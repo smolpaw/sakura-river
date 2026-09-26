@@ -1,0 +1,16 @@
+{
+  "name": "sakura-river",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-screen interactive 3D cherry-blossom river scene (Three.js)",
+  "scripts": {
+    "build:engine": "sh scripts/build.sh",
+    "build": "sh scripts/build.sh && node scripts/build-page.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
