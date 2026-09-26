@@ -20,4 +20,4 @@ Procedural Three.js scene (cherry tree, river, Fuji-style mountain). See README.
 
 ## Publishing
 
-- The live page is the claude.ai artifact https://claude.ai/artifact/UmQeKrrzEj1KMDrSshWq6z. Update it in place by publishing `dist/index.html` (after `pnpm build`) with that URL. Publishing without the URL creates a new artifact.
+- Not hosted as a claude.ai artifact any more (owner decision, 2026-09-27): don't publish anything to claude.ai. `pnpm build` still produces one self-contained `dist/index.html`; the final host is undecided.

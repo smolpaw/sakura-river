@@ -34,13 +34,21 @@ Integrated GPUs share limited memory bandwidth (about 40–70 GB/s) with the CPU
 - **Commit in small logical units**, so any step can be benchmarked against its parent and reverted cleanly. Commit bench result JSON with the step it measures.
 - **Work autonomously.** Stop and ask the owner only where this plan says so.
 
+## Scope changes from the owner
+
+- **2026-09-27: claude.ai artifacts are no longer the hosting target.** Work only in this repo and commit; publish nothing to claude.ai. Consequences:
+  - Constraint 5 and every "new private artifact" step are withdrawn: the Phase 0 sandbox spike (step 4), the remote bench artifact (step 6) and the artifact check in Phase 5.
+  - The single-file `dist/index.html` build stays (constraint 3), because it is host-neutral. The final host is unknown, so assume no COOP/COEP headers (no SharedArrayBuffer, no WASM threads); workers and WASM are inlined.
+  - Real-device runs: the shipped page's `?bench` mode (Phase 5) shows its results as copyable JSON, so the owner can run it on a laptop from a local copy of `dist/index.html`.
+  - DoD items 2 and 8 are read without their artifact parts.
+
 ## Hard constraints
 
 1. **No visual degradation.** Every change that affects rendering must pass the visual gate (see Measurement). A change that fails is reworked or reverted, never merged with a note.
 2. **Changes that alter the look.** Some changes improve the image but move it away from the goldens (for example softer shadows or different reflections). These may ship only if they pass the gate. Otherwise, put them in the "better but different" gallery for the owner and don't ship them in this goal.
-3. **The single-file deliverable stays.** `pnpm build` must still produce one self-contained `dist/index.html` that runs as a claude.ai artifact, with workers and WASM inlined.
+3. **The single-file deliverable stays.** *(Artifact part withdrawn, see Scope changes.)* `pnpm build` must still produce one self-contained `dist/index.html` that runs as a claude.ai artifact, with workers and WASM inlined.
 4. **The WebGL2 fallback stays.** Browsers without WebGPU must still render the scene at visual parity.
-5. **Never update the live artifact** (https://claude.ai/artifact/UmQeKrrzEj1KMDrSshWq6z). Sandbox checks go to *new private* artifacts only.
+5. *(Withdrawn, see Scope changes.)* **Never update the live artifact** (https://claude.ai/artifact/UmQeKrrzEj1KMDrSshWq6z). Sandbox checks go to *new private* artifacts only.
 6. **Don't fake numbers.** If a target is unreachable, stop pushing on it. Record the evidence, what you tried and the best result achieved, then continue with the rest of the plan.
 7. **Dependencies:** add them through the pnpm CLI. Pin `three` exactly (`pnpm add -E`).
 8. **Correct on every vendor.**
@@ -227,7 +235,7 @@ Each phase ends with its gate passing, results in `bench/results/<phase>-<step>.
    - 30 extra objects with distinct materials;
    - 50k weather particles as a rain placeholder.
    - Record how baseline cost scales with each parameter.
-4. **Sandbox spike:** publish a tiny test page as a **new private** artifact and record, from inside the artifact:
+4. *(Withdrawn, see Scope changes.)* **Sandbox spike:** publish a tiny test page as a **new private** artifact and record, from inside the artifact:
    - WebGPU adapter and whether it has the `timestamp-query` feature;
    - `crossOriginIsolated`;
    - blob-URL module workers and `data:` workers;
@@ -236,7 +244,7 @@ Each phase ends with its gate passing, results in `bench/results/<phase>-<step>.
    - Expect `crossOriginIsolated` to be false. A host that can't set COOP/COEP headers can't use SharedArrayBuffer, so **plan for no WASM threads**; parallelism comes from multiple workers with transferables.
    - Later phases must respect whatever this spike finds.
 5. Update the "Verifying changes" section of `CLAUDE.md` and the README with the bench commands.
-6. **Remote bench page for real hardware.**
+6. *(Withdrawn, see Scope changes; replaced by the Phase 5 `?bench` mode.)* **Remote bench page for real hardware.**
    - Publish a **new private** artifact that runs the bench on whatever machine opens it.
    - It records GPU/adapter info, backend, per-pass GPU times (when `timestamp-query` or the WebGL timer extension exists; otherwise frame times), the controller's steady state, and a thumbnail of the hero view for a visual sanity check.
    - It should run the *current* build, and a toggle should let the same page also run the *baseline* build, so every device gets a before/after pair.
@@ -340,7 +348,7 @@ Do these in order, measuring each separately.
 
 ### Phase 5: Delivery
 
-1. The single-file build works, with workers inlined (and WASM, if adopted). Verify it in a **new private** test artifact against the Phase 0 spike checks.
+1. *(Artifact check withdrawn, see Scope changes.)* The single-file build works, with workers inlined (and WASM, if adopted). Verify it in a **new private** test artifact against the Phase 0 spike checks.
 2. The shipped page keeps a `?bench` mode (the same benchmark as the Phase 0 remote bench page). Republish the remote bench page with the final build, and summarize all real-device runs in Status.
 3. Update `README.md` and `CLAUDE.md` (architecture, bench commands, performance budgets), and close out the Status log.
 
@@ -420,7 +428,7 @@ All true, with evidence in `bench/results/` and the Status log:
 - Optionally lock a stable clock for normal benchmarks: `sudo nvidia-smi -lgc 1500,1500`, reset with `sudo nvidia-smi -rgc`. A reboot also resets both.
 - Open the remote bench link on any integrated-GPU laptops you can reach, including the cousin's.
 - Review the "better but different" gallery (constraint 2).
-- Republish the live artifact when satisfied.
+- *(Withdrawn.)* Republish the live artifact when satisfied.
 
 ## Status
 

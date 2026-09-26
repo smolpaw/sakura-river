@@ -9,7 +9,7 @@ A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree 
     pnpm build     # dist/index.html: one self-contained file (all JS and CSS inlined)
     pnpm preview   # serve the production build
 
-`dist/index.html` opens directly in a browser, and it's the file that gets published as the claude.ai artifact.
+`dist/index.html` opens directly in a browser; it is the deliverable.
 
 ## Layout
 
