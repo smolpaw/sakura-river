@@ -18,6 +18,7 @@ import { GodRaysPass, GradeShader } from './post.js';
 import { mulberry32, clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
 import { createBenchProbe } from './bench-probe.js';
+import { hashScene } from './bench-hash.js';
 import { tessellate, tessellateTree, makeStressObjects, makeRain } from './stress.js';
 
 const TIERS = {
@@ -534,6 +535,7 @@ export function create(canvas, opts = {}) {
     heroView() { cinematic = false; controls.enabled = true; tween = null; camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); },
     advance(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt, false); },
     bench: probe,
+    hashScene: () => hashScene(scene, { heightCache: world.heightCacheData() }),
     qualityState() { return { tier: tierName, level, scale: resScale, fps: fpsShown }; },
     setAdaptive(on) { opts.fixedQuality = !on; },
     step(dt) { step(dt); },

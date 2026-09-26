@@ -116,3 +116,4 @@ H.observe = async (sec) => {
 
 H.dispose = () => { eng && eng.dispose(); canvas && canvas.remove(); eng = null; };
 window.harnessReady = true;
+H.hashScene = () => eng.hashScene();
