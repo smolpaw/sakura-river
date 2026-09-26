@@ -1,3 +1,9 @@
 node_modules/
 dist/
 *.zip
+bench/.venv/
+bench/.wt/
+bench/.profile/
+bench/builds/
+bench/out/
+bench/goldens/

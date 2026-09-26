@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "bench": "node bench/perf.mjs",
+    "bench:visual": "node bench/visual.mjs",
+    "bench:build": "node bench/build.mjs"
   },
   "dependencies": {
     "three": "0.170.0"
   },
   "devDependencies": {
+    "puppeteer-core": "^25.12.0",
     "vite": "^8.3.1",
     "vite-plugin-singlefile": "^2.3.3"
   }

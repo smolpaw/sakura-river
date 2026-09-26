@@ -1,0 +1,34 @@
+{
+  "defaults": { "wind": 0.38, "petals": 0.6, "river": 0.45, "time": 0.92, "fog": 0.25, "bloom": 0.4 },
+  "views": [
+    { "id": "hero", "hero": true },
+    { "id": "cine000", "cine": 0 },
+    { "id": "cine125", "cine": 0.125 },
+    { "id": "cine250", "cine": 0.25 },
+    { "id": "cine375", "cine": 0.375 },
+    { "id": "cine500", "cine": 0.5 },
+    { "id": "cine625", "cine": 0.625 },
+    { "id": "cine750", "cine": 0.75 },
+    { "id": "cine875", "cine": 0.875 }
+  ],
+  "settings": [
+    { "id": "default", "set": {} },
+    { "id": "time050", "set": { "time": 0.5 } },
+    { "id": "time010", "set": { "time": 0.1 } },
+    { "id": "fog090", "set": { "fog": 0.9 } }
+  ],
+  "perfViews": ["hero", "cine000", "cine250", "cine500", "cine750"],
+  "still": { "settle": 120, "converge": 24, "dt": 0.016666666666666666 },
+  "sequences": [
+    { "id": "a-cine", "kind": "cine", "start": 0.1, "settle": 120, "warm": 30, "frames": 120, "every": 3 },
+    { "id": "b-wind", "kind": "wind", "settle": 120, "warm": 30, "frames": 120, "every": 3 },
+    { "id": "c-frozen", "kind": "frozen", "settle": 120, "frames": 64, "captureFrom": 32 }
+  ],
+  "workloads": {
+    "hero": { "cssW": 1920, "cssH": 1080, "scale": 2, "quality": "high" },
+    "1080p": { "cssW": 1920, "cssH": 1080, "scale": 1, "quality": "high" },
+    "stress": { "cssW": 1920, "cssH": 1080, "scale": 1, "quality": "high", "stress": { "grass": 4, "triMul": 10, "objects": 30, "particles": 50000 } },
+    "igpu": { "cssW": 1920, "cssH": 1080, "scale": 1, "adaptive": true }
+  },
+  "visual": { "cssW": 1600, "cssH": 900, "scale": 1, "quality": "high", "supersample": 3 }
+}

@@ -17,6 +17,7 @@ import { PetalSystem, makeFallenPetals, makeMotes } from './petals.js';
 import { GodRaysPass, GradeShader } from './post.js';
 import { mulberry32, clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
+import { createBenchProbe } from './bench-probe.js';
 
 const TIERS = {
   high: { pr: 2.0, terrain: [420, 440], grass: 40000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1 },
@@ -51,6 +52,7 @@ export function create(canvas, opts = {}) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const probe = opts.bench ? createBenchProbe(renderer) : null;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 9000);
@@ -254,6 +256,10 @@ export function create(canvas, opts = {}) {
   composer.addPass(new OutputPass());
   const grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
+  if (probe) {
+    probe.wrapPass(renderPass, 'scene'); probe.wrapPass(rays, 'godrays'); probe.wrapPass(bloom, 'bloom');
+    probe.wrapPass(composer.passes[3], 'output'); probe.wrapPass(grade, 'grade');
+  }
 
   // ---------- camera / controls ----------
   const controls = new OrbitControls(camera, canvas);
@@ -464,15 +470,19 @@ export function create(canvas, opts = {}) {
     // reflections
     if (!doRender) return;
     frameNo++;
+    if (probe) probe.beginFrame();
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = frameNo % shadowEvery === 0 || frameNo < 3;
     if (reflection && (frameNo % reflEvery === 0 || frameNo < 3)) {
+      if (probe) probe.push('reflection');
       const ok = reflection.render(scene, camera, [water.mesh]);
+      if (probe) probe.pop();
       water.uniforms.uHasRefl.value = ok ? 1 : 0;
       water.uniforms.uRefl.value = reflection.rt.texture;
       water.uniforms.uTexMat.value.copy(reflection.texMat);
     }
     composer.render(dt);
+    if (probe) probe.endFrame();
   }
 
   function loop() {
@@ -513,6 +523,11 @@ export function create(canvas, opts = {}) {
     setAutoOrbit(on) { autoOrbit = !!on; },
     cineView(u) { const p = posCurve.getPointAt(u), t = tgtCurve.getPointAt(u); tween = null; camera.position.copy(p); controls.target.copy(t); clampCamera(); controls.update(); },
     setView(pos, target) { tween = null; camera.position.set(...pos); controls.target.set(...target); controls.update(); },
+    heroView() { cinematic = false; controls.enabled = true; tween = null; camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); },
+    advance(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt, false); },
+    bench: probe,
+    qualityState() { return { tier: tierName, level, scale: resScale, fps: fpsShown }; },
+    setAdaptive(on) { opts.fixedQuality = !on; },
     step(dt) { step(dt); },
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
