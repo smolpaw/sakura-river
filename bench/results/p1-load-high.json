@@ -1,0 +1,144 @@
+{
+ "date": "2026-09-26T20:18:41.070Z",
+ "chromium": "Chrome/150.0.7871.128",
+ "quality": "high",
+ "extra": {},
+ "runs": 5,
+ "summary": {
+  "hashref2": {
+   "ttffMedian": 3969.0899999961257,
+   "createMedian": 2565.6450000032783,
+   "firstFrameMedian": 1174.0050000026822,
+   "maxLongBefore": 0,
+   "maxLongFirstFrame": 0,
+   "maxGapMedian": 3740.3700000047684
+  },
+  "p1": {
+   "ttffMedian": 3964.439999997616,
+   "createMedian": 1962.1900000050664,
+   "firstFrameMedian": 1192.0499999970198,
+   "maxLongBefore": 875,
+   "maxLongFirstFrame": 0,
+   "maxGapMedian": 1198.0750000029802
+  }
+ },
+ "rows": {
+  "hashref2": [
+   {
+    "ttff": 4829.960000000894,
+    "firstFrameMs": 1448.3499999940395,
+    "createMs": 3121.789999999106,
+    "maxGap": 4570.979999996722,
+    "longBefore": [],
+    "longFirstFrame": []
+   },
+   {
+    "ttff": 4814.429999999702,
+    "firstFrameMs": 1446.4400000050664,
+    "createMs": 3212.880000002682,
+    "maxGap": 4660.159999996424,
+    "longBefore": [],
+    "longFirstFrame": []
+   },
+   {
+    "ttff": 3969.0899999961257,
+    "firstFrameMs": 1174.0050000026822,
+    "createMs": 2565.6450000032783,
+    "maxGap": 3740.3700000047684,
+    "longBefore": [],
+    "longFirstFrame": []
+   },
+   {
+    "ttff": 3279.3700000047684,
+    "firstFrameMs": 1057.6899999976158,
+    "createMs": 2100.1750000044703,
+    "maxGap": 3158.380000002682,
+    "longBefore": [],
+    "longFirstFrame": []
+   },
+   {
+    "ttff": 2547.195000000298,
+    "firstFrameMs": 902.8650000020862,
+    "createMs": 1558.6499999985099,
+    "maxGap": 2462.094999998808,
+    "longBefore": [],
+    "longFirstFrame": []
+   }
+  ],
+  "p1": [
+   {
+    "ttff": 6087.829999998212,
+    "firstFrameMs": 1192.0499999970198,
+    "createMs": 4742.115000002086,
+    "maxGap": 1198.0750000029802,
+    "longBefore": [
+     875,
+     110
+    ],
+    "longFirstFrame": [],
+    "gen": {
+     "workers": 4,
+     "ms": 1509.390000000596
+    }
+   },
+   {
+    "ttff": 3964.439999997616,
+    "firstFrameMs": 1733.210000000894,
+    "createMs": 1962.1900000050664,
+    "maxGap": 1739.054999999702,
+    "longBefore": [
+     368,
+     126
+    ],
+    "longFirstFrame": [],
+    "gen": {
+     "workers": 4,
+     "ms": 1158.8950000032783
+    }
+   },
+   {
+    "ttff": 4187.380000002682,
+    "firstFrameMs": 1467.7400000020862,
+    "createMs": 2516.255000002682,
+    "maxGap": 1474.75,
+    "longBefore": [
+     360,
+     158
+    ],
+    "longFirstFrame": [],
+    "gen": {
+     "workers": 4,
+     "ms": 1537.8799999952316
+    }
+   },
+   {
+    "ttff": 2800.380000002682,
+    "firstFrameMs": 811.5649999976158,
+    "createMs": 1907.5,
+    "maxGap": 818.6649999991059,
+    "longBefore": [
+     59
+    ],
+    "longFirstFrame": [],
+    "gen": {
+     "workers": 4,
+     "ms": 648.0300000011921
+    }
+   },
+   {
+    "ttff": 2795.60000000149,
+    "firstFrameMs": 839.679999999702,
+    "createMs": 1877.070000000298,
+    "maxGap": 855.1299999952316,
+    "longBefore": [
+     52
+    ],
+    "longFirstFrame": [],
+    "gen": {
+     "workers": 4,
+     "ms": 627.4199999943376
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,14 @@
+diff --git i/src/main.js w/src/main.js
+index d04c50b..5609a61 100644
+--- i/src/main.js
++++ w/src/main.js
+@@ -489,7 +489,9 @@ export function create(canvas, opts = {}) {
+       water.uniforms.uRefl.value = reflection.rt.texture;
+       water.uniforms.uTexMat.value.copy(reflection.texMat);
+     }
++    if (opts.jitter) { const b = renderer.getDrawingBufferSize(new THREE.Vector2()); camera.setViewOffset(b.x, b.y, opts.jitter[0], opts.jitter[1], b.x, b.y); }
+     composer.render(dt);
++    if (opts.jitter) camera.clearViewOffset();
+     if (probe) probe.endFrame();
+   }
+ 

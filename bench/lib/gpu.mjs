@@ -34,13 +34,26 @@ export function idleSnapshot() {
 
 const COMPOSITOR = /Hyprland|Xwayland|gnome-shell|kwin|sway|mutter/i;
 
-// contention = a GPU client not in the idle set (and not ours), or a non-own, non-compositor client with real SM load
-export function contention(idle, own, { smLimit = 15 } = {}) {
+// contention = a GPU client not in the idle set (and not ours), or a non-own, non-compositor client with real SM load.
+// A new client that stays longer than `absorbMs` with < 5% SM (a lock screen, a tray app) joins the idle set.
+const firstSeen = new Map();
+export function contention(idle, own, { smLimit = 15, absorbMs = 120000 } = {}) {
   const idlePids = new Set(idle.procs.map((p) => p.pid));
   const procs = gpuProcesses();
-  const fresh = procs.filter((p) => !idlePids.has(p.pid) && !own.has(p.pid));
+  const samples = [pmon(), pmon(), pmon()];
+  const smOf = (pid) => Math.max(0, ...samples.map((s) => (s.find((p) => p.pid === pid) || { sm: 0 }).sm));
+  const now = Date.now();
+  let fresh = procs.filter((p) => !idlePids.has(p.pid) && !own.has(p.pid));
+  for (const p of fresh) {
+    if (!firstSeen.has(p.pid)) firstSeen.set(p.pid, now);
+    if (now - firstSeen.get(p.pid) > absorbMs && smOf(p.pid) < 5) {
+      idle.procs.push(p);
+      (idle.absorbed ||= []).push({ pid: p.pid, name: p.name, at: new Date().toISOString() });
+    }
+  }
+  fresh = fresh.filter((p) => !idle.procs.includes(p));
   const load = [];
-  for (let k = 0; k < 3; k++) for (const p of pmon()) if (!own.has(p.pid) && !COMPOSITOR.test(p.name) && p.sm >= smLimit) load.push(p);
+  for (const s of samples) for (const p of s) if (!own.has(p.pid) && !COMPOSITOR.test(p.name) && p.sm >= smLimit) load.push(p);
   return { busy: fresh.length > 0 || load.length > 0, fresh, load };
 }
 

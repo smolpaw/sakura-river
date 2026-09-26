@@ -1,0 +1,6 @@
+# Phase 0 remainder (stress scaling), paused 2026-09-27 for the WebGPU port work
+node bench/perf.mjs --a base0 --b base0 --workload 1080p --stress-a none --runs 3 --out p0-stress-full-1080p-webgl
+node bench/perf.mjs --a base0 --b base0 --workload 1080p --stress-a none --stress-b '{"grass":4,"triMul":1,"objects":0,"particles":0}' --runs 3 --views hero,cine250 --out p0-stress-grass4
+node bench/perf.mjs --a base0 --b base0 --workload 1080p --stress-a none --stress-b '{"grass":1,"triMul":10,"objects":0,"particles":0}' --runs 3 --views hero,cine250 --out p0-stress-tri10
+node bench/perf.mjs --a base0 --b base0 --workload 1080p --stress-a none --stress-b '{"grass":1,"triMul":1,"objects":30,"particles":0}' --runs 3 --views hero,cine250 --out p0-stress-obj30
+node bench/perf.mjs --a base0 --b base0 --workload 1080p --stress-a none --stress-b '{"grass":1,"triMul":1,"objects":0,"particles":50000}' --runs 3 --views hero,cine250 --out p0-stress-rain50k

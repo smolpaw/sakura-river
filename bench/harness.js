@@ -80,18 +80,32 @@ H.quality = () => (eng.qualityState ? eng.qualityState() : null);
 H.setAdaptive = (on) => eng.setAdaptive(on);
 H.setBallast = (ms) => eng.setBallast && eng.setBallast(ms);
 
+// Canvas contents right after a render. WebGL canvases are read back with readPixels and sent as raw RGBA (the
+// server encodes the PNG): with Chromium's Vulkan features on, toBlob and 2D canvases return transparent black.
+// WebGPU canvases use toBlob (its snapshot is synchronous).
+async function snapshot(c) {
+  const gl = c.getContext('webgl2');
+  if (!gl) return { body: await new Promise((r) => c.toBlob(r, 'image/png')), query: '' };
+  const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+  const px = new Uint8Array(w * h * 4), out = new Uint8Array(w * h * 4), row = w * 4;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  for (let y = 0; y < h; y++) out.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+  return { body: out, query: `&w=${w}&h=${h}` };
+}
+
 // render one frame and upload the canvas as PNG to bench/<path>
 H.capture = async (path, dt = 0) => {
   await raf();
   eng.tick(1, dt);
-  const blob = await new Promise((r) => canvas.toBlob(r, 'image/png')); // snapshot is taken synchronously
-  if (!blob) throw new Error('toBlob returned null (context lost?)');
-  const body = await blob.arrayBuffer();
+  const snap = await snapshot(canvas);
+  if (!snap.body) throw new Error('canvas snapshot failed (context lost?)');
+  const body = snap.body instanceof Blob ? await snap.body.arrayBuffer() : snap.body;
   for (let i = 0; ; i++) {
     try {
-      const res = await fetch('/save?path=' + encodeURIComponent(path), { method: 'POST', body });
+      const res = await fetch('/save?path=' + encodeURIComponent(path) + snap.query, { method: 'POST', body });
       if (!res.ok) throw new Error('save failed: ' + (await res.text()));
-      return blob.size;
+      return body.byteLength;
     } catch (e) {
       if (i >= 4) throw new Error(`upload of ${path} (${body.byteLength} B) failed: ${e.message}`);
       await new Promise((r) => setTimeout(r, 500 * (i + 1)));
@@ -138,5 +152,10 @@ H.loadProfile = async ({ engine, cssW, cssH, quality = 'high', extra = {} }) => 
   await raf();
   loading = false;
   const ttff = performance.now();
-  return { tImport, tCreated, firstFrameMs, ttff, longtasks: window.__longtasks.slice(), maxGap: Math.max(...gaps.slice(1)), gaps: gaps.length, gen: eng.info().gen };
+  await new Promise((r) => setTimeout(r, 100));
+  window.__ltFlush();
+  const marks = Object.fromEntries(performance.getEntriesByType('mark').filter((m) => m.name.startsWith('sr:')).map((m) => [m.name.slice(3), m.startTime]));
+  return { tImport, tCreated, t0, firstFrameMs, ttff, marks, longtasks: window.__longtasks.slice(), maxGap: Math.max(...gaps.slice(1)), gaps: gaps.length, gen: eng.info().gen };
 };
+H.tickRaw = (dt = 1 / 60) => eng.tick(1, dt);
+H.programs = () => eng.bench.programs();

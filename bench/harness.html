@@ -6,7 +6,17 @@
 <script>
   // long tasks from page start (Phase 1 gate: none over 50 ms before the first frame, except GPU pipeline creation)
   window.__longtasks = [];
-  try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longtasks.push({ start: e.startTime, dur: e.duration, name: e.name }); }).observe({ type: 'longtask', buffered: true }); } catch (e) {}
+  const push = (l) => { for (const e of l) window.__longtasks.push({ start: e.startTime, dur: e.duration, name: e.name }); };
+  try { window.__ltObserver = new PerformanceObserver((l) => push(l.getEntries())); window.__ltObserver.observe({ type: 'longtask', buffered: true }); window.__ltFlush = () => push(window.__ltObserver.takeRecords()); } catch (e) { window.__ltFlush = () => {}; }
+</script>
+<script>
+  // ?preserve: keep the WebGL drawing buffer so canvas snapshots work on ANGLE's Vulkan backend (pixels unchanged)
+  if (location.search.includes('preserve')) {
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+      return orig.call(this, type, /webgl/.test(type) ? { ...(attrs || {}), preserveDrawingBuffer: true } : attrs);
+    };
+  }
 </script>
 <style>html, body { margin: 0; background: #000; overflow: hidden; } canvas { display: block; }</style>
 </head>

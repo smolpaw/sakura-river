@@ -47,12 +47,12 @@ export function ownPids(browser) {
   return out;
 }
 
-export async function openHarness(browser, url) {
+export async function openHarness(browser, url, query = '') {
   const page = await browser.newPage();
   const logs = [];
   page.on('console', (m) => { const t = m.type(); if (t === 'error' || t === 'warn') logs.push(`[${t}] ${m.text()}`); });
   page.on('pageerror', (e) => logs.push('[pageerror] ' + e.message));
-  await page.goto(url + '/harness.html', { waitUntil: 'load' });
+  await page.goto(url + '/harness.html' + query, { waitUntil: 'load' });
   await page.waitForFunction('window.harnessReady === true');
   page.logs = logs;
   return page;

@@ -133,6 +133,9 @@ for (const v of views) {
     const rs = pick(arm, key);
     row[arm][key] = rs.length ? { runMedians: rs.map(median), ...summarize(rs.flat()) } : null;
   }
+  // secondary: GPU time scaled to a 1500 MHz clock (cycles); removes clock drift, biased for memory-bound work
+  const cyc = (arm) => runs.filter((r) => r.arm === arm).map((r) => r.views[v.id].gpu.map((x) => (x * r.views[v.id].grMedian) / 1500)).filter((xs) => xs.length);
+  if (cyc('A').length && cyc('B').length) row.gpuCyclesRatio = bootstrapRatio(cyc('A'), cyc('B'), { seed: 7 });
   for (const key of ['gpu', 'cpu']) {
     const A = pick('A', key), B = pick('B', key);
     if (A.length && B.length) { row[key + 'Ratio'] = bootstrapRatio(A, B, { seed: 7 }); logRatios[key].push(Math.log(row[key + 'Ratio'].ratio)); }
@@ -146,11 +149,11 @@ const geo = (xs) => (xs.length ? Math.exp(xs.reduce((a, b) => a + b, 0) / xs.len
 const result = {
   date: new Date().toISOString(), workload: o.workload, backend: o.backend, angle: o.angle, chromium: version, flags: args, env,
   runsPerArm: RUNS, frames: FRAMES, warmup: WARMUP, clockTolerance: TOL, clockLock, clockAtStart: clockState(),
-  idle: { procs: idle.procs.map((p) => p.name) }, arms,
+  idle: { procs: idle.procs.map((p) => p.name), absorbed: idle.absorbed || [] }, arms,
   order: schedule.map((j) => j.arm + j.i),
   geomeanRatio: { gpu: geo(logRatios.gpu), cpu: geo(logRatios.cpu) },
   views: Object.fromEntries(Object.entries(compare).map(([id, r]) => [id, {
-    gpuRatio: r.gpuRatio, cpuRatio: r.cpuRatio,
+    gpuRatio: r.gpuRatio, gpuCyclesRatio: r.gpuCyclesRatio, cpuRatio: r.cpuRatio,
     A: { gpu: r.A.gpu && { median: r.A.gpu.median, runMedians: r.A.gpu.runMedians, bimodality: r.A.gpu.bimodality }, cpu: r.A.cpu && { median: r.A.cpu.median, min: r.A.cpu.min, runMedians: r.A.cpu.runMedians, bimodality: r.A.cpu.bimodality } },
     B: { gpu: r.B.gpu && { median: r.B.gpu.median, runMedians: r.B.gpu.runMedians, bimodality: r.B.gpu.bimodality }, cpu: r.B.cpu && { median: r.B.cpu.median, min: r.B.cpu.min, runMedians: r.B.cpu.runMedians, bimodality: r.B.cpu.bimodality } },
     labelsA: r.labelsA, labelsB: r.labelsB, counters: r.counters,

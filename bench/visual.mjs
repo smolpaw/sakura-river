@@ -29,13 +29,14 @@ const extra = o.extra ? JSON.parse(o.extra) : {};
 
 const { server, url } = await startServer();
 const { browser, args, version } = await launch({ scale: V.visual.scale, angle: o.angle, profile: 'visual' });
-let page = await openHarness(browser, url);
+const query = o.angle === 'vulkan' || o.angle === 'swiftshader' ? '?preserve' : '';
+let page = await openHarness(browser, url, query);
 const env = await page.evaluate(() => H.env());
 await page.close();
 assertHardware(env, { allowSoftware: o.angle === 'swiftshader', needWebGPU: o.backend === 'webgpu' });
 
 async function fresh(settings) {
-  page = await openHarness(browser, url);
+  page = await openHarness(browser, url, query);
   const setup = await page.evaluate((p) => H.setup(p), {
     engine: `./builds/${o.build}/engine.js`, cssW, cssH, quality: V.visual.quality, backend: o.backend, settings: { ...V.defaults, ...settings }, extra,
   });

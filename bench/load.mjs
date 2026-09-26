@@ -21,7 +21,7 @@ for (const job of shuffle([...Array(+o.runs)].flatMap(() => [ref, cand]), 3)) {
   const p = await page.evaluate((b, q, extra) => H.loadProfile({ engine: `./builds/${b}/engine.js`, cssW: 1920, cssH: 1080, quality: q, extra }), job, o.quality, job === cand ? extra : {});
   const lt = p.longtasks.filter((t) => t.start + t.dur > p.tImport && t.start < p.ttff);
   const before = lt.filter((t) => t.start < p.tCreated), after = lt.filter((t) => t.start >= p.tCreated);
-  rows[job].push({ ttff: p.ttff, firstFrameMs: p.firstFrameMs, createMs: p.tCreated - p.tImport, maxGap: p.maxGap,
+  rows[job].push({ marks: p.marks, t0: p.t0, tImport: p.tImport, longtasks: lt.map((t) => [+t.start.toFixed(0), +t.dur.toFixed(0)]), ttff: p.ttff, firstFrameMs: p.firstFrameMs, createMs: p.tCreated - p.tImport, maxGap: p.maxGap,
     longBefore: before.map((t) => +t.dur.toFixed(1)), longFirstFrame: after.map((t) => +t.dur.toFixed(1)), gen: p.gen && { workers: p.gen.workers, ms: p.gen.ms } });
   await page.evaluate(() => H.dispose());
   await page.close();

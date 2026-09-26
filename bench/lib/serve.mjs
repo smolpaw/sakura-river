@@ -2,6 +2,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { encodePNG } from './png.mjs';
 import { fileURLToPath } from 'node:url';
 
 export const BENCH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -20,6 +21,12 @@ export function startServer(port = 0) {
       if (req.method === 'POST' && url.pathname === '/save') {
         const file = safe(url.searchParams.get('path'));
         fs.mkdirSync(path.dirname(file), { recursive: true });
+        if (url.searchParams.has('w')) { // raw top-down RGBA8 rows, encoded here
+          const parts = [];
+          req.on('data', (d) => parts.push(d));
+          req.on('end', () => { fs.writeFileSync(file, encodePNG(Buffer.concat(parts), +url.searchParams.get('w'), +url.searchParams.get('h'))); res.writeHead(200); res.end('ok'); });
+          return;
+        }
         const out = fs.createWriteStream(file);
         req.pipe(out);
         out.on('finish', () => { res.writeHead(200); res.end('ok'); });

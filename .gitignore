@@ -7,3 +7,4 @@ bench/.profile/
 bench/builds/
 bench/out/
 bench/goldens/
+__pycache__/

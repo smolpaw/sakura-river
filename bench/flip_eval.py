@@ -67,7 +67,9 @@ def gate(a):
     rep_dir = os.path.join(cand, 'report')
     os.makedirs(rep_dir, exist_ok=True)
     mc = json.load(open(os.path.join(cand, 'manifest.json')))
-    res = {'cand': os.path.relpath(cand, HERE), 'base': base and os.path.relpath(base, HERE), 'eps': a.eps, 'p99Threshold': a.p99, 'ppd': PPD, 'stills': [], 'sequences': {}, 'fail': []}
+    cal = json.load(open(a.p99_calib))['p99'] if a.p99_calib else {}
+    res = {'cand': os.path.relpath(cand, HERE), 'base': base and os.path.relpath(base, HERE), 'eps': a.eps, 'p99Threshold': a.p99, 'p99Calib': a.p99_calib and os.path.relpath(a.p99_calib, HERE), 'ppd': PPD, 'stills': [], 'sequences': {}, 'fail': []}
+    thr = lambda f: cal.get(f, a.p99)
 
     def one(rel, heat_name):
         c = load(os.path.join(cand, rel))
@@ -87,7 +89,9 @@ def gate(a):
         r = one(s['file'], 'still-' + s['id'])
         r['name'] = s['id']
         if base:
-            r['pass'] = r['flipGolden'] <= r['baseFlipGolden'] + a.eps and (a.p99 is None or r['p99Base'] <= a.p99)
+            t = thr(s['file'])
+            r['p99Threshold'] = t
+            r['pass'] = r['flipGolden'] <= r['baseFlipGolden'] + a.eps and (t is None or r['p99Base'] <= t)
             if not r['pass']:
                 res['fail'].append(r['name'])
         res['stills'].append(r)
@@ -108,7 +112,8 @@ def gate(a):
                     res['fail'].append(sid)
             last = one(frames[-1]['file'], sid + '-last')
             row['last'] = last
-            if base and a.p99 is not None and last['p99Base'] > a.p99:
+            t = thr(frames[-1]['file'])
+            if base and t is not None and last['p99Base'] > t:
                 row['pass'] = False
                 res['fail'].append(sid + '-p99')
             res['sequences'][sid] = row
@@ -120,8 +125,9 @@ def gate(a):
         row = {'meanFlipGolden': float(np.mean(cg)), 'maxFlipGolden': float(np.max(cg)), 'frames': len(rows)}
         if base:
             bg = [r['baseFlipGolden'] for r in rows]
-            row.update({'baseMeanFlipGolden': float(np.mean(bg)), 'baseMaxFlipGolden': float(np.max(bg)), 'maxP99Base': float(max(r['p99Base'] for r in rows))})
-            row['pass'] = row['meanFlipGolden'] <= row['baseMeanFlipGolden'] + a.eps and row['maxFlipGolden'] <= row['baseMaxFlipGolden'] + a.eps and (a.p99 is None or row['maxP99Base'] <= a.p99)
+            over = [r['p99Base'] - thr(f['file']) for f, r in zip(frames, rows) if thr(f['file']) is not None]
+            row.update({'baseMeanFlipGolden': float(np.mean(bg)), 'baseMaxFlipGolden': float(np.max(bg)), 'maxP99Base': float(max(r['p99Base'] for r in rows)), 'maxP99OverThreshold': float(max(over)) if over else None})
+            row['pass'] = row['meanFlipGolden'] <= row['baseMeanFlipGolden'] + a.eps and row['maxFlipGolden'] <= row['baseMaxFlipGolden'] + a.eps and (not over or max(over) <= 0)
             if not row['pass']:
                 res['fail'].append(sid)
         row['perFrame'] = [{'k': f['k'], **{k: v for k, v in r.items() if k != 'id'}} for f, r in zip(frames, rows)]
@@ -170,5 +176,6 @@ if __name__ == '__main__':
     g = sp.add_parser('gate'); g.add_argument('--cand'); g.add_argument('--base'); g.add_argument('--golden')
     g.add_argument('--eps', type=float, default=0.002); g.add_argument('--eps-temporal', dest='eps_temporal', type=float, default=0.002)
     g.add_argument('--p99', type=float, default=None); g.add_argument('--json')
+    g.add_argument('--p99-calib', dest='p99_calib', default=os.path.join(HERE, 'calib', 'p99-base0.json'))
     a = p.parse_args()
     downsample(a.src, a.dst, a.factor) if a.cmd == 'downsample' else gate(a)
