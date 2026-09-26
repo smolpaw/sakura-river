@@ -45,11 +45,25 @@ H.view = (v, settle = 120, dt = 1 / 60) => {
 H.set = (k, v) => eng.setImmediate(k, v);
 H.cinematic = (on) => eng.setCinematic(on);
 
-// render n frames; returns per-frame { cpu, t, pf } plus GPU samples keyed by probe frame
-H.frames = async (n, dt = 1 / 60) => {
+// wait until the GPU has drained all submitted work (WebGPU queue, or a WebGL fence)
+async function gpuIdle() {
+  if (eng.bench && eng.bench.waitIdle) { const p = eng.bench.waitIdle(); if (p) return p; }
+  const gl = canvas.getContext('webgl2');
+  if (!gl) return;
+  const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  gl.flush();
+  while (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED) await new Promise((r) => setTimeout(r, 0));
+  gl.deleteSync(sync);
+}
+
+// render n frames; returns per-frame { cpu, t, pf } plus GPU samples keyed by probe frame.
+// sync: drain the GPU before each frame, so the measured CPU time is JS work without GPU backpressure
+// (WebGPU blocks in writeBuffer/getCurrentTexture when the GPU is behind).
+H.frames = async (n, dt = 1 / 60, sync = false) => {
   const cpu = new Float64Array(n), cpuTotal = new Float64Array(n), t = new Float64Array(n), pf = new Int32Array(n);
   const gpu = [];
   for (let i = 0; i < n; i++) {
+    if (sync) await gpuIdle();
     await raf();
     const t0 = performance.now();
     eng.tick(1, dt);

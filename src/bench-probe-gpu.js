@@ -159,6 +159,8 @@ export function createGPUProbe(renderer) {
     get disjointFrames() { return disjointFrames; },
     get frame() { return frame; },
     get blockedMs() { return lastBlocked; },
+    // resolves when the GPU has finished all submitted work (bench CPU timing without backpressure)
+    waitIdle() { return webgpu ? backend.device.queue.onSubmittedWorkDone() : null; },
     counters() {
       const c = lastCounters || { drawCalls: 0, triangles: 0, passes: [] };
       let rtMem = canvas.width * canvas.height * 4;

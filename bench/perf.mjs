@@ -22,7 +22,7 @@ const V = JSON.parse(fs.readFileSync(path.join(BENCH, 'views.json'), 'utf8'));
 const W = V.workloads[o.workload];
 if (!W) throw new Error('unknown workload ' + o.workload);
 const views = (o.views ? o.views.split(',') : V.perfViews).map((id) => V.views.find((v) => v.id === id));
-const RUNS = +o.runs, FRAMES = +o.frames, WARMUP = +o.warmup, TOL = +o['clock-tol'];
+const RUNS = +o.runs, FRAMES = +o.frames, WARMUP = +o.warmup, TOL = +o['clock-tol'], CPU_FRAMES = 120;
 const meta = (label) => JSON.parse(fs.readFileSync(path.join(BENCH, 'builds', label, 'meta.json'), 'utf8'));
 const stressOf = (s) => (s === undefined ? W.stress : s === 'none' ? undefined : JSON.parse(s));
 const arms = { A: { label: o.a, build: meta(o.a), stress: stressOf(o['stress-a']) }, B: { label: o.b, build: meta(o.b), stress: stressOf(o['stress-b']) } };
@@ -74,6 +74,9 @@ async function oneRun(job) {
     }
     const m = await page.evaluate((n) => H.frames(n), FRAMES);
     const late = await page.evaluate(() => H.drain());
+    // CPU: a separate GPU-synchronised batch (free-running frames include GPU backpressure in JS calls)
+    const cs = await page.evaluate((n) => H.frames(n, 1 / 60, true), CPU_FRAMES);
+    await page.evaluate(() => H.drain());
     const counters = await page.evaluate(() => H.counters());
     const disjoint = await page.evaluate(() => H.disjoint());
     const gpuByFrame = new Map([...m.gpu, ...late].map((g) => [g.frame, g]));
@@ -81,18 +84,18 @@ async function oneRun(job) {
     const grMed = median(clocks.filter(Boolean).map((c) => c.gr));
     const frames = [];
     let rejected = { clock: 0, throttle: 0, noGpu: 0, noClock: 0 };
-    m.cpu.forEach((cpu, i) => {
+    m.cpu.forEach((cpuFree, i) => {
       const c = clocks[i], g = gpuByFrame.get(m.pf[i]);
       if (!c) { rejected.noClock++; return; }
       if (Math.abs(c.gr - grMed) / grMed > TOL) { rejected.clock++; return; }
       if (!o['no-throttle-reject'] && (c.reasons & THROTTLE)) { rejected.throttle++; return; }
       if (!g && setup.timer) { rejected.noGpu++; }
-      frames.push({ cpu, cpuTotal: m.cpuTotal ? m.cpuTotal[i] : cpu, gpu: g ? g.total : null, labels: g ? g.gpu : null });
+      frames.push({ cpuTotal: cpuFree, gpu: g ? g.total : null, labels: g ? g.gpu : null });
     });
     const labels = {};
     for (const f of frames) if (f.labels) for (const k in f.labels) (labels[k] ||= []).push(f.labels[k]);
     out.views[v.id] = {
-      cpu: frames.map((f) => f.cpu), cpuTotal: frames.map((f) => f.cpuTotal), gpu: frames.filter((f) => f.gpu !== null).map((f) => f.gpu),
+      cpu: cs.cpu, cpuTotal: frames.map((f) => f.cpuTotal), gpu: frames.filter((f) => f.gpu !== null).map((f) => f.gpu),
       labels: Object.fromEntries(Object.entries(labels).map(([k, xs]) => [k, median(xs)])),
       rejected, grMedian: grMed, counters, disjoint,
       reasons: clocks.filter(Boolean).reduce((h, c) => { const k = '0x' + c.reasons.toString(16); h[k] = (h[k] || 0) + 1; return h; }, {}),
