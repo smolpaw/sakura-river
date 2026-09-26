@@ -151,7 +151,15 @@ The owner's machine runs processes with spiky load, including another agent sess
 - **Calibrate noise first** with an A/A run: baseline against itself.
 - **What counts as an improvement:** report ratios with bootstrap confidence intervals (Kalibera & Jones 2013, https://dl.acm.org/doi/10.1145/2464157.2464160). Accept an improvement only if the 95% CI excludes zero *and* the gain exceeds the A/A noise floor.
 - **Weak-GPU emulation:** a bench-only "ballast" pass that burns a configurable number of GPU milliseconds per frame. It tests the adaptive controller as if running on a slow laptop.
-- **Optional clock lock:** the owner can run `sudo nvidia-smi -lgc <min>,<max>` (the man page says it needs root and Volta or newer; GeForce support is unverified). Ask once, don't depend on it.
+- **GPU clock lock (optional, done by the owner):**
+  - The owner may lock the graphics clock with `sudo nvidia-smi -lgc 1500,1500`.
+  - This machine reports a 2145 MHz maximum, but that's the top of the boost range. Under sustained load the 170 W power limit and temperature pull the clock down. 1500 MHz is below the RTX 2060's 1680 MHz rated boost clock, so it's a speed the card can hold.
+  - The lock applies system-wide and lasts until `sudo nvidia-smi -rgc` or a reboot.
+  - At the start of each bench session, check `nvidia-smi --query-gpu=clocks.gr,clocks_event_reasons.active --format=csv`:
+    - `clocks.gr` reads 1500 under load: the lock is active. Record that in the results.
+    - `clocks.gr` isn't 1500: the lock isn't active. Rely on the clock-deviation rejection above.
+    - Any power or thermal throttle bit set under load while locked: tell the owner a lower lock value is needed.
+  - Never run `sudo` yourself.
 - **Workloads:**
   - **hero:** `high` tier at 1920×1080, device scale 2 (worst case, like a laptop with a high-density screen);
   - **1080p:** device scale 1;
@@ -345,7 +353,7 @@ All true, with evidence in `bench/results/` and the Status log:
 
 ## For the owner (never blocks the work)
 
-- Optionally lock GPU clocks for tighter benchmarks.
+- Optionally lock the GPU clock for tighter benchmarks: `sudo nvidia-smi -lgc 1500,1500` before the run, and `sudo nvidia-smi -rgc` afterwards (a reboot also resets it).
 - Run the `?bench` page on the laptop that gets 18–25 fps and share the JSON.
 - Review the "better but different" gallery (constraint 2).
 - Republish the live artifact when satisfied.
