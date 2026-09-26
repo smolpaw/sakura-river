@@ -4,13 +4,15 @@
   "private": true,
   "description": "Full-screen interactive 3D cherry-blossom river scene (Three.js)",
   "scripts": {
-    "build:engine": "sh scripts/build.sh",
-    "build": "sh scripts/build.sh && node scripts/build-page.mjs"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "three": "0.170.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "vite": "^8.3.1",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }
