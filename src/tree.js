@@ -286,7 +286,7 @@ export function paintBlossomAtlas(seed = 5, size = 1024) {
   const rng = mulberry32(seed);
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
-  const ctx = cv.getContext('2d');
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
   const cell = size / 2;
   const petalPath = (ctx, len, wid) => {
     ctx.beginPath();
@@ -386,10 +386,10 @@ export function paintBark(seed = 3, size = 512) {
   const nz = makeNoise(seed);
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
-  const ctx = cv.getContext('2d');
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
   const img = ctx.createImageData(size, size);
   const bump = document.createElement('canvas'); bump.width = bump.height = size;
-  const bctx = bump.getContext('2d');
+  const bctx = bump.getContext('2d', { willReadFrequently: true });
   const bimg = bctx.createImageData(size, size);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const u = x / size, v = y / size;
