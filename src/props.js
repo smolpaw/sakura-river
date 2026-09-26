@@ -2,7 +2,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeNoise, mulberry32, clamp, lerp, smoothstep } from './noise.js';
-import { patch, U } from './shaders.js';
 
 const V = THREE.Vector3;
 
@@ -70,21 +69,6 @@ const STONE = [0.33, 0.31, 0.29], STONE_D = [0.22, 0.21, 0.2];
 const VERM = [0.62, 0.055, 0.02], VERM_D = [0.38, 0.03, 0.012];
 const WOOD = [0.16, 0.1, 0.07], ROOF = [0.07, 0.07, 0.075], WALL = [0.8, 0.74, 0.62], BRONZE = [0.42, 0.3, 0.1];
 
-function propMaterial(key, extra = {}) {
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, side: THREE.DoubleSide, ...extra });
-  patch(m, {
-    key,
-    fragColor: key === 'stone' ? `
-      float mossP = smoothstep(0.45, 0.9, normalize(vNormalW).y + 0.35 * vnoise(vFogWorld.xz * 6.0 + vFogWorld.y * 3.0));
-      diffuseColor.rgb = mix(diffuseColor.rgb * (0.8 + 0.4 * vnoise(vFogWorld.xz * 11.0 + vFogWorld.y * 9.0)), vec3(0.1, 0.19, 0.04), mossP * 0.85);` : `
-      diffuseColor.rgb *= 0.88 + 0.24 * vnoise(vFogWorld.xz * 4.0 + vFogWorld.y * 6.0);`,
-    varyings: 'varying vec3 vNormalW;',
-    vertEnd: 'vNormalW = normalize(mat3(modelMatrix) * objectNormal);',
-    noFlip: false,
-  });
-  return m;
-}
-
 // ---------------- stone lantern ----------------
 export function lanternGeometry() {
   const parts = [];
@@ -104,11 +88,11 @@ export function lanternGeometry() {
   return mergeGeometries(parts);
 }
 
-export function makeLantern(world, g, x, z, rot = 0) {
-  const mesh = new THREE.Mesh(g, propMaterial('stone'));
+export function makeLantern(world, g, x, z, rot, mats) {
+  const mesh = new THREE.Mesh(g, mats.stone);
   mesh.castShadow = true; mesh.receiveShadow = true;
   // glowing paper core
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 6, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.62, 0.3) }));
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 6, 1), mats.core);
   core.position.y = 1.52;
   const glowMat = core.material;
   const light = new THREE.PointLight(0xffa860, 0, 14, 1.6);
@@ -185,8 +169,8 @@ export function bridgeData(world, zc) {
   return { geo: mergeGeometries(parts), center: center.toArray(), half, across: across.toArray(), endY, rise };
 }
 
-export function makeBridge(d) {
-  const mesh = new THREE.Mesh(d.geo, propMaterial('wood', { roughness: 0.55 }));
+export function makeBridge(d, mat) {
+  const mesh = new THREE.Mesh(d.geo, mat);
   mesh.castShadow = true; mesh.receiveShadow = true;
   return { mesh, center: new V().fromArray(d.center), half: d.half, across: new V().fromArray(d.across), endY: d.endY, rise: d.rise };
 }
@@ -222,8 +206,8 @@ export function pagodaGeometry() {
   return mergeGeometries(parts);
 }
 
-export function makePagoda(world, g, x, z, scale = 1) {
-  const mesh = new THREE.Mesh(g, propMaterial('pagoda', { roughness: 0.7 }));
+export function makePagoda(world, g, x, z, scale, mat) {
+  const mesh = new THREE.Mesh(g, mat);
   mesh.scale.setScalar(scale);
   mesh.position.set(x, world.height(x, z) - 0.3, z);
   mesh.rotation.y = 0.35;
@@ -281,19 +265,7 @@ export function fujiGeometry(cx, cz, R = 1850, H = 700, baseY = 40) {
   return g;
 }
 
-export function makeFuji(g) {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
-  patch(mat, {
-    key: 'fuji',
-    fragColor: 'diffuseColor.rgb *= 0.9 + 0.2 * vnoise(vFogWorld.xz * 0.05);',
-    // snow picks up sky light (cool) and alpenglow
-    fragLight: `
-      float snowAmt = smoothstep(0.6, 0.85, diffuseColor.b);
-      outgoingLight += diffuseColor.rgb * uSkyAmb * snowAmt * 0.35;
-      outgoingLight += diffuseColor.rgb * uSunColor * uSunVis * snowAmt * 0.18 * pow(max(dot(normal, normalize((viewMatrix * vec4(uSunDirV, 0.0)).xyz)), 0.0), 0.6);`,
-    fragPars: 'uniform vec3 uSunDirV;',
-    uniforms: { uSunDirV: U.uSunDir },
-  });
+export function makeFuji(g, mat) {
   const mesh = new THREE.Mesh(g, mat);
   mesh.frustumCulled = false;
   return mesh;

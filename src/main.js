@@ -1,23 +1,21 @@
 // Sakura River — cinematic procedural scene engine
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import * as THREE from 'three/webgpu';
+import { pass } from 'three/tsl';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { createWorld, depthTexture } from './world.js';
-import { U, patch, windDepthMaterial } from './shaders.js';
+import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildBlossomCardGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
 import { makeSky, skyState } from './sky.js';
-import { makeWater, PlanarReflection } from './water.js';
-import { PetalSystem, makeFallenPetals, makeMotes } from './petals.js';
-import { GodRaysPass, GradeShader } from './post.js';
+import { makeWater } from './water.js';
+import { PetalSystem, makeFallenPetals } from './petals.js';
+import { petalMaterial, makeMotes, rainMaterial } from './fx.js';
+import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
-import { createBenchProbe } from './bench-probe.js';
+import * as M from './materials.js';
+import { createGPUProbe } from './bench-probe-gpu.js';
 import { hashScene } from './bench-hash.js';
 import { tessellate, makeStressObjects, makeRain } from './stress.js';
 import { runJobs } from './gen/pool.js';
@@ -34,7 +32,11 @@ function detectTier(renderer) {
   const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
   const cores = navigator.hardwareConcurrency || 4;
   let gpu = '';
-  try { const gl = renderer.getContext(); const ext = gl.getExtension('WEBGL_debug_renderer_info'); if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || ''; } catch (e) { /* ignore */ }
+  try {
+    const b = renderer.backend;
+    if (b.isWebGPUBackend) { const i = b.device.adapterInfo || {}; gpu = `${i.vendor || ''} ${i.architecture || ''} ${i.description || ''}`; }
+    else { const gl = b.gl; const ext = gl.getExtension('WEBGL_debug_renderer_info'); if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || ''; }
+  } catch (e) { /* ignore */ }
   const weak = /SwiftShader|llvmpipe|Software|Mali-[4T]|Adreno \(TM\) [3-5]\d\d|PowerVR/i.test(gpu);
   if (mobile) return !weak && cores >= 8 ? 'medium' : 'low';
   if (weak) return 'low';
@@ -45,21 +47,32 @@ function detectTier(renderer) {
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export async function create(canvas, opts = {}) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+  const mark = (n) => performance.mark('sr:' + n);
+  // let the page breathe between assembly stages so no main-thread task runs long
+  const yieldTask = () => new Promise((r) => setTimeout(r, 0));
+  mark('create');
+  const renderer = new THREE.WebGPURenderer({
+    canvas, antialias: false, powerPreference: 'high-performance', forceWebGL: opts.backend === 'webgl',
+    trackTimestamp: !!opts.bench && opts.backend !== 'webgl',
+  });
+  await renderer.init();
+  const backendName = renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
+  // on the WebGL2 fallback the bench probe runs its own timer queries (three's cannot time nested passes)
+  if (backendName === 'webgl') renderer.backend.trackTimestamp = false;
   const tierName = opts.quality || detectTier(renderer);
   const Q = { ...TIERS[tierName] };
   const ST = opts.stress || null; // bench-only future-content scenario
   const dpr = Math.min(window.devicePixelRatio || 1, Q.pr);
   let resScale = 1;
   renderer.setPixelRatio(dpr);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMappingExposure = 1.0; // read by renderOutput() in the post pipeline
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  const probe = opts.bench ? createBenchProbe(renderer) : null;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // filter replaced below by the r170 PCFSoft equivalent
+  const probe = opts.bench ? createGPUProbe(renderer) : null;
 
   const scene = new THREE.Scene();
+  scene.name = 'scene';
+  scene.fogNode = sceneFog();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 9000);
   camera.layers.enable(1);
 
@@ -90,25 +103,11 @@ export async function create(canvas, opts = {}) {
     fallen: { name: 'fallen', args: { count: Q.fallen } },
   }, { mainThread: opts.workers === false });
   world.setHeightCache(G.heightCache);
+  mark('generated');
 
   // ---------- terrain ----------
   const terrainGeo = G.terrain;
-  const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
-  patch(terrainMat, {
-    key: 'terrain',
-    fragColor: `
-      float dn = vnoise(vFogWorld.xz * 0.9) * 0.5 + vnoise(vFogWorld.xz * 3.7) * 0.3 + vnoise(vFogWorld.xz * 0.12) * 0.45;
-      diffuseColor.rgb *= 0.7 + 0.42 * dn;`,
-    fragLight: `
-      if (vFogWorld.y < 0.03) {
-        vec2 cp = vFogWorld.xz * 0.8; float ct = uTime * 0.55;
-        float c1 = vnoise(cp + vec2(ct, ct * 0.7)); float c2 = vnoise(cp * 1.37 - vec2(ct * 0.8, -ct * 0.5) + 5.0);
-        float cc = pow(1.0 - abs(c1 - c2), 10.0);
-        float cw = smoothstep(0.03, -0.3, vFogWorld.y) * smoothstep(-2.6, -0.6, vFogWorld.y);
-        outgoingLight += diffuseColor.rgb * uSunColor * uSunVis * cc * cw * 2.2;
-        outgoingLight *= mix(1.0, 0.75, smoothstep(0.0, -1.5, vFogWorld.y));
-      }`,
-  });
+  const terrainMat = M.terrainMaterial();
   const terrain = new THREE.Mesh(terrainGeo, terrainMat);
   terrain.receiveShadow = true;
   scene.add(terrain);
@@ -121,50 +120,30 @@ export async function create(canvas, opts = {}) {
   sun.shadow.mapSize.set(Q.shadow, Q.shadow);
   const sc = sun.shadow.camera;
   sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 320;
-  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
-  sun.shadow.radius = 3;
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0; // applied per receiver (SHADOW_NORMAL_BIAS in tsl.js)
+  sun.shadow.filterNode = pcfSoftShadowFilter;
+  sun.shadow.autoUpdate = false; // re-rendered on the frames the quality level asks for (see step)
+  sun.shadow.camera.layers.set(0); sun.shadow.camera.layers.enable(2); // layer 2: shadow-only proxies
   scene.add(sun); scene.add(sun.target);
   const hemi = new THREE.HemisphereLight(0xbcd0ff, 0x3a3a20, 0.9);
   scene.add(hemi);
 
+  await yieldTask();
   // ---------- trees ----------
   const bark = barkTextures(G.bark);
   const atlas = atlasTexture(G.atlas);
   if (opts.debug) window.__sakuraDebug = { bark, atlas };
-  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  const maxAniso = renderer.getMaxAnisotropy();
   atlas.anisotropy = Math.min(16, maxAniso); bark.map.anisotropy = Math.min(16, maxAniso); bark.bump.anisotropy = Math.min(8, maxAniso);
-  const barkMat = new THREE.MeshStandardMaterial({ map: bark.map, bumpMap: bark.bump, bumpScale: 0.5, vertexColors: true, roughness: 0.78, metalness: 0, color: new THREE.Color(1.9, 1.75, 1.75) });
-  patch(barkMat, {
-    key: 'bark', wind: 'aFlex', vertPars: 'attribute float aFlex;',
-    fragLight: `
-      vec3 vvB = normalize(cameraPosition - vFogWorld);
-      float rimB = pow(1.0 - max(dot(normal, normalize((viewMatrix * vec4(vvB, 0.0)).xyz)), 0.0), 3.0);
-      outgoingLight += uSunColor * uSunVis * rimB * pow(max(dot(-vvB, uSunDir), 0.0), 2.0) * 0.35 * diffuseColor.rgb * 4.0;
-      outgoingLight += diffuseColor.rgb * uSkyAmb * 0.15;`,
-  });
-  const barkDepth = windDepthMaterial('aFlex', 'bark');
-  const blossomMat = new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.72, metalness: 0, alphaToCoverage: Q.msaa > 0 });
-  patch(blossomMat, {
-    key: 'blossom', wind: 'aFlex',
-    vertPars: 'attribute float aFlex; attribute vec2 aAtlas; attribute vec3 aCanopyN;',
-    vertUv: 'vMapUv = vMapUv * 0.5 + aAtlas;',
-    vertNormal: 'transformedNormal = normalMatrix * normalize(mix(normalize(mat3(instanceMatrix) * objectNormal), aCanopyN, 0.72));',
-    noFlip: true,
-    fragLight: `
-      vec3 vdirB = normalize(vFogWorld - cameraPosition);
-      float backB = pow(max(dot(vdirB, uSunDir), 0.0), 2.5);
-      vec3 sunB = mix(uSunColor, vec3(dot(uSunColor, vec3(0.33))), 0.45);
-      outgoingLight += diffuseColor.rgb * sunB * uSunVis * (backB * 1.2 + 0.1);
-      outgoingLight += diffuseColor.rgb * (vec3(0.16) + uSkyAmb * 0.1);`,
-  });
-  const blossomDepth = windDepthMaterial('aFlex', 'blossom', { map: atlas, alphaTest: 0.4 });
+  const barkMat = M.barkMaterial(bark.map, bark.bump);
+  const blossomMat = M.blossomMaterial(atlas, Q.msaa > 0);
+  const blossomShadowMat = M.blossomShadowMaterial(atlas);
   const cardGeo = ST ? tessellate(buildBlossomCardGeometry(), ST.triMul) : buildBlossomCardGeometry();
 
   function buildTreeObject(d, pos, castShadow = true) {
     const group = new THREE.Group();
     group.position.copy(pos);
     const barkMesh = new THREE.Mesh(d.bark, barkMat);
-    barkMesh.customDepthMaterial = barkDepth;
     barkMesh.castShadow = castShadow; barkMesh.receiveShadow = true;
     group.add(barkMesh);
     const geo = cardGeo.clone();
@@ -174,10 +153,18 @@ export async function create(canvas, opts = {}) {
     geo.setAttribute('aFlex', new THREE.InstancedBufferAttribute(d.aFlex, 1));
     geo.setAttribute('aAtlas', new THREE.InstancedBufferAttribute(d.aAtlas, 2));
     geo.setAttribute('aCanopyN', new THREE.InstancedBufferAttribute(d.aCanopyN, 3));
-    mesh.customDepthMaterial = blossomDepth;
-    mesh.castShadow = castShadow; mesh.receiveShadow = castShadow;
+    mesh.receiveShadow = castShadow;
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
+    if (castShadow) {
+      // cast through a shadow-only proxy on layer 2 (see blossomShadowMaterial)
+      const proxy = new THREE.InstancedMesh(geo, blossomShadowMat, d.n);
+      proxy.instanceMatrix = mesh.instanceMatrix;
+      proxy.boundingSphere = mesh.boundingSphere;
+      proxy.castShadow = true;
+      proxy.layers.set(2);
+      group.add(proxy);
+    }
     return { group, data: d, blossoms: mesh };
   }
 
@@ -193,67 +180,64 @@ export async function create(canvas, opts = {}) {
     smallTrees.push(o);
   });
 
+  await yieldTask();
   // ---------- Japanese set pieces ----------
-  const fuji = makeFuji(G.fuji);
+  const fuji = makeFuji(G.fuji, M.fujiMaterial());
   scene.add(fuji);
-  const lantern = makeLantern(world, G.props.lantern, LX, LZ, 0.3);
+  const lantern = makeLantern(world, G.props.lantern, LX, LZ, 0.3, { stone: M.propMaterial('stone'), core: M.lanternCoreMaterial() });
   scene.add(lantern.group);
-  const bridge = makeBridge(G.props.bridge);
+  const bridge = makeBridge(G.props.bridge, M.propMaterial('wood', { roughness: 0.55 }));
   scene.add(bridge.mesh);
-  const pagoda = makePagoda(world, G.props.pagoda, world.pagoda.x, world.pagoda.z, 1.0);
+  const pagoda = makePagoda(world, G.props.pagoda, world.pagoda.x, world.pagoda.z, 1.0, M.propMaterial('pagoda', { roughness: 0.7 }));
   scene.add(pagoda);
 
+  await yieldTask();
   // ---------- ground cover ----------
-  const rocks = makeRocks(G.rocks);
+  const rocks = makeRocks(G.rocks, M.rockMaterial());
   scene.add(rocks.group);
-  const grass = makeGrass(G.grass);
+  const grass = makeGrass(G.grass, M.grassMaterial());
   scene.add(grass);
-  const flowers = makeFlowers(G.flowers);
+  const flowers = makeFlowers(G.flowers, M.flowerMaterial());
   scene.add(flowers);
-  const forest = makeForest(G.forest);
+  const forest = makeForest(G.forest, M.forestMaterial());
   scene.add(forest);
 
+  await yieldTask();
   // ---------- river ----------
   const depthMap = depthTexture(G.depth);
-  const water = makeWater(G.river, depthMap, sky);
+  const water = makeWater(G.river, depthMap, sky, { reflectionScale: Q.refl });
   scene.add(water.mesh);
-  let reflection = null;
-  if (Q.refl > 0) reflection = new PlanarReflection(renderer, 256, 256);
+  const reflector = water.reflector ? water.reflector.reflector : null;
+  if (reflector) {
+    // the old planar reflection rendered layer 0 only (no grass, flowers, petals, motes)
+    reflector.getVirtualCamera(camera).layers.set(0);
+    // quality ladder can skip reflection frames
+    const upd = reflector.updateBefore.bind(reflector);
+    reflector.updateBefore = (frame) => (reflSkip ? false : upd(frame));
+  }
+  let reflSkip = false;
 
   // ---------- petals ----------
   const sp3 = main.data.spawn, spawnPts = [];
   for (let i = 0; i < sp3.length; i += 3) spawnPts.push(new THREE.Vector3(sp3[i], sp3[i + 1], sp3[i + 2]).add(treePos));
-  const petals = new PetalSystem(world, spawnPts, Q.petals, camera);
+  const petalMat = petalMaterial();
+  const petals = new PetalSystem(world, spawnPts, Q.petals, camera, petalMat, U.uWindDir.value);
   scene.add(petals.mesh);
-  const fallen = makeFallenPetals(G.fallen);
+  const fallen = makeFallenPetals(G.fallen, petalMat);
   scene.add(fallen);
   const motes = makeMotes(new THREE.Vector3(...Lay.motes), Q.motes);
-  scene.add(motes);
+  scene.add(motes.mesh);
   if (ST) {
-    scene.add(makeStressObjects(world, ST.objects, focus));
-    scene.add(makeRain(ST.particles));
+    scene.add(makeStressObjects(world, ST.objects, focus, M.stressObjectMaterial));
+    scene.add(makeRain(ST.particles, rainMaterial()));
   }
 
+  mark('assembled');
+  await yieldTask();
   // ---------- post ----------
-  const rtSize = new THREE.Vector2(2, 2);
-  const depthTex = new THREE.DepthTexture(2, 2);
-  depthTex.type = THREE.UnsignedIntType;
-  const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: Q.msaa, depthTexture: depthTex });
-  const composer = new EffectComposer(renderer, rt);
-  composer.setPixelRatio(dpr);
-  const renderPass = new RenderPass(scene, camera);
-  composer.addPass(renderPass);
-  const rays = new GodRaysPass(2, 2, Q.rays);
-  composer.addPass(rays);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.55, 2.2);
-  composer.addPass(bloom);
-  composer.addPass(new OutputPass());
-  const grade = new ShaderPass(GradeShader);
-  composer.addPass(grade);
-  if (probe) {
-    probe.wrapPass(renderPass, 'scene'); probe.wrapPass(rays, 'godrays'); probe.wrapPass(bloom, 'bloom');
-    probe.wrapPass(composer.passes[3], 'output'); probe.wrapPass(grade, 'grade');
-  }
+  const scenePass = pass(scene, camera, { samples: Q.msaa });
+  const post = buildPipeline(renderer, scenePass, { raySamples: Q.rays });
+  const rays = post.shafts.uniforms;
 
   // ---------- camera / controls ----------
   const controls = new OrbitControls(camera, canvas);
@@ -337,7 +321,7 @@ export async function create(canvas, opts = {}) {
     hemi.color.copy(amb).multiplyScalar(1.25);
     hemi.groundColor.setRGB(0.16, 0.15, 0.08).lerp(st.fog, 0.25);
     hemi.intensity = lerp(0.62, 1.0, 1 - st.vis * 0.6);
-    rays.tint.copy(st.sun).lerp(new THREE.Color(1, 0.9, 0.8), 0.3);
+    rays.tint.value.copy(st.sun).lerp(new THREE.Color(1, 0.9, 0.8), 0.3);
     renderer.toneMappingExposure = lerp(1.35, 0.98, st.vis) * (st.elev > 30 ? 0.92 : 1);
     lastTime = t;
     return st;
@@ -352,14 +336,14 @@ export async function create(canvas, opts = {}) {
     const pr = dpr * resScale;
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
-    composer.setPixelRatio(pr);
-    composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    if (reflection) reflection.setSize(Math.floor(w * pr * Q.refl), Math.floor(h * pr * Q.refl));
-    grade.uniforms.uRes.value.set(w * pr, h * pr);
-    grade.uniforms.uSharp.value = pr >= 1.75 ? 0.3 : pr >= 1.2 ? 0.45 : 0.6;
-    motes.material.uniforms.uPx.value = pr * (h / 900) * 1.3;
+    const g = post.grade.uniforms;
+    renderer.getDrawingBufferSize(g.res.value);
+    post.bloom.setSize(g.res.value.x, g.res.value.y);
+    g.sharp.value = pr >= 1.75 ? 0.3 : pr >= 1.2 ? 0.45 : 0.6;
+    rays.aspect.value = w / h;
+    motes.uPx.value = pr * (h / 900) * 1.3;
   }
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);
@@ -374,7 +358,7 @@ export async function create(canvas, opts = {}) {
     { up() { shadowEvery = 2; }, down() { shadowEvery = tierName === 'high' ? 1 : 2; } },
     { up() { grass.userData.setFraction(0.7); }, down() { grass.userData.setFraction(1); } },
     { up() { resScale = 0.85; resize(); }, down() { resScale = 1; resize(); } },
-    { up() { reflEvery = 1e9; water.uniforms.uHasRefl.value = 0; grass.userData.setFraction(0.5); }, down() { reflEvery = 2; grass.userData.setFraction(0.7); } },
+    { up() { reflEvery = 1e9; grass.userData.setFraction(0.5); }, down() { reflEvery = 2; grass.userData.setFraction(0.7); } },
     { up() { resScale = 0.72; resize(); }, down() { resScale = 0.85; resize(); } },
   ];
   let slowWin = 0, fastWin = 0;
@@ -395,11 +379,12 @@ export async function create(canvas, opts = {}) {
   }
 
   // ---------- loop ----------
-  const clock = new THREE.Clock();
+  const timer = new THREE.Timer();
   const tmpV = new THREE.Vector3();
   let running = true;
   let frameNo = 0;
   const sunScreen = new THREE.Vector3();
+  const tmpSize = new THREE.Vector2();
 
   function step(dtIn, doRender = true) {
     const dt = Math.min(dtIn, 0.05);
@@ -414,8 +399,8 @@ export async function create(canvas, opts = {}) {
     sky.uniforms.uCloud.value.y -= dt * (0.003 + S.wind * 0.005);
     U.uFogDensity.value = 0.0006 + Math.pow(S.fog, 1.5) * 0.013;
     U.uFogFalloff.value = 0.028;
-    bloom.strength = S.bloom * 1.6;
-    grade.uniforms.uTime.value = U.uTime.value;
+    post.bloom.uniforms.strength.value = S.bloom * 1.6;
+    post.grade.uniforms.time.value = U.uTime.value;
 
     petals.update(dt, U.uTime.value, S.wind, S.river);
     lantern.update(U.uSunVis.value * smoothstep(-2, 14, skyNow.elev));
@@ -458,44 +443,38 @@ export async function create(canvas, opts = {}) {
     const camDir = camera.getWorldDirection(new THREE.Vector3());
     const facing = smoothstep(0.05, 0.55, camDir.dot(sd));
     const onScreen = smoothstep(1.9, 1.0, Math.max(Math.abs(sunScreen.x), Math.abs(sunScreen.y)));
-    rays.sun.set(sunScreen.x * 0.5 + 0.5, sunScreen.y * 0.5 + 0.5);
-    rays.intensity = facing * onScreen * U.uSunVis.value * (0.55 + S.fog * 0.9) * (opts.rays ?? 1);
+    // uv of the sun in the post passes: three's fullscreen quad runs uv.y top-down on both backends
+    rays.sun.value.set(sunScreen.x * 0.5 + 0.5, 0.5 - sunScreen.y * 0.5);
+    rays.intensity.value = facing * onScreen * U.uSunVis.value * (0.55 + S.fog * 0.9) * (opts.rays ?? 1);
+    post.shafts.setEnabled(rays.intensity.value > 0.001);
 
     // reflections
     if (!doRender) return;
     frameNo++;
     if (probe) probe.beginFrame();
-    renderer.shadowMap.autoUpdate = false;
-    renderer.shadowMap.needsUpdate = frameNo % shadowEvery === 0 || frameNo < 3;
-    if (reflection && (frameNo % reflEvery === 0 || frameNo < 3)) {
-      if (probe) probe.push('reflection');
-      const ok = reflection.render(scene, camera, [water.mesh]);
-      if (probe) probe.pop();
-      water.uniforms.uHasRefl.value = ok ? 1 : 0;
-      water.uniforms.uRefl.value = reflection.rt.texture;
-      water.uniforms.uTexMat.value.copy(reflection.texMat);
-    }
-    composer.render(dt);
+    sun.shadow.needsUpdate = frameNo % shadowEvery === 0 || frameNo < 3;
+    // the reflector skips when the camera is below the water plane; fall back to the analytic sky then
+    reflSkip = !(frameNo % reflEvery === 0 || frameNo < 3);
+    water.uniforms.uHasRefl.value = reflector && reflEvery < 1e9 && camera.position.y > 0.02 ? 1 : 0;
+    // bench-only: sub-pixel view offset, the A/A calibration for sample-placement differences between backends
+    if (opts.jitter) { const b = renderer.getDrawingBufferSize(tmpSize); camera.setViewOffset(b.x, b.y, opts.jitter[0], opts.jitter[1], b.x, b.y); }
+    post.pipeline.render();
+    if (opts.jitter) camera.clearViewOffset();
     if (probe) probe.endFrame();
   }
 
   function loop() {
     if (!running) return;
     requestAnimationFrame(loop);
-    const dt = clock.getDelta();
+    timer.update();
+    const dt = timer.getDelta();
     step(dt);
     adapt(dt);
   }
-  // precompile scene programs behind the veil, one top-level object per task (KHR_parallel_shader_compile
-  // links them off the main thread); bind the composer's target so the variants match the real render
-  if (opts.precompile !== false) {
-    for (const o of [...scene.children]) {
-      renderer.setRenderTarget(composer.renderTarget1);
-      const p = renderer.compileAsync(o, camera, scene);
-      renderer.setRenderTarget(null);
-      await p;
-    }
-  }
+  // build pipelines behind the veil (asynchronously on WebGPU)
+  mark('ready');
+  if (opts.precompile !== false) await renderer.compileAsync(scene, camera);
+  mark('precompiled');
   if (!opts.manual) requestAnimationFrame(loop);
   opts.onReady && opts.onReady({ quality: tierName });
 
@@ -536,7 +515,8 @@ export async function create(canvas, opts = {}) {
     step(dt) { step(dt); },
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
-    info() { return { tier: tierName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
+    backend: backendName,
+    info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
     dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); },
   };
 }

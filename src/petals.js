@@ -1,6 +1,5 @@
-// Drifting petals (CPU-simulated, GPU instanced), fallen petal carpet, glowing pollen motes
+// Drifting petals (CPU-simulated, GPU instanced) and the fallen petal carpet; materials come from fx.js
 import * as THREE from 'three';
-import { U, GLSL_FOG_PARS } from './shaders.js';
 import { mulberry32, clamp, lerp } from './noise.js';
 
 function petalGeometry() {
@@ -22,56 +21,9 @@ function petalGeometry() {
   return g;
 }
 
-const PETAL_VS = /* glsl */`
-  attribute vec3 iPos; attribute vec4 iRot; // yaw, pitch, roll, scale
-  attribute float iTint;
-  varying vec3 vW; varying vec3 vN; varying vec2 vP; varying float vTint;
-  mat3 rotY(float a){ float c=cos(a), s=sin(a); return mat3(c,0.,-s, 0.,1.,0., s,0.,c); }
-  mat3 rotX(float a){ float c=cos(a), s=sin(a); return mat3(1.,0.,0., 0.,c,s, 0.,-s,c); }
-  mat3 rotZ(float a){ float c=cos(a), s=sin(a); return mat3(c,s,0., -s,c,0., 0.,0.,1.); }
-  void main(){
-    mat3 R = rotY(iRot.x) * rotX(iRot.y) * rotZ(iRot.z);
-    float camD = length(iPos - cameraPosition);
-    vec3 p = R * (position * iRot.w * smoothstep(0.9, 2.2, camD)) + iPos;
-    vN = R * normal;
-    vP = position.xy / 0.1;
-    vTint = iTint;
-    vW = p;
-    gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
-  }`;
-
-const PETAL_FS = /* glsl */`
-  uniform vec3 uSunColor, uSkyAmb; uniform float uSunVis;
-  varying vec3 vW; varying vec3 vN; varying vec2 vP; varying float vTint;
-  ${GLSL_FOG_PARS}
-  void main(){
-    vec3 N = normalize(vN);
-    vec3 V = normalize(cameraPosition - vW);
-    if (dot(N, V) < 0.0) N = -N;
-    float t = clamp(vP.y + 0.5, 0.0, 1.0);
-    vec3 tip = mix(vec3(0.98, 0.72, 0.8), vec3(1.0, 0.84, 0.89), vTint);
-    vec3 base = mix(vec3(0.88, 0.38, 0.54), vec3(0.95, 0.55, 0.68), vTint);
-    vec3 alb = mix(base, tip, smoothstep(0.0, 0.7, t));
-    float ndl = dot(N, uSunDir);
-    float diff = max(ndl, 0.0) * 0.7 + 0.3 * (ndl * 0.5 + 0.5);
-    float trans = pow(max(dot(-V, uSunDir), 0.0), 3.0) * 1.3 + 0.12;
-    vec3 col = alb * (uSkyAmb * 0.9 + uSunColor * uSunVis * (diff + trans) * 0.9);
-    col = applyFog(col, vW);
-    gl_FragColor = vec4(col, 1.0);
-  }`;
-
-function petalMaterial() {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uSunColor: U.uSunColor, uSkyAmb: U.uSkyAmb, uSunVis: U.uSunVis, uSunDir: U.uSunDir,
-      uFogColor: U.uFogColor, uFogSunColor: U.uFogSunColor, uFogDensity: U.uFogDensity, uFogBase: U.uFogBase, uFogFalloff: U.uFogFalloff,
-    },
-    vertexShader: PETAL_VS, fragmentShader: PETAL_FS, side: THREE.DoubleSide,
-  });
-}
-
 export class PetalSystem {
-  constructor(world, spawnPoints, max, camera) {
+  constructor(world, spawnPoints, max, camera, material, windDir) {
+    this.windDir = windDir;
     this.world = world; this.spawn = spawnPoints; this.max = max; this.camera = camera;
     this.rng = mulberry32(2024);
     const g = petalGeometry();
@@ -84,7 +36,7 @@ export class PetalSystem {
     ig.setAttribute('iTint', new THREE.InstancedBufferAttribute(this.tint, 1));
     ig.instanceCount = 0;
     this.geo = ig;
-    this.mesh = new THREE.Mesh(ig, petalMaterial());
+    this.mesh = new THREE.Mesh(ig, material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 3;
     this.mesh.layers.set(1);
@@ -105,7 +57,7 @@ export class PetalSystem {
     let x, y, z;
     if (nearCam) {
       const c = this.camera.position;
-      const w = U.uWindDir.value;
+      const w = this.windDir;
       // upwind of the camera so they drift through frame
       const fwd = new THREE.Vector3(); this.camera.getWorldDirection(fwd);
       const d0 = 3 + r() * 9;
@@ -119,7 +71,7 @@ export class PetalSystem {
     if (initial) {
       // pre-warm: scatter along a plausible fall path
       const t = r();
-      x += U.uWindDir.value.x * t * 12; z += U.uWindDir.value.y * t * 12; y -= t * (y - 0.5) * 0.9;
+      x += this.windDir.x * t * 12; z += this.windDir.y * t * 12; y -= t * (y - 0.5) * 0.9;
     }
     this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
     this.vel[i * 3] = 0; this.vel[i * 3 + 1] = -0.2; this.vel[i * 3 + 2] = 0;
@@ -133,7 +85,7 @@ export class PetalSystem {
     // ramp active count toward target smoothly
     if (this.active < this.target) this.active = Math.min(this.target, this.active + Math.ceil(this.max * dt * 0.4));
     else if (this.active > this.target) this.active = this.target;
-    const W = U.uWindDir.value;
+    const W = this.windDir;
     const world = this.world;
     const k = 1 - Math.exp(-dt * 2.2);
     const gust = 0.55 + 0.45 * Math.sin(time * 0.31) * Math.sin(time * 0.19 + 1.3);
@@ -212,7 +164,7 @@ export function fallenData(world, center, count, avoid) {
   return { pos, rot, tint, n };
 }
 
-export function makeFallenPetals({ pos, rot, tint, n }) {
+export function makeFallenPetals({ pos, rot, tint, n }, material) {
   const g = petalGeometry();
   const ig = new THREE.InstancedBufferGeometry();
   ig.index = g.index; ig.attributes.position = g.attributes.position; ig.attributes.normal = g.attributes.normal;
@@ -220,49 +172,8 @@ export function makeFallenPetals({ pos, rot, tint, n }) {
   ig.setAttribute('iRot', new THREE.InstancedBufferAttribute(rot, 4));
   ig.setAttribute('iTint', new THREE.InstancedBufferAttribute(tint, 1));
   ig.instanceCount = n;
-  const mesh = new THREE.Mesh(ig, petalMaterial());
+  const mesh = new THREE.Mesh(ig, material);
   mesh.frustumCulled = false;
   mesh.layers.set(1);
   return mesh;
-}
-
-// pollen / dust motes glowing in the light shafts
-export function makeMotes(center, count) {
-  const rng = mulberry32(5);
-  const geo = new THREE.BufferGeometry();
-  const p = new Float32Array(count * 3), s = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    p[i * 3] = center.x + (rng() - 0.5) * 34; p[i * 3 + 1] = 0.5 + rng() * 11; p[i * 3 + 2] = center.z + (rng() - 0.5) * 30;
-    s[i] = rng();
-  }
-  geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
-  geo.setAttribute('aSeed', new THREE.BufferAttribute(s, 1));
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime: U.uTime, uSunDir: U.uSunDir, uSunColor: U.uSunColor, uSunVis: U.uSunVis, uWind: U.uWind, uWindDir: U.uWindDir, uPx: { value: 1 } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    vertexShader: /* glsl */`
-      attribute float aSeed; uniform float uTime, uWind, uPx; uniform vec2 uWindDir; uniform vec3 uSunDir;
-      varying float vA;
-      void main(){
-        vec3 p = position;
-        float t = uTime * (0.15 + aSeed * 0.2);
-        p.x += sin(t + aSeed * 40.0) * 1.2 + uWindDir.x * mod(uTime * uWind * 0.6 + aSeed * 30.0, 30.0) - uWindDir.x * 15.0;
-        p.z += cos(t * 0.8 + aSeed * 17.0) * 1.2 + uWindDir.y * mod(uTime * uWind * 0.6 + aSeed * 30.0, 30.0) - uWindDir.y * 15.0;
-        p.y += sin(t * 1.3 + aSeed * 9.0) * 0.6;
-        vec4 mv = viewMatrix * vec4(p, 1.0);
-        vec3 V = normalize(p - cameraPosition);
-        float toward = pow(max(dot(V, uSunDir), 0.0), 3.0);
-        vA = (0.15 + toward * 1.2) * (0.5 + 0.5 * sin(uTime * 2.0 + aSeed * 50.0));
-        vA *= smoothstep(2.0, 5.0, -mv.z);
-        gl_PointSize = min(uPx * (1.2 + aSeed * 1.6) * 30.0 / -mv.z, 18.0 * uPx);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uSunColor; uniform float uSunVis; varying float vA;
-      void main(){ vec2 c = gl_PointCoord - 0.5; float d = dot(c,c); float a = exp(-d * 18.0) * vA * uSunVis; gl_FragColor = vec4(uSunColor * a * 1.4, a); }`,
-  });
-  const pts = new THREE.Points(geo, mat);
-  pts.frustumCulled = false;
-  pts.layers.set(1);
-  return pts;
 }

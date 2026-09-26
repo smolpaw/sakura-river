@@ -1,0 +1,408 @@
+{
+ "cand": "out/visual/wt-webgpu",
+ "base": "out/visual/base0-webgl",
+ "eps": 0.002,
+ "p99Threshold": null,
+ "p99Calib": "calib/p99-base0.json",
+ "ppd": 44.2,
+ "stills": [
+  {
+   "id": "stills/default-hero.png",
+   "flipGolden": 0.06804879009723663,
+   "baseFlipGolden": 0.06780973076820374,
+   "flipBase": 0.05089583992958069,
+   "p99Base": 0.3129609227180481,
+   "name": "default-hero",
+   "p99Threshold": 0.3414,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine000.png",
+   "flipGolden": 0.11849099397659302,
+   "baseFlipGolden": 0.11782536655664444,
+   "flipBase": 0.03598535805940628,
+   "p99Base": 0.2435467392206192,
+   "name": "default-cine000",
+   "p99Threshold": 0.2761,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine125.png",
+   "flipGolden": 0.11074573546648026,
+   "baseFlipGolden": 0.10995809733867645,
+   "flipBase": 0.04005755856633186,
+   "p99Base": 0.258423388004303,
+   "name": "default-cine125",
+   "p99Threshold": 0.3006,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine250.png",
+   "flipGolden": 0.08556556701660156,
+   "baseFlipGolden": 0.08432185649871826,
+   "flipBase": 0.05615059658885002,
+   "p99Base": 0.3380832374095917,
+   "name": "default-cine250",
+   "p99Threshold": 0.3519,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine375.png",
+   "flipGolden": 0.05983341112732887,
+   "baseFlipGolden": 0.05971650779247284,
+   "flipBase": 0.04408508539199829,
+   "p99Base": 0.24400725960731506,
+   "name": "default-cine375",
+   "p99Threshold": 0.2736,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine500.png",
+   "flipGolden": 0.06551232933998108,
+   "baseFlipGolden": 0.06516730040311813,
+   "flipBase": 0.050774287432432175,
+   "p99Base": 0.2816975712776184,
+   "name": "default-cine500",
+   "p99Threshold": 0.3064,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine625.png",
+   "flipGolden": 0.06768937408924103,
+   "baseFlipGolden": 0.06783292442560196,
+   "flipBase": 0.05350824072957039,
+   "p99Base": 0.30729860067367554,
+   "name": "default-cine625",
+   "p99Threshold": 0.3262,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine750.png",
+   "flipGolden": 0.10003412514925003,
+   "baseFlipGolden": 0.09977947175502777,
+   "flipBase": 0.06029757112264633,
+   "p99Base": 0.3455533981323242,
+   "name": "default-cine750",
+   "p99Threshold": 0.3575,
+   "pass": true
+  },
+  {
+   "id": "stills/default-cine875.png",
+   "flipGolden": 0.09702842682600021,
+   "baseFlipGolden": 0.09702369570732117,
+   "flipBase": 0.06034788489341736,
+   "p99Base": 0.3522927463054657,
+   "name": "default-cine875",
+   "p99Threshold": 0.3578,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-hero.png",
+   "flipGolden": 0.07393710315227509,
+   "baseFlipGolden": 0.07348879426717758,
+   "flipBase": 0.055229898542165756,
+   "p99Base": 0.3603816628456116,
+   "name": "time050-hero",
+   "p99Threshold": 0.3939,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine000.png",
+   "flipGolden": 0.060783617198467255,
+   "baseFlipGolden": 0.06007005646824837,
+   "flipBase": 0.04018648341298103,
+   "p99Base": 0.29814761877059937,
+   "name": "time050-cine000",
+   "p99Threshold": 0.3358,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine125.png",
+   "flipGolden": 0.0645257830619812,
+   "baseFlipGolden": 0.06348112970590591,
+   "flipBase": 0.04420381411910057,
+   "p99Base": 0.3054808974266052,
+   "name": "time050-cine125",
+   "p99Threshold": 0.3456,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine250.png",
+   "flipGolden": 0.07671168446540833,
+   "baseFlipGolden": 0.07624869793653488,
+   "flipBase": 0.056943900883197784,
+   "p99Base": 0.36550623178482056,
+   "name": "time050-cine250",
+   "p99Threshold": 0.3825,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine375.png",
+   "flipGolden": 0.06433924287557602,
+   "baseFlipGolden": 0.06396637111902237,
+   "flipBase": 0.04746150225400925,
+   "p99Base": 0.3037033677101135,
+   "name": "time050-cine375",
+   "p99Threshold": 0.3406,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine500.png",
+   "flipGolden": 0.08357813209295273,
+   "baseFlipGolden": 0.08329123258590698,
+   "flipBase": 0.06670945882797241,
+   "p99Base": 0.38125914335250854,
+   "name": "time050-cine500",
+   "p99Threshold": 0.4278,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine625.png",
+   "flipGolden": 0.081434465944767,
+   "baseFlipGolden": 0.08128376305103302,
+   "flipBase": 0.06564585864543915,
+   "p99Base": 0.38850289583206177,
+   "name": "time050-cine625",
+   "p99Threshold": 0.4267,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine750.png",
+   "flipGolden": 0.07977334409952164,
+   "baseFlipGolden": 0.07944320887327194,
+   "flipBase": 0.06834512203931808,
+   "p99Base": 0.39627084136009216,
+   "name": "time050-cine750",
+   "p99Threshold": 0.4212,
+   "pass": true
+  },
+  {
+   "id": "stills/time050-cine875.png",
+   "flipGolden": 0.08191055059432983,
+   "baseFlipGolden": 0.08171544969081879,
+   "flipBase": 0.06975265592336655,
+   "p99Base": 0.4089856743812561,
+   "name": "time050-cine875",
+   "p99Threshold": 0.4281,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-hero.png",
+   "flipGolden": 0.06356881558895111,
+   "baseFlipGolden": 0.06340287625789642,
+   "flipBase": 0.047341834753751755,
+   "p99Base": 0.28124338388442993,
+   "name": "time010-hero",
+   "p99Threshold": 0.3197,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine000.png",
+   "flipGolden": 0.05445665866136551,
+   "baseFlipGolden": 0.053901854902505875,
+   "flipBase": 0.03654884174466133,
+   "p99Base": 0.2527814507484436,
+   "name": "time010-cine000",
+   "p99Threshold": 0.2895,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine125.png",
+   "flipGolden": 0.05812542140483856,
+   "baseFlipGolden": 0.05735291168093681,
+   "flipBase": 0.03951516002416611,
+   "p99Base": 0.2513236999511719,
+   "name": "time010-cine125",
+   "p99Threshold": 0.2976,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine250.png",
+   "flipGolden": 0.06864912062883377,
+   "baseFlipGolden": 0.06812909245491028,
+   "flipBase": 0.04960048198699951,
+   "p99Base": 0.2781643569469452,
+   "name": "time010-cine250",
+   "p99Threshold": 0.3069,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine375.png",
+   "flipGolden": 0.06487636268138885,
+   "baseFlipGolden": 0.06481403112411499,
+   "flipBase": 0.048553191125392914,
+   "p99Base": 0.2781864404678345,
+   "name": "time010-cine375",
+   "p99Threshold": 0.3178,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine500.png",
+   "flipGolden": 0.07019642740488052,
+   "baseFlipGolden": 0.06995934993028641,
+   "flipBase": 0.054147619754076004,
+   "p99Base": 0.30012235045433044,
+   "name": "time010-cine500",
+   "p99Threshold": 0.3344,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine625.png",
+   "flipGolden": 0.06854279339313507,
+   "baseFlipGolden": 0.06837599724531174,
+   "flipBase": 0.05304206907749176,
+   "p99Base": 0.2849796414375305,
+   "name": "time010-cine625",
+   "p99Threshold": 0.3164,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine750.png",
+   "flipGolden": 0.06527934223413467,
+   "baseFlipGolden": 0.06497989594936371,
+   "flipBase": 0.054330430924892426,
+   "p99Base": 0.29723966121673584,
+   "name": "time010-cine750",
+   "p99Threshold": 0.3217,
+   "pass": true
+  },
+  {
+   "id": "stills/time010-cine875.png",
+   "flipGolden": 0.06464535742998123,
+   "baseFlipGolden": 0.064633809030056,
+   "flipBase": 0.054651595652103424,
+   "p99Base": 0.30986300110816956,
+   "name": "time010-cine875",
+   "p99Threshold": 0.33,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-hero.png",
+   "flipGolden": 0.054511658847332,
+   "baseFlipGolden": 0.05439097061753273,
+   "flipBase": 0.04222159460186958,
+   "p99Base": 0.2396588772535324,
+   "name": "fog090-hero",
+   "p99Threshold": 0.2646,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine000.png",
+   "flipGolden": 0.09374246001243591,
+   "baseFlipGolden": 0.09335029125213623,
+   "flipBase": 0.029779164120554924,
+   "p99Base": 0.1596485674381256,
+   "name": "fog090-cine000",
+   "p99Threshold": 0.1837,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine125.png",
+   "flipGolden": 0.08806328475475311,
+   "baseFlipGolden": 0.08741236478090286,
+   "flipBase": 0.03338385000824928,
+   "p99Base": 0.1810806840658188,
+   "name": "fog090-cine125",
+   "p99Threshold": 0.2105,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine250.png",
+   "flipGolden": 0.07081995159387589,
+   "baseFlipGolden": 0.06968096643686295,
+   "flipBase": 0.046445757150650024,
+   "p99Base": 0.25563567876815796,
+   "name": "fog090-cine250",
+   "p99Threshold": 0.2671,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine375.png",
+   "flipGolden": 0.05322037264704704,
+   "baseFlipGolden": 0.05320518836379051,
+   "flipBase": 0.03982244059443474,
+   "p99Base": 0.20441360771656036,
+   "name": "fog090-cine375",
+   "p99Threshold": 0.2345,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine500.png",
+   "flipGolden": 0.05591583624482155,
+   "baseFlipGolden": 0.05575694516301155,
+   "flipBase": 0.04389171674847603,
+   "p99Base": 0.23018799722194672,
+   "name": "fog090-cine500",
+   "p99Threshold": 0.2534,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine625.png",
+   "flipGolden": 0.05367258936166763,
+   "baseFlipGolden": 0.05387453734874725,
+   "flipBase": 0.04346426948904991,
+   "p99Base": 0.23349636793136597,
+   "name": "fog090-cine625",
+   "p99Threshold": 0.2495,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine750.png",
+   "flipGolden": 0.07124455273151398,
+   "baseFlipGolden": 0.07107771188020706,
+   "flipBase": 0.04703181982040405,
+   "p99Base": 0.25422871112823486,
+   "name": "fog090-cine750",
+   "p99Threshold": 0.2676,
+   "pass": true
+  },
+  {
+   "id": "stills/fog090-cine875.png",
+   "flipGolden": 0.06953025609254837,
+   "baseFlipGolden": 0.06949969381093979,
+   "flipBase": 0.04677005857229233,
+   "p99Base": 0.2585218548774719,
+   "name": "fog090-cine875",
+   "p99Threshold": 0.2662,
+   "pass": true
+  }
+ ],
+ "fail": [],
+ "pass": true,
+ "meanFlipGolden": 0.07302788717465268,
+ "baseMeanFlipGolden": 0.07267283731036717,
+ "sequences": {
+  "a-cine": {
+   "meanFlipGolden": 0.11635117214627383,
+   "maxFlipGolden": 0.12243763357400894,
+   "frames": 41,
+   "baseMeanFlipGolden": 0.11550699029026962,
+   "baseMaxFlipGolden": 0.12155958265066147,
+   "maxP99Base": 0.25918322801589966,
+   "maxP99OverThreshold": -0.03676829509735108,
+   "pass": true
+  },
+  "b-wind": {
+   "meanFlipGolden": 0.0699269051958875,
+   "maxFlipGolden": 0.07091984897851944,
+   "frames": 41,
+   "baseMeanFlipGolden": 0.06945317929110877,
+   "baseMaxFlipGolden": 0.07063490152359009,
+   "maxP99Base": 0.3348787724971771,
+   "maxP99OverThreshold": -0.0301460873603821,
+   "pass": true
+  },
+  "c-frozen": {
+   "temporalStd": 9.971023473553942e-08,
+   "baseTemporalStd": 4.6444137069556746e-07,
+   "pass": true,
+   "last": {
+    "id": "seq/c-frozen/063.png",
+    "flipGolden": 0.06804876774549484,
+    "baseFlipGolden": 0.06780973076820374,
+    "flipBase": 0.05089591443538666,
+    "p99Base": 0.3129609227180481
+   }
+  }
+ }
+}

@@ -1,7 +1,6 @@
 // Grass clumps, wildflowers, rocks & pebbles, distant forest — all instanced
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
-import { patch, U } from './shaders.js';
 import { tessellate } from './stress.js';
 
 const V = THREE.Vector3;
@@ -48,27 +47,6 @@ function grassClumpGeometry(rng, blades = 5, segs = 4) {
   g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
   g.setIndex(I);
   return g;
-}
-
-function grassMaterial() {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
-  patch(mat, {
-    key: 'grass', wind: 'aFlex',
-    vertPars: 'attribute float aFlex;',
-    windExtra: `
-      float wave = 0.5 + 0.5 * sin(uTime * 1.9 - dot(wPos.xz, uWindDir) * 0.22 + sin(wPos.x * 0.05) * 1.5);
-      wave = wave * wave;
-      wPos.xyz += vec3(uWindDir.x, -0.35, uWindDir.y) * aFlex * uWind * wave * 0.55;
-      vWave = wave * uWind; vTip = aFlex;`,
-    varyings: 'varying float vTip; varying float vWave;',
-    noFlip: true,
-    fragLight: `
-      vec3 vdir = normalize(vFogWorld - cameraPosition);
-      float back = pow(max(dot(vdir, uSunDir), 0.0), 3.0);
-      outgoingLight += diffuseColor.rgb * uSunColor * uSunVis * (back * 1.6 + 0.15) * clamp(vTip * 2.2, 0.0, 1.0);
-      outgoingLight *= 1.0 + vWave * clamp(vTip * 2.0, 0.0, 1.0) * 0.35;`,
-  });
-  return mat;
 }
 
 // placement + per-tile instance data (worker-safe)
@@ -127,8 +105,7 @@ export function grassData(world, count, opts) {
   return { geo, tiles: out, total };
 }
 
-export function makeGrass(data) {
-  const mat = grassMaterial();
+export function makeGrass(data, mat) {
   const group = new THREE.Group();
   for (const t of data.tiles) {
     const mesh = new THREE.InstancedMesh(data.geo, mat, t.n);
@@ -184,9 +161,7 @@ export function flowersData(world, count, opts) {
   return { geo, matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, count, n };
 }
 
-export function makeFlowers(d) {
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.7, side: THREE.DoubleSide });
-  patch(mat, { key: 'flowers', wind: 'aFlex', vertPars: 'attribute float aFlex;', noFlip: true });
+export function makeFlowers(d, mat) {
   const mesh = new THREE.InstancedMesh(d.geo, mat, d.count);
   mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
   mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
@@ -306,19 +281,8 @@ export function rocksData(world, tier, treePos, triMul = 1) {
   return { geos: triMul > 1 ? geos.map((g) => tessellate(g, triMul)) : geos, variants: out, rocksInWater, blockers: placements };
 }
 
-export function makeRocks(d) {
+export function makeRocks(d, mat) {
   const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
-  patch(mat, {
-    key: 'rock',
-    fragColor: `
-      float wet = smoothstep(0.28, -0.05, vFogWorld.y);
-      diffuseColor.rgb *= mix(1.0, 0.5, wet) * (0.85 + 0.3 * vnoise(vFogWorld.xz * 3.0 + vFogWorld.y * 2.0));`,
-    fragLight: `
-      float wet2 = smoothstep(0.28, -0.05, vFogWorld.y);
-      vec3 vv = normalize(cameraPosition - vFogWorld);
-      outgoingLight += uSunColor * uSunVis * pow(max(dot(reflect(-uSunDir, normal), vv), 0.0), 24.0) * wet2 * 0.25;`,
-  });
   d.variants.forEach((v, vi) => {
     const mesh = new THREE.InstancedMesh(d.geos[vi], mat, v.n);
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(v.matrix, 16);
@@ -425,9 +389,7 @@ export function forestData(world, count) {
   return { kinds, lists: out };
 }
 
-export function makeForest(d) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide });
-  patch(mat, { key: 'forest', fragColor: 'diffuseColor.rgb *= 0.8 + 0.4 * vnoise(vFogWorld.xz * 0.5 + vFogWorld.y);' });
+export function makeForest(d, mat) {
   const group = new THREE.Group();
   d.lists.forEach((l, k) => {
     const mesh = new THREE.InstancedMesh(d.kinds[k], mat, l.n);

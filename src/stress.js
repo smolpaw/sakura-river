@@ -2,7 +2,6 @@
 // Enabled with create(canvas, { stress: { grass, triMul, objects, particles } }). Not part of the shipped look.
 import * as THREE from 'three';
 import { mulberry32 } from './noise.js';
-import { patch, U, GLSL_FOG_PARS } from './shaders.js';
 
 // split every triangle into n*n (barycentric grid); attributes interpolate linearly, so the surface is unchanged
 export function tessellate(geo, triMul) {
@@ -46,12 +45,8 @@ export function tessellate(geo, triMul) {
   return out;
 }
 
-export function tessellateTree(root, triMul) {
-  root.traverse((o) => { if (o.isMesh && !o.userData.noStress) o.geometry = tessellate(o.geometry, triMul); });
-}
-
 // 30 small sculptures around the meadow, each with its own material
-export function makeStressObjects(world, count, center) {
+export function makeStressObjects(world, count, center, makeMaterial) {
   const rng = mulberry32(31337);
   const group = new THREE.Group();
   const shapes = [
@@ -65,8 +60,7 @@ export function makeStressObjects(world, count, center) {
     const x = center.x + Math.cos(a) * r, z = center.z + Math.sin(a) * r;
     const y = world.height(x, z);
     if (y < 0.1) continue;
-    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rng(), 0.35, 0.45), roughness: 0.3 + rng() * 0.6, metalness: rng() < 0.3 ? 0.6 : 0 });
-    patch(mat, { key: 'stress-obj' });
+    const mat = makeMaterial(new THREE.Color().setHSL(rng(), 0.35, 0.45), 0.3 + rng() * 0.6, rng() < 0.3 ? 0.6 : 0);
     const m = new THREE.Mesh(shapes[i % shapes.length](), mat);
     m.position.set(x, y + 0.5, z);
     m.rotation.set(rng() * 3, rng() * 3, rng() * 3);
@@ -76,8 +70,8 @@ export function makeStressObjects(world, count, center) {
   return group;
 }
 
-// rain placeholder: instanced streaks animated entirely in the vertex shader, in a box that follows the camera
-export function makeRain(count) {
+// rain placeholder: instanced streaks animated in the vertex stage (material from fx.js)
+export function makeRain(count, material) {
   const rng = mulberry32(99);
   const geo = new THREE.InstancedBufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0], 3));
@@ -86,34 +80,7 @@ export function makeRain(count) {
   for (let i = 0; i < count * 4; i++) seed[i] = rng();
   geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 4));
   geo.instanceCount = count;
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      uTime: U.uTime, uWind: U.uWind, uWindDir: U.uWindDir, uSunColor: U.uSunColor, uSkyAmb: U.uSkyAmb, uSunDir: U.uSunDir,
-      uFogColor: U.uFogColor, uFogSunColor: U.uFogSunColor, uFogDensity: U.uFogDensity, uFogBase: U.uFogBase, uFogFalloff: U.uFogFalloff,
-    },
-    transparent: true, depthWrite: false,
-    vertexShader: /* glsl */`
-      attribute vec4 aSeed; uniform float uTime, uWind; uniform vec2 uWindDir;
-      varying vec3 vW; varying float vA;
-      const vec3 BOX = vec3(60.0, 30.0, 60.0);
-      void main(){
-        vec3 p = aSeed.xyz * BOX;
-        p.y -= uTime * (9.0 + aSeed.w * 3.0);
-        p.xz += uWindDir * uWind * uTime * 2.0;
-        vec3 c = cameraPosition - BOX * 0.5;
-        p = c + mod(p - c, BOX);
-        vec3 fall = normalize(vec3(uWindDir.x * uWind * 0.2, -1.0, uWindDir.y * uWind * 0.2));
-        vec3 side = normalize(cross(fall, normalize(cameraPosition - p)));
-        vec3 w = p + side * position.x * 0.012 + fall * position.y * 0.55;
-        vW = w; vA = 0.18 + 0.12 * aSeed.w;
-        gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uSunColor, uSkyAmb; varying vec3 vW; varying float vA;
-      ${GLSL_FOG_PARS}
-      void main(){ vec3 c = applyFog(uSkyAmb * 1.2 + uSunColor * 0.15, vW); gl_FragColor = vec4(c, vA); }`,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = 4;
   mesh.layers.set(1);

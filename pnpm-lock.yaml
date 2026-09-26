@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       three:
-        specifier: 0.170.0
-        version: 0.170.0
+        specifier: 0.186.1
+        version: 0.186.1
     devDependencies:
       puppeteer-core:
         specifier: ^25.12.0
@@ -496,8 +496,8 @@ packages:
     resolution: {integrity: sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==}
     engines: {node: '>=12'}
 
-  three@0.170.0:
-    resolution: {integrity: sha512-FQK+LEpYc0fBD+J8g6oSEyyNzjp+Q7Ks1C568WWaoMRLW+TkNNWmenWeGgJjV105Gd+p/2ql1ZcjYvNiPZBhuQ==}
+  three@0.186.1:
+    resolution: {integrity: sha512-blFeqb49wRCSGUGj7gtpfnSGHy2lwDk94RhUmS1c/hTby70kvChbWpkJ4Pm1390LqzzvTmzgXKHPEafJwCb8jA==}
 
   tinyglobby@0.2.17:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
@@ -930,7 +930,7 @@ snapshots:
     dependencies:
       ansi-regex: 6.3.0
 
-  three@0.170.0: {}
+  three@0.186.1: {}
 
   tinyglobby@0.2.17:
     dependencies:

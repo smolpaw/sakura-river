@@ -1,67 +1,58 @@
 // Sky dome with sun, glow and drifting procedural clouds + time-of-day palette
-import * as THREE from 'three';
-import { U, GLSL_NOISE } from './shaders.js';
-import { clamp, lerp, smoothstep } from './noise.js';
+import * as THREE from 'three/webgpu';
+import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, positionWorld, cameraPosition, If } from 'three/tsl';
+import { U, vnoise, sstep } from './tsl.js';
+import { clamp as clampJS, lerp, smoothstep } from './noise.js';
+
+const cfbm = Fn(([p0]) => {
+  const p = vec2(p0).toVar(), s = float(0).toVar(), a = float(0.5).toVar();
+  // GLSL mat2(1.6, 1.2, -1.2, 1.6) * p (column-major), written out
+  for (let i = 0; i < 5; i++) { s.addAssign(a.mul(vnoise(p))); p.assign(vec2(p.x.mul(1.6).sub(p.y.mul(1.2)), p.x.mul(1.2).add(p.y.mul(1.6))).add(3.1)); a.mulAssign(0.5); }
+  return s;
+});
 
 export function makeSky() {
   const uniforms = {
-    uSunDir: U.uSunDir,
-    uSunColor: U.uSunColor,
-    uZenith: { value: new THREE.Color() },
-    uHorizon: { value: new THREE.Color() },
-    uFogColor: U.uFogColor,
-    uFogSunColor: U.uFogSunColor,
-    uCloud: { value: new THREE.Vector2() },
-    uCloudLit: { value: new THREE.Color() },
-    uCloudShade: { value: new THREE.Color() },
-    uSunVis: U.uSunVis,
-    uTime: U.uTime,
+    uZenith: uniform(new THREE.Color()),
+    uHorizon: uniform(new THREE.Color()),
+    uCloud: uniform(new THREE.Vector2()),
+    uCloudLit: uniform(new THREE.Color()),
+    uCloudShade: uniform(new THREE.Color()),
   };
-  const mat = new THREE.ShaderMaterial({
-    uniforms,
-    side: THREE.BackSide,
-    depthWrite: false,
-    vertexShader: /* glsl */`
-      varying vec3 vW;
-      void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; gl_Position.z = gl_Position.w; }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uSunDir, uSunColor, uZenith, uHorizon, uFogColor, uFogSunColor, uCloudLit, uCloudShade;
-      uniform vec2 uCloud; uniform float uSunVis; uniform float uTime;
-      varying vec3 vW;
-      ${GLSL_NOISE}
-      float cfbm(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<5;i++){ s+=a*vnoise(p); p = mat2(1.6,1.2,-1.2,1.6)*p + 3.1; a*=0.5; } return s; }
-      void main(){
-        vec3 d = normalize(vW - cameraPosition);
-        float h = d.y;
-        float mu = dot(d, uSunDir);
-        float hz = pow(1.0 - clamp(h, 0.0, 1.0), 4.0);
-        vec3 col = mix(uZenith, uHorizon, hz);
-        // warm band hugging the horizon near the sun
-        float sunSide = pow(max(mu, 0.0) * 0.5 + 0.5, 3.0);
-        col = mix(col, uFogSunColor, hz * hz * pow(max(mu, 0.0), 4.0) * 0.45);
-        // below horizon blend into haze
-        col = mix(col, mix(uFogColor, uFogSunColor, pow(max(mu,0.0), 6.0)), smoothstep(0.02, -0.08, h));
-        // mie glow + disk
-        float g = max(mu, 0.0);
-        col += uSunColor * (pow(g, 40.0) * 0.1 + pow(g, 400.0) * 0.45 + pow(g, 3000.0) * 1.2) * uSunVis;
-        col += uSunColor * smoothstep(0.99962, 0.99978, mu) * 5.0 * uSunVis;
-        // clouds on a virtual plane
-        if (h > -0.02) {
-          vec2 uv = d.xz / (h + 0.12) * 1.3 + uCloud;
-          vec2 w = vec2(cfbm(uv * 0.35 + 7.0), cfbm(uv * 0.35 - 4.0));
-          float n = cfbm(uv * 0.55 + w * 1.4);
-          float streak = cfbm(vec2(uv.x * 0.25, uv.y * 1.1) + w);
-          float dens = smoothstep(0.56, 0.8, n * 0.75 + streak * 0.35);
-          dens *= smoothstep(-0.02, 0.18, h) * (1.0 - smoothstep(0.55, 0.95, h) * 0.6);
-          float thick = smoothstep(0.55, 0.95, n);
-          vec3 cl = mix(uCloudLit, uCloudShade, smoothstep(0.3, 1.0, thick) * 0.85 + (1.0 - sunSide) * 0.25);
-          // silver lining toward the sun
-          cl += uSunColor * pow(g, 14.0) * (1.0 - thick) * 1.2 * uSunVis;
-          col = mix(col, cl, dens * 0.9);
-        }
-        gl_FragColor = vec4(col, 1.0);
-      }`,
+  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade } = uniforms;
+  const skyColor = Fn(() => {
+    const d = normalize(positionWorld.sub(cameraPosition)).toVar();
+    const h = d.y, mu = dot(d, U.uSunDir).toVar();
+    const hz = pow(float(1.0).sub(clamp(h, 0.0, 1.0)), 4.0).toVar();
+    const col = mix(uZenith, uHorizon, hz).toVar();
+    // warm band hugging the horizon near the sun
+    const sunSide = pow(max(mu, 0.0).mul(0.5).add(0.5), 3.0);
+    col.assign(mix(col, U.uFogSunColor, hz.mul(hz).mul(pow(max(mu, 0.0), 4.0)).mul(0.45)));
+    // below horizon blend into haze
+    col.assign(mix(col, mix(U.uFogColor, U.uFogSunColor, pow(max(mu, 0.0), 6.0)), sstep(0.02, -0.08, h)));
+    // mie glow + disk
+    const g = max(mu, 0.0).toVar();
+    col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2))).mul(U.uSunVis));
+    col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis));
+    // clouds on a virtual plane
+    If(h.greaterThan(-0.02), () => {
+      const cuv = d.xz.div(h.add(0.12)).mul(1.3).add(uCloud).toVar();
+      const w = vec2(cfbm(cuv.mul(0.35).add(7.0)), cfbm(cuv.mul(0.35).sub(4.0))).toVar();
+      const n = cfbm(cuv.mul(0.55).add(w.mul(1.4))).toVar();
+      const streak = cfbm(vec2(cuv.x.mul(0.25), cuv.y.mul(1.1)).add(w));
+      const dens = sstep(0.56, 0.8, n.mul(0.75).add(streak.mul(0.35))).toVar();
+      dens.mulAssign(sstep(-0.02, 0.18, h).mul(float(1.0).sub(sstep(0.55, 0.95, h).mul(0.6))));
+      const thick = sstep(0.55, 0.95, n);
+      const cl = mix(uCloudLit, uCloudShade, sstep(0.3, 1.0, thick).mul(0.85).add(float(1.0).sub(sunSide).mul(0.25))).toVar();
+      // silver lining toward the sun
+      cl.addAssign(U.uSunColor.mul(pow(g, 14.0)).mul(float(1.0).sub(thick)).mul(1.2).mul(U.uSunVis));
+      col.assign(mix(col, cl, dens.mul(0.9)));
+    });
+    // alpha 0 marks sky pixels for the light-shaft mask (replaces the old depth == far test)
+    return vec4(col, 0.0);
   });
+  const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false, fog: false, transparent: true, blending: THREE.NoBlending });
+  mat.colorNode = skyColor();
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(7000, 48, 24), mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;
@@ -78,7 +69,7 @@ const KF = [
 ];
 
 export function skyState(t) {
-  const el = -4 + 62 * Math.sin(Math.PI * clamp(t, 0, 1));
+  const el = -4 + 62 * Math.sin(Math.PI * clampJS(t, 0, 1));
   const az = THREE.MathUtils.degToRad(lerp(60, -40, t));
   const er = THREE.MathUtils.degToRad(el);
   const dir = new THREE.Vector3(Math.sin(az) * Math.cos(er), Math.sin(er), -Math.cos(az) * Math.cos(er)).normalize();
