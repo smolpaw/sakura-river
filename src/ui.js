@@ -50,16 +50,16 @@ import { create } from './main.js';
   });
 
   function start() {
-    try {
-      engine = create($('scene'), {
-        onStats: function (s) { $('stats').textContent = s.fps + ' fps · ' + s.quality; },
-        onCinematicChange: function (on) { setPressed($('btn-cine'), on); },
-      });
+    create($('scene'), {
+      onStats: function (s) { $('stats').textContent = s.fps + ' fps · ' + s.quality; },
+      onCinematicChange: function (on) { setPressed($('btn-cine'), on); },
+    }).then(function (e) {
+      engine = e;
       keys.forEach(function (k) { engine.setImmediate(k, +$('s-' + k).value / 100); });
       $('veil').classList.add('done');
-    } catch (e) {
+    }).catch(function () {
       $('veil-text').textContent = 'This device could not start WebGL. Try a desktop browser with hardware acceleration on.';
-    }
+    });
   }
   // let the veil paint before the procedural build
   requestAnimationFrame(function () { setTimeout(start, 30); });

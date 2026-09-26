@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <title>Sakura River bench harness</title>
+<script>
+  // long tasks from page start (Phase 1 gate: none over 50 ms before the first frame, except GPU pipeline creation)
+  window.__longtasks = [];
+  try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longtasks.push({ start: e.startTime, dur: e.duration, name: e.name }); }).observe({ type: 'longtask', buffered: true }); } catch (e) {}
+</script>
 <style>html, body { margin: 0; background: #000; overflow: hidden; } canvas { display: block; }</style>
 </head>
 <body>

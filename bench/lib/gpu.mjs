@@ -49,11 +49,12 @@ export function clockState() {
   return { gr: +gr, mem: +mem, pstate: ps, reasons: parseInt(reasons, 16), temp: +temp, power: +pw, powerLimit: +pl };
 }
 
-// clock-event bits from nvml.h. SW power cap (0x4) is the normal boost regulator: without a clock lock the
-// RTX 2060 reports it in ~every sample under load, so it is logged but not rejected (the 5% clock-deviation
-// rule covers its effect). Rejected: HW slowdown, SW thermal, HW thermal, HW power brake.
+// clock-event bits from nvml.h: 0x1 idle, 0x2 app clocks, 0x4 SW power cap, 0x8 HW slowdown, 0x10 sync boost,
+// 0x20 SW thermal, 0x40 HW thermal, 0x80 HW power brake, 0x100 display clock. SW power cap is the normal boost
+// regulator: without a clock lock the RTX 2060 reports it in ~every sample under load, so it is logged but not
+// rejected (the 5% clock-deviation rule covers its effect). Rejected: HW slowdown and the thermal/brake bits.
 export const SW_POWER_CAP = 0x4;
-export const THROTTLE = 0x8 | 0x40 | 0x80 | 0x100;
+export const THROTTLE = 0x8 | 0x20 | 0x40 | 0x80;
 
 export function startLogger(periodMs = 100) {
   const samples = [];

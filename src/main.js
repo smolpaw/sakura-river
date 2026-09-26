@@ -7,19 +7,21 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
-import { createWorld } from './world.js';
+import { createWorld, depthTexture } from './world.js';
 import { U, patch, windDepthMaterial } from './shaders.js';
-import { growTree, buildBarkGeometry, buildBlossomCardGeometry, paintBlossomAtlas, paintBark, MAIN_TREE, SMALL_TREE } from './tree.js';
+import { buildBlossomCardGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
 import { makeSky, skyState } from './sky.js';
 import { makeWater, PlanarReflection } from './water.js';
 import { PetalSystem, makeFallenPetals, makeMotes } from './petals.js';
 import { GodRaysPass, GradeShader } from './post.js';
-import { mulberry32, clamp, lerp, smoothstep } from './noise.js';
+import { clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
 import { createBenchProbe } from './bench-probe.js';
 import { hashScene } from './bench-hash.js';
-import { tessellate, tessellateTree, makeStressObjects, makeRain } from './stress.js';
+import { tessellate, makeStressObjects, makeRain } from './stress.js';
+import { runJobs } from './gen/pool.js';
+import { layout } from './gen/layout.js';
 
 const TIERS = {
   high: { pr: 2.0, terrain: [420, 440], grass: 40000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1 },
@@ -42,7 +44,7 @@ function detectTier(renderer) {
 
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-export function create(canvas, opts = {}) {
+export async function create(canvas, opts = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   const tierName = opts.quality || detectTier(renderer);
   const Q = { ...TIERS[tierName] };
@@ -61,13 +63,36 @@ export function create(canvas, opts = {}) {
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 9000);
   camera.layers.enable(1);
 
-  // ---------- world ----------
+  // ---------- procedural generation (worker pool) ----------
   const world = createWorld(7);
-  const TZ = 2;
-  const TX = world.riverX(TZ) - world.riverHW(TZ) - 7.2;
-  const treePos = new THREE.Vector3(TX, 0, TZ);
+  const Lay = layout(world);
+  const { TX, TZ, LX, LZ } = Lay;
+  const treePos = new THREE.Vector3(...Lay.tree);
+  const focus = new THREE.Vector3(...Lay.focus);
+  const triMul = ST ? ST.triMul : 1;
+  const treeSpecs = [{ seed: 11, pos: Lay.tree, blossomScale: 1.0 }, ...Lay.small.map((sp) => ({ seed: 100 + sp.k * 13, small: true, pos: [sp.x, 0, sp.z], blossomScale: 1.05 }))];
+  const { results: G, stats: genStats } = await runJobs({
+    terrain: { name: 'terrain', args: { seg: Q.terrain } },
+    heightCache: { name: 'heightCache' },
+    depth: { name: 'depth', args: { tier: tierName } },
+    river: { name: 'river' },
+    treeMain: { name: 'trees', args: { list: treeSpecs.slice(0, 1), triMul } },
+    treesA: { name: 'trees', args: { list: treeSpecs.slice(1, 4), triMul } },
+    treesB: { name: 'trees', args: { list: treeSpecs.slice(4), triMul } },
+    atlas: { name: 'atlas', args: { size: tierName === 'high' ? 2048 : 1024 } },
+    bark: { name: 'bark' },
+    fuji: { name: 'fuji' },
+    props: { name: 'props', args: { triMul } },
+    rocks: { name: 'rocks', args: { tier: tierName, triMul } },
+    grass: { name: 'grass', args: { count: Q.grass * (ST ? ST.grass : 1), tier: tierName } },
+    flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
+    forest: { name: 'forest', args: { count: Q.forest } },
+    fallen: { name: 'fallen', args: { count: Q.fallen } },
+  }, { mainThread: opts.workers === false });
+  world.setHeightCache(G.heightCache);
 
-  const terrainGeo = world.buildTerrain(Q.terrain[0], Q.terrain[1]);
+  // ---------- terrain ----------
+  const terrainGeo = G.terrain;
   const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
   patch(terrainMat, {
     key: 'terrain',
@@ -103,8 +128,8 @@ export function create(canvas, opts = {}) {
   scene.add(hemi);
 
   // ---------- trees ----------
-  const bark = paintBark(3);
-  const atlas = paintBlossomAtlas(5, tierName === 'high' ? 2048 : 1024);
+  const bark = barkTextures(G.bark);
+  const atlas = atlasTexture(G.atlas);
   if (opts.debug) window.__sakuraDebug = { bark, atlas };
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
   atlas.anisotropy = Math.min(16, maxAniso); bark.map.anisotropy = Math.min(16, maxAniso); bark.bump.anisotropy = Math.min(8, maxAniso);
@@ -135,63 +160,33 @@ export function create(canvas, opts = {}) {
   const blossomDepth = windDepthMaterial('aFlex', 'blossom', { map: atlas, alphaTest: 0.4 });
   const cardGeo = ST ? tessellate(buildBlossomCardGeometry(), ST.triMul) : buildBlossomCardGeometry();
 
-  function buildTreeObject(seed, cfg, pos, blossomScale = 1, castShadow = true) {
-    const groundAt = (x, z) => world.height(x + pos.x, z + pos.z);
-    const t = growTree(seed, cfg, groundAt);
-    const bg = ST ? tessellate(buildBarkGeometry(t, groundAt), ST.triMul) : buildBarkGeometry(t, groundAt);
+  function buildTreeObject(d, pos, castShadow = true) {
     const group = new THREE.Group();
     group.position.copy(pos);
-    const barkMesh = new THREE.Mesh(bg, barkMat);
+    const barkMesh = new THREE.Mesh(d.bark, barkMat);
     barkMesh.customDepthMaterial = barkDepth;
     barkMesh.castShadow = castShadow; barkMesh.receiveShadow = true;
     group.add(barkMesh);
-    // blossoms
-    const rng = mulberry32(seed + 1);
-    const n = t.blossoms.length;
     const geo = cardGeo.clone();
-    const aFlex = new Float32Array(n), aAtlas = new Float32Array(n * 2), aCan = new Float32Array(n * 3);
-    const mesh = new THREE.InstancedMesh(geo, blossomMat, n);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler(), col = new THREE.Color();
-    const { center, ext } = t.canopy;
-    t.blossoms.forEach((b, i) => {
-      e.set(rng() * 6.28, rng() * 6.28, rng() * 6.28);
-      q.setFromEuler(e);
-      const sz = (0.85 + rng() * 0.55) * blossomScale * (b.depth <= 2 ? 1.15 : 1);
-      s.set(sz, sz, sz);
-      m.compose(b.p, q, s);
-      mesh.setMatrixAt(i, m);
-      aFlex[i] = Math.pow(clamp((b.f - 2.2) / 14, 0, 1.4), 1.55);
-      aAtlas[i * 2] = rng() < 0.5 ? 0 : 0.5; aAtlas[i * 2 + 1] = rng() < 0.5 ? 0 : 0.5;
-      const cn = new THREE.Vector3((b.p.x - center.x) / ext.x, (b.p.y - center.y) / ext.y * 0.8, (b.p.z - center.z) / ext.z);
-      const r = cn.length();
-      cn.normalize();
-      aCan[i * 3] = cn.x; aCan[i * 3 + 1] = cn.y; aCan[i * 3 + 2] = cn.z;
-      const ao = lerp(0.3, 1.0, smoothstep(0.3, 1.05, r)) * (0.75 + 0.25 * clamp(cn.y + 0.5, 0, 1));
-      const hue = rng();
-      col.setRGB(ao * (0.98 + hue * 0.04), ao * (0.8 + hue * 0.14) * lerp(0.85, 1, ao), ao * (0.88 + hue * 0.08));
-      mesh.setColorAt(i, col);
-    });
-    geo.setAttribute('aFlex', new THREE.InstancedBufferAttribute(aFlex, 1));
-    geo.setAttribute('aAtlas', new THREE.InstancedBufferAttribute(aAtlas, 2));
-    geo.setAttribute('aCanopyN', new THREE.InstancedBufferAttribute(aCan, 3));
-    mesh.instanceMatrix.needsUpdate = true;
+    const mesh = new THREE.InstancedMesh(geo, blossomMat, d.n);
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
+    geo.setAttribute('aFlex', new THREE.InstancedBufferAttribute(d.aFlex, 1));
+    geo.setAttribute('aAtlas', new THREE.InstancedBufferAttribute(d.aAtlas, 2));
+    geo.setAttribute('aCanopyN', new THREE.InstancedBufferAttribute(d.aCanopyN, 3));
     mesh.customDepthMaterial = blossomDepth;
     mesh.castShadow = castShadow; mesh.receiveShadow = castShadow;
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
-    return { group, tree: t, blossoms: mesh };
+    return { group, data: d, blossoms: mesh };
   }
 
-  const main = buildTreeObject(11, MAIN_TREE, treePos, 1.0, true);
+  const main = buildTreeObject(G.treeMain[0], treePos, true);
   scene.add(main.group);
   const smallTrees = [];
-  const smallSpots = [
-    { z: -40, side: 1, off: 9, s: 0.95 }, { z: -92, side: -1, off: 12, s: 1.0 }, { z: -150, side: 1, off: 15, s: 1.05 },
-    { z: -12, side: 1, off: 24, s: 0.9 }, { z: -225, side: -1, off: 18, s: 1.1 }, { z: -300, side: 1, off: 26, s: 1.1 },
-  ];
-  smallSpots.forEach((sp, k) => {
-    const x = world.riverX(sp.z) + sp.side * (world.riverHW(sp.z) + sp.off);
-    const o = buildTreeObject(100 + k * 13, SMALL_TREE, new THREE.Vector3(x, 0, sp.z), 1.05, Math.abs(sp.z) < 45);
+  const smallData = [...G.treesA, ...G.treesB];
+  Lay.small.forEach((sp, k) => {
+    const o = buildTreeObject(smallData[k], new THREE.Vector3(sp.x, 0, sp.z), Math.abs(sp.z) < 45);
     o.group.scale.setScalar(sp.s);
     o.group.position.y += (1 - sp.s) * 0.2;
     scene.add(o.group);
@@ -199,50 +194,40 @@ export function create(canvas, opts = {}) {
   });
 
   // ---------- Japanese set pieces ----------
-  const fuji = makeFuji(world, world.peak.x, world.peak.z, world.peak.R, 820, 30);
+  const fuji = makeFuji(G.fuji);
   scene.add(fuji);
-  const LX = TX + 5.2, LZ = TZ + 12;
-  const lantern = makeLantern(world, LX, LZ, 0.3);
+  const lantern = makeLantern(world, G.props.lantern, LX, LZ, 0.3);
   scene.add(lantern.group);
-  const bridge = makeBridge(world, -60);
+  const bridge = makeBridge(G.props.bridge);
   scene.add(bridge.mesh);
-  const pagoda = makePagoda(world, world.pagoda.x, world.pagoda.z, 1.0);
+  const pagoda = makePagoda(world, G.props.pagoda, world.pagoda.x, world.pagoda.z, 1.0);
   scene.add(pagoda);
-  if (ST) [lantern.group, bridge.mesh, pagoda].forEach((o) => tessellateTree(o, ST.triMul));
 
   // ---------- ground cover ----------
-  const trunkAvoid = (x, z) => Math.hypot(x - TX, z - TZ) < 0.95 || Math.hypot(x - LX, z - LZ) < 0.75;
-  const rocks = makeRocks(world, tierName, treePos);
+  const rocks = makeRocks(G.rocks);
   scene.add(rocks.group);
-  if (ST) tessellateTree(rocks.group, ST.triMul);
-  const rockAvoid = (x, z) => {
-    if (trunkAvoid(x, z)) return true;
-    for (const r of rocks.blockers) { if (r.sc > 0.3 && Math.abs(x - r.x) < r.sc && Math.abs(z - r.z) < r.sc && Math.hypot(x - r.x, z - r.z) < r.sc * 0.9) return true; }
-    return false;
-  };
-  const focus = new THREE.Vector3(TX + 8, 0, TZ + 8);
-  const grass = makeGrass(world, Q.grass * (ST ? ST.grass : 1), { focus, radius: 62, avoid: rockAvoid });
-  world.buildHeightCache();
+  const grass = makeGrass(G.grass);
   scene.add(grass);
-  const flowers = makeFlowers(world, Q.flowers, { focus, radius: 48, avoid: rockAvoid });
+  const flowers = makeFlowers(G.flowers);
   scene.add(flowers);
-  const forest = makeForest(world, Q.forest);
+  const forest = makeForest(G.forest);
   scene.add(forest);
 
   // ---------- river ----------
-  const depthMap = world.buildDepthMap(rocks.rocksInWater);
-  const water = makeWater(world.buildRiver(), depthMap, sky);
+  const depthMap = depthTexture(G.depth);
+  const water = makeWater(G.river, depthMap, sky);
   scene.add(water.mesh);
   let reflection = null;
   if (Q.refl > 0) reflection = new PlanarReflection(renderer, 256, 256);
 
   // ---------- petals ----------
-  const spawnPts = main.blossoms ? main.tree.blossoms.map((b) => b.p.clone().add(treePos)) : [];
+  const sp3 = main.data.spawn, spawnPts = [];
+  for (let i = 0; i < sp3.length; i += 3) spawnPts.push(new THREE.Vector3(sp3[i], sp3[i + 1], sp3[i + 2]).add(treePos));
   const petals = new PetalSystem(world, spawnPts, Q.petals, camera);
   scene.add(petals.mesh);
-  const fallen = makeFallenPetals(world, treePos, Q.fallen, (x, z) => trunkAvoid(x, z));
+  const fallen = makeFallenPetals(G.fallen);
   scene.add(fallen);
-  const motes = makeMotes(new THREE.Vector3(TX + 3, 0, TZ + 2), Q.motes);
+  const motes = makeMotes(new THREE.Vector3(...Lay.motes), Q.motes);
   scene.add(motes);
   if (ST) {
     scene.add(makeStressObjects(world, ST.objects, focus));
@@ -501,6 +486,16 @@ export function create(canvas, opts = {}) {
     step(dt);
     adapt(dt);
   }
+  // precompile scene programs behind the veil, one top-level object per task (KHR_parallel_shader_compile
+  // links them off the main thread); bind the composer's target so the variants match the real render
+  if (opts.precompile !== false) {
+    for (const o of [...scene.children]) {
+      renderer.setRenderTarget(composer.renderTarget1);
+      const p = renderer.compileAsync(o, camera, scene);
+      renderer.setRenderTarget(null);
+      await p;
+    }
+  }
   if (!opts.manual) requestAnimationFrame(loop);
   opts.onReady && opts.onReady({ quality: tierName });
 
@@ -541,7 +536,7 @@ export function create(canvas, opts = {}) {
     step(dt) { step(dt); },
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
-    info() { return { tier: tierName, tree: [TX, TZ], blossoms: main.tree.blossoms.length, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
+    info() { return { tier: tierName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
     dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); },
   };
 }

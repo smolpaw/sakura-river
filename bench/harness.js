@@ -117,3 +117,26 @@ H.observe = async (sec) => {
 H.dispose = () => { eng && eng.dispose(); canvas && canvas.remove(); eng = null; };
 window.harnessReady = true;
 H.hashScene = () => eng.hashScene();
+
+// load profile: create the engine while a rAF loop records frame gaps, then render the first frame.
+// Returns time to first frame (from navigation start), long tasks, and the largest rAF gap during loading.
+H.loadProfile = async ({ engine, cssW, cssH, quality = 'high', extra = {} }) => {
+  const mod = await import(engine);
+  canvas = document.createElement('canvas');
+  canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
+  document.body.appendChild(canvas);
+  const gaps = [];
+  let loading = true, last = performance.now();
+  (function tickGap() { if (!loading) return; const t = performance.now(); gaps.push(t - last); last = t; requestAnimationFrame(tickGap); })();
+  const tImport = performance.now();
+  eng = await mod.create(canvas, { manual: true, fixedQuality: true, quality, bench: true, introDuration: 0, ...extra });
+  const tCreated = performance.now();
+  eng.heroView();
+  const t0 = performance.now();
+  eng.tick(1, 1 / 60);
+  const firstFrameMs = performance.now() - t0;
+  await raf();
+  loading = false;
+  const ttff = performance.now();
+  return { tImport, tCreated, firstFrameMs, ttff, longtasks: window.__longtasks.slice(), maxGap: Math.max(...gaps.slice(1)), gaps: gaps.length, gen: eng.info().gen };
+};

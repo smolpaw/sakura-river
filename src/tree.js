@@ -1,6 +1,7 @@
 // Procedural cherry tree: recursive branch growth -> merged tube geometry + blossom anchors
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
+import { tessellate } from './stress.js';
 
 const V = THREE.Vector3;
 
@@ -284,8 +285,7 @@ export function buildBlossomCardGeometry() {
 // blossom cluster atlas (2x2 variants) painted procedurally
 export function paintBlossomAtlas(seed = 5, size = 1024) {
   const rng = mulberry32(seed);
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = size;
+  const cv = new OffscreenCanvas(size, size);
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   const cell = size / 2;
   const petalPath = (ctx, len, wid) => {
@@ -371,7 +371,11 @@ export function paintBlossomAtlas(seed = 5, size = 1024) {
     const a = d[i + 3] / 255;
     d[i] = Math.round(d[i] * a + 244 * (1 - a)); d[i + 1] = Math.round(d[i + 1] * a + 178 * (1 - a)); d[i + 2] = Math.round(d[i + 2] * a + 198 * (1 - a));
   }
-  const tex = new THREE.DataTexture(new Uint8Array(d.buffer.slice(0)), size, size, THREE.RGBAFormat);
+  return { data: new Uint8Array(d.buffer.slice(0)), size };
+}
+
+export function atlasTexture({ data, size }) {
+  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
   tex.needsUpdate = true;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -384,11 +388,10 @@ export function paintBlossomAtlas(seed = 5, size = 1024) {
 export function paintBark(seed = 3, size = 512) {
   const rng = mulberry32(seed);
   const nz = makeNoise(seed);
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = size;
+  const cv = new OffscreenCanvas(size, size);
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   const img = ctx.createImageData(size, size);
-  const bump = document.createElement('canvas'); bump.width = bump.height = size;
+  const bump = new OffscreenCanvas(size, size);
   const bctx = bump.getContext('2d', { willReadFrequently: true });
   const bimg = bctx.createImageData(size, size);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
@@ -421,7 +424,58 @@ export function paintBark(seed = 3, size = 512) {
     ctx.fillStyle = `rgba(${120 + rng() * 30},${135 + rng() * 25},${95 + rng() * 20},${0.12 + rng() * 0.18})`;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
   }
-  const map = new THREE.CanvasTexture(cv); map.colorSpace = THREE.SRGBColorSpace; map.wrapS = map.wrapT = THREE.RepeatWrapping; map.anisotropy = 4;
-  const bmap = new THREE.CanvasTexture(bump); bmap.wrapS = bmap.wrapT = THREE.RepeatWrapping;
-  return { map, bump: bmap };
+  // rows bottom-up: the same bytes a flipY canvas upload produces, so the textures need no flipY
+  const rows = (c) => {
+    const d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, size, size).data, out = new Uint8Array(d.length), row = size * 4;
+    for (let y = 0; y < size; y++) out.set(d.subarray(y * row, y * row + row), (size - 1 - y) * row);
+    return out;
+  };
+  return { size, map: rows(cv), bump: rows(bump) };
+}
+
+export function barkTextures({ size, map, bump }) {
+  const make = (data) => {
+    const t = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.userData.rowsFlipped = true;
+    t.needsUpdate = true;
+    return t;
+  };
+  const m = make(map); m.colorSpace = THREE.SRGBColorSpace; m.anisotropy = 4;
+  return { map: m, bump: make(bump) };
+}
+
+// one tree: bark geometry + blossom-card instance data (moved from main.js; same RNG order)
+export function treeData(world, seed, cfg, pos, blossomScale = 1, triMul = 1) {
+  const groundAt = (x, z) => world.height(x + pos.x, z + pos.z);
+  const t = growTree(seed, cfg, groundAt);
+  const bark = triMul > 1 ? tessellate(buildBarkGeometry(t, groundAt), triMul) : buildBarkGeometry(t, groundAt);
+  const rng = mulberry32(seed + 1);
+  const n = t.blossoms.length;
+  const matrix = new Float32Array(n * 16), color = new Float32Array(n * 3);
+  const aFlex = new Float32Array(n), aAtlas = new Float32Array(n * 2), aCan = new Float32Array(n * 3);
+  const spawn = new Float64Array(n * 3);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), e = new THREE.Euler(), col = new THREE.Color();
+  const { center, ext } = t.canopy;
+  t.blossoms.forEach((b, i) => {
+    e.set(rng() * 6.28, rng() * 6.28, rng() * 6.28);
+    q.setFromEuler(e);
+    const sz = (0.85 + rng() * 0.55) * blossomScale * (b.depth <= 2 ? 1.15 : 1);
+    s.set(sz, sz, sz);
+    m.compose(b.p, q, s);
+    m.toArray(matrix, i * 16);
+    aFlex[i] = Math.pow(clamp((b.f - 2.2) / 14, 0, 1.4), 1.55);
+    aAtlas[i * 2] = rng() < 0.5 ? 0 : 0.5; aAtlas[i * 2 + 1] = rng() < 0.5 ? 0 : 0.5;
+    const cn = new V((b.p.x - center.x) / ext.x, (b.p.y - center.y) / ext.y * 0.8, (b.p.z - center.z) / ext.z);
+    const r = cn.length();
+    cn.normalize();
+    aCan[i * 3] = cn.x; aCan[i * 3 + 1] = cn.y; aCan[i * 3 + 2] = cn.z;
+    const ao = lerp(0.3, 1.0, smoothstep(0.3, 1.05, r)) * (0.75 + 0.25 * clamp(cn.y + 0.5, 0, 1));
+    const hue = rng();
+    col.setRGB(ao * (0.98 + hue * 0.04), ao * (0.8 + hue * 0.14) * lerp(0.85, 1, ao), ao * (0.88 + hue * 0.08));
+    col.toArray(color, i * 3);
+    spawn[i * 3] = b.p.x; spawn[i * 3 + 1] = b.p.y; spawn[i * 3 + 2] = b.p.z;
+  });
+  return { bark, n, matrix, color, aFlex, aAtlas, aCanopyN: aCan, spawn };
 }

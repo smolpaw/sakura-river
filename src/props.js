@@ -86,7 +86,7 @@ function propMaterial(key, extra = {}) {
 }
 
 // ---------------- stone lantern ----------------
-export function makeLantern(world, x, z, rot = 0) {
+export function lanternGeometry() {
   const parts = [];
   const hexR = (r) => r / Math.cos(Math.PI / 6);
   parts.push(lathe([[0, 0], [hexR(0.5), 0], [hexR(0.46), 0.1], [hexR(0.3), 0.26], [hexR(0.2), 0.3], [0, 0.3]], 6, STONE_D, Math.PI / 6)); // kiso
@@ -101,7 +101,10 @@ export function makeLantern(world, x, z, rot = 0) {
   parts.push(lathe([[0, 1.72], [hexR(0.3), 1.72], [hexR(0.3), 1.78], [0, 1.78]], 6, STONE, Math.PI / 6));
   parts.push(roof(6, 0.72, 0.36, 0.1, STONE, Math.PI / 6, 0.09).translate(0, 1.78, 0)); // kasa
   parts.push(lathe([[0, 2.1], [0.1, 2.1], [0.13, 2.17], [0.1, 2.24], [0.05, 2.3], [0, 2.34]], 16, STONE)); // hoju
-  const g = mergeGeometries(parts);
+  return mergeGeometries(parts);
+}
+
+export function makeLantern(world, g, x, z, rot = 0) {
   const mesh = new THREE.Mesh(g, propMaterial('stone'));
   mesh.castShadow = true; mesh.receiveShadow = true;
   // glowing paper core
@@ -126,7 +129,7 @@ export function makeLantern(world, x, z, rot = 0) {
 }
 
 // ---------------- vermilion arched bridge ----------------
-export function makeBridge(world, zc) {
+export function bridgeData(world, zc) {
   const rx = world.riverX(zc), hw = world.riverHW(zc);
   const [fx, fz] = world.flowDir(zc);
   const across = new V(fz, 0, -fx).normalize(); // perpendicular to flow
@@ -179,14 +182,17 @@ export function makeBridge(world, zc) {
     }
     parts.push(beam(pt(u, -width * 0.5, -0.9 - (1 - Math.abs(u - 0.5)) * 0.2), pt(u, width * 0.5, -0.9 - (1 - Math.abs(u - 0.5)) * 0.2), 0.14, 0.14, VERM_D, across));
   }
-  const g = mergeGeometries(parts);
-  const mesh = new THREE.Mesh(g, propMaterial('wood', { roughness: 0.55 }));
+  return { geo: mergeGeometries(parts), center: center.toArray(), half, across: across.toArray(), endY, rise };
+}
+
+export function makeBridge(d) {
+  const mesh = new THREE.Mesh(d.geo, propMaterial('wood', { roughness: 0.55 }));
   mesh.castShadow = true; mesh.receiveShadow = true;
-  return { mesh, center, half, across, endY, rise };
+  return { mesh, center: new V().fromArray(d.center), half: d.half, across: new V().fromArray(d.across), endY: d.endY, rise: d.rise };
 }
 
 // ---------------- five-storey pagoda ----------------
-export function makePagoda(world, x, z, scale = 1) {
+export function pagodaGeometry() {
   const parts = [];
   let y = 0;
   const base = 7.2;
@@ -213,7 +219,10 @@ export function makePagoda(world, x, z, scale = 1) {
   for (let k = 0; k < 9; k++) { const yy = y + 0.9 + k * 0.55; spire.push([0.18, yy], [0.42, yy + 0.08], [0.42, yy + 0.18], [0.18, yy + 0.26]); }
   spire.push([0.14, y + 6.2], [0.3, y + 6.5], [0.2, y + 7.0], [0, y + 7.4]);
   parts.push(lathe(spire, 12, BRONZE));
-  const g = mergeGeometries(parts);
+  return mergeGeometries(parts);
+}
+
+export function makePagoda(world, g, x, z, scale = 1) {
   const mesh = new THREE.Mesh(g, propMaterial('pagoda', { roughness: 0.7 }));
   mesh.scale.setScalar(scale);
   mesh.position.set(x, world.height(x, z) - 0.3, z);
@@ -223,7 +232,7 @@ export function makePagoda(world, x, z, scale = 1) {
 }
 
 // ---------------- Fuji-style stratovolcano (own radial mesh for crisp snow streaks) ----------------
-export function makeFuji(world, cx, cz, R = 1850, H = 700, baseY = 40) {
+export function fujiGeometry(cx, cz, R = 1850, H = 700, baseY = 40) {
   const nz = makeNoise(4242);
   const rings = 110, segs = 300;
   const P = [], C = [], I = [];
@@ -269,6 +278,10 @@ export function makeFuji(world, cx, cz, R = 1850, H = 700, baseY = 40) {
   g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
   g.setIndex(I);
   g.computeVertexNormals();
+  return g;
+}
+
+export function makeFuji(g) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
   patch(mat, {
     key: 'fuji',

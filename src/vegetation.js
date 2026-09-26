@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
 import { patch, U } from './shaders.js';
+import { tessellate } from './stress.js';
 
 const V = THREE.Vector3;
 
@@ -49,10 +50,7 @@ function grassClumpGeometry(rng, blades = 5, segs = 4) {
   return g;
 }
 
-export function makeGrass(world, count, opts) {
-  const rng = mulberry32(42);
-  const nz = makeNoise(77);
-  const geo = grassClumpGeometry(rng);
+function grassMaterial() {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   patch(mat, {
     key: 'grass', wind: 'aFlex',
@@ -70,6 +68,14 @@ export function makeGrass(world, count, opts) {
       outgoingLight += diffuseColor.rgb * uSunColor * uSunVis * (back * 1.6 + 0.15) * clamp(vTip * 2.2, 0.0, 1.0);
       outgoingLight *= 1.0 + vWave * clamp(vTip * 2.0, 0.0, 1.0) * 0.35;`,
   });
+  return mat;
+}
+
+// placement + per-tile instance data (worker-safe)
+export function grassData(world, count, opts) {
+  const rng = mulberry32(42);
+  const nz = makeNoise(77);
+  const geo = grassClumpGeometry(rng);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
   const col = new THREE.Color();
   const cA = new THREE.Color(0.09, 0.26, 0.05), cB = new THREE.Color(0.24, 0.42, 0.08), cC = new THREE.Color(0.42, 0.42, 0.14), reed = new THREE.Color(0.2, 0.28, 0.08);
@@ -107,28 +113,40 @@ export function makeGrass(world, count, opts) {
     if (!tiles.has(key)) tiles.set(key, []);
     tiles.get(key).push(it);
   }
-  const group = new THREE.Group();
+  const out = [];
   let total = 0;
   for (const list of tiles.values()) {
     list.sort((a, b) => a.rank - b.rank);
-    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    const mesh = new THREE.InstancedMesh(geo, undefined, list.length);
     list.forEach((it, i) => { mesh.setMatrixAt(i, it.mm); mesh.setColorAt(i, it.c); });
-    mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
-    mesh.boundingSphere.radius += 1.5;
-    mesh.receiveShadow = true; mesh.castShadow = false;
-    mesh.layers.set(1);
-    mesh.userData.max = list.length;
-    group.add(mesh);
+    const bs = mesh.boundingSphere;
+    out.push({ matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length, bs: [bs.center.x, bs.center.y, bs.center.z, bs.radius + 1.5] });
     total += list.length;
   }
-  group.userData.total = total;
+  return { geo, tiles: out, total };
+}
+
+export function makeGrass(data) {
+  const mat = grassMaterial();
+  const group = new THREE.Group();
+  for (const t of data.tiles) {
+    const mesh = new THREE.InstancedMesh(data.geo, mat, t.n);
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(t.matrix, 16);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(t.color, 3);
+    mesh.boundingSphere = new THREE.Sphere(new V(t.bs[0], t.bs[1], t.bs[2]), t.bs[3]);
+    mesh.receiveShadow = true; mesh.castShadow = false;
+    mesh.layers.set(1);
+    mesh.userData.max = t.n;
+    group.add(mesh);
+  }
+  group.userData.total = data.total;
   group.userData.setFraction = (f) => { group.children.forEach((m) => (m.count = Math.max(0, Math.round(m.userData.max * f)))); };
   return group;
 }
 
 // ---------- wildflowers (tiny heads riding above the grass) ----------
-export function makeFlowers(world, count, opts) {
+export function flowersData(world, count, opts) {
   const rng = mulberry32(9);
   const shape = new THREE.Shape();
   for (let k = 0; k <= 30; k++) {
@@ -140,9 +158,7 @@ export function makeFlowers(world, count, opts) {
   geo.rotateX(-Math.PI / 2);
   const flex = new Float32Array(geo.attributes.position.count).fill(0.32);
   geo.setAttribute('aFlex', new THREE.BufferAttribute(flex, 1));
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.7, side: THREE.DoubleSide });
-  patch(mat, { key: 'flowers', wind: 'aFlex', vertPars: 'attribute float aFlex;', noFlip: true });
-  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  const mesh = new THREE.InstancedMesh(geo, undefined, count);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new V(), p = new V();
   const palette = [new THREE.Color(1, 1, 0.97), new THREE.Color(1, 0.93, 0.55), new THREE.Color(0.8, 0.72, 1.0), new THREE.Color(1, 0.8, 0.88), new THREE.Color(1, 1, 1)];
   let n = 0, tries = 0;
@@ -165,9 +181,16 @@ export function makeFlowers(world, count, opts) {
     mesh.setColorAt(n, palette[Math.floor(rng() * palette.length)]);
     n++;
   }
-  mesh.count = n;
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.instanceColor.needsUpdate = true;
+  return { geo, matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, count, n };
+}
+
+export function makeFlowers(d) {
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.7, side: THREE.DoubleSide });
+  patch(mat, { key: 'flowers', wind: 'aFlex', vertPars: 'attribute float aFlex;', noFlip: true });
+  const mesh = new THREE.InstancedMesh(d.geo, mat, d.count);
+  mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
+  mesh.count = d.n;
   mesh.frustumCulled = false;
   mesh.layers.set(1);
   return mesh;
@@ -211,23 +234,10 @@ function rockGeometry(seed, detail = 4) {
   return g;
 }
 
-export function makeRocks(world, tier, treePos) {
+// rock/pebble placements; the returned rng continues into rocksData's instancing (same sequence as before)
+export function rockPlan(world, tier, treePos) {
   const rng = mulberry32(1234);
-  const group = new THREE.Group();
   const variants = 5;
-  const geos = [];
-  for (let i = 0; i < variants; i++) geos.push(rockGeometry(500 + i * 17, tier === 'low' ? 3 : 4));
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
-  patch(mat, {
-    key: 'rock',
-    fragColor: `
-      float wet = smoothstep(0.28, -0.05, vFogWorld.y);
-      diffuseColor.rgb *= mix(1.0, 0.5, wet) * (0.85 + 0.3 * vnoise(vFogWorld.xz * 3.0 + vFogWorld.y * 2.0));`,
-    fragLight: `
-      float wet2 = smoothstep(0.28, -0.05, vFogWorld.y);
-      vec3 vv = normalize(cameraPosition - vFogWorld);
-      outgoingLight += uSunColor * uSunVis * pow(max(dot(reflect(-uSunDir, normal), vv), 0.0), 24.0) * wet2 * 0.25;`,
-  });
   const placements = [];
   const rocksInWater = [];
   const add = (x, z, sc, sink = 0.3, flatten = 1) => {
@@ -267,12 +277,20 @@ export function makeRocks(world, tier, treePos) {
     const y = world.height(x, z);
     pebbles.push({ x, y: y - 0.02, z, sc: 0.05 + Math.pow(rng(), 2) * 0.18, flatten: 0.7, v: Math.floor(rng() * variants), rot: rng() * 6.28 });
   }
+  return { rng, placements, pebbles, rocksInWater };
+}
+
+export function rocksData(world, tier, treePos, triMul = 1) {
+  const variants = 5;
+  const geos = [];
+  for (let i = 0; i < variants; i++) geos.push(rockGeometry(500 + i * 17, tier === 'low' ? 3 : 4));
+  const { rng, placements, pebbles, rocksInWater } = rockPlan(world, tier, treePos);
   const all = placements.concat(pebbles);
   const byV = Array.from({ length: variants }, () => []);
   all.forEach((p) => byV[p.v].push(p));
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), col = new THREE.Color();
-  byV.forEach((list, vi) => {
-    const mesh = new THREE.InstancedMesh(geos[vi], mat, list.length);
+  const out = byV.map((list, vi) => {
+    const mesh = new THREE.InstancedMesh(geos[vi], undefined, list.length);
     list.forEach((r, i) => {
       p.set(r.x, r.y, r.z);
       q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.25, r.rot, (rng() - 0.5) * 0.25));
@@ -283,12 +301,34 @@ export function makeRocks(world, tier, treePos) {
       col.setRGB(tint, tint * (0.97 + rng() * 0.05), tint * (0.93 + rng() * 0.08));
       mesh.setColorAt(i, col);
     });
+    return { matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length };
+  });
+  return { geos: triMul > 1 ? geos.map((g) => tessellate(g, triMul)) : geos, variants: out, rocksInWater, blockers: placements };
+}
+
+export function makeRocks(d) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
+  patch(mat, {
+    key: 'rock',
+    fragColor: `
+      float wet = smoothstep(0.28, -0.05, vFogWorld.y);
+      diffuseColor.rgb *= mix(1.0, 0.5, wet) * (0.85 + 0.3 * vnoise(vFogWorld.xz * 3.0 + vFogWorld.y * 2.0));`,
+    fragLight: `
+      float wet2 = smoothstep(0.28, -0.05, vFogWorld.y);
+      vec3 vv = normalize(cameraPosition - vFogWorld);
+      outgoingLight += uSunColor * uSunVis * pow(max(dot(reflect(-uSunDir, normal), vv), 0.0), 24.0) * wet2 * 0.25;`,
+  });
+  d.variants.forEach((v, vi) => {
+    const mesh = new THREE.InstancedMesh(d.geos[vi], mat, v.n);
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(v.matrix, 16);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(v.color, 3);
     mesh.castShadow = true; mesh.receiveShadow = true;
-    mesh.instanceMatrix.needsUpdate = true;
     group.add(mesh);
   });
-  return { group, rocksInWater, blockers: placements };
+  return { group, rocksInWater: d.rocksInWater, blockers: d.blockers };
 }
+
 
 // ---------- distant forest on the hills ----------
 function coniferGeometry(nz) {
@@ -344,12 +384,9 @@ function mergeGeos(parts) {
   return geo;
 }
 
-export function makeForest(world, count) {
+export function forestData(world, count) {
   const rng = mulberry32(555);
   const nz = makeNoise(31);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide });
-  patch(mat, { key: 'forest', fragColor: 'diffuseColor.rgb *= 0.8 + 0.4 * vnoise(vFogWorld.xz * 0.5 + vFogWorld.y);' });
-  const group = new THREE.Group();
   const kinds = [coniferGeometry(nz), roundTreeGeometry(nz, rng)];
   const lists = [[], []];
   let tries = 0, n = 0;
@@ -369,8 +406,8 @@ export function makeForest(world, count) {
     n++;
   }
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), c = new THREE.Color();
-  lists.forEach((list, k) => {
-    const mesh = new THREE.InstancedMesh(kinds[k], mat, list.length);
+  const out = lists.map((list, k) => {
+    const mesh = new THREE.InstancedMesh(kinds[k], undefined, list.length);
     list.forEach((t, i) => {
       p.set(t.x, t.y - 0.6, t.z);
       q.setFromAxisAngle(new V(0, 1, 0), rng() * 6.28);
@@ -383,7 +420,19 @@ export function makeForest(world, count) {
       
       mesh.setColorAt(i, c);
     });
-    mesh.instanceMatrix.needsUpdate = true;
+    return { matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length };
+  });
+  return { kinds, lists: out };
+}
+
+export function makeForest(d) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide });
+  patch(mat, { key: 'forest', fragColor: 'diffuseColor.rgb *= 0.8 + 0.4 * vnoise(vFogWorld.xz * 0.5 + vFogWorld.y);' });
+  const group = new THREE.Group();
+  d.lists.forEach((l, k) => {
+    const mesh = new THREE.InstancedMesh(d.kinds[k], mat, l.n);
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(l.matrix, 16);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(l.color, 3);
     group.add(mesh);
   });
   return group;

@@ -201,20 +201,18 @@ export function createWorld(seed = 7) {
       const v = Math.min(255, Math.round((depths[k] / 4) * 255));
       data[k * 4] = v; data[k * 4 + 1] = v; data[k * 4 + 2] = v; data[k * 4 + 3] = 255;
     }
-    const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
-    tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
-    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.needsUpdate = true;
-    return { tex, bounds: new THREE.Vector4(HB.x0, HB.z0, 1 / (HB.x1 - HB.x0), 1 / (HB.z1 - HB.z0)) };
+    return { data, W, H, bounds: [HB.x0, HB.z0, 1 / (HB.x1 - HB.x0), 1 / (HB.z1 - HB.z0)] };
   }
 
   // cached height grid for hot paths (petal sim, camera clamp)
   const HC = { x0: -160, z0: -240, step: 1, nx: 321, nz: 361, data: null };
-  function buildHeightCache() {
+  function computeHeightCache() {
     const d = new Float32Array(HC.nx * HC.nz);
     for (let j = 0; j < HC.nz; j++) for (let i = 0; i < HC.nx; i++) d[j * HC.nx + i] = height(HC.x0 + i * HC.step, HC.z0 + j * HC.step);
-    HC.data = d;
+    return d;
   }
+  function buildHeightCache() { HC.data = computeHeightCache(); }
+  function setHeightCache(d) { HC.data = d; }
   function heightFast(x, z) {
     if (!HC.data) return height(x, z);
     const fx = (x - HC.x0) / HC.step, fz = (z - HC.z0) / HC.step;
@@ -223,5 +221,14 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = HC.data, k = j * HC.nx + i;
     return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + HC.nx] * (1 - u) + d[k + HC.nx + 1] * u) * v;
   }
-  return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, pagoda };
+  return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, pagoda };
+}
+
+// water depth texture (R = depth / 4) from buildDepthMap's data
+export function depthTexture(d) {
+  const tex = new THREE.DataTexture(d.data, d.W, d.H, THREE.RGBAFormat);
+  tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return { tex, bounds: new THREE.Vector4(...d.bounds) };
 }

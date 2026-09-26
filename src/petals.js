@@ -193,11 +193,8 @@ export class PetalSystem {
 }
 
 // static carpet of fallen petals under the tree
-export function makeFallenPetals(world, center, count, avoid) {
+export function fallenData(world, center, count, avoid) {
   const rng = mulberry32(88);
-  const g = petalGeometry();
-  const ig = new THREE.InstancedBufferGeometry();
-  ig.index = g.index; ig.attributes.position = g.attributes.position; ig.attributes.normal = g.attributes.normal;
   const pos = new Float32Array(count * 3), rot = new Float32Array(count * 4), tint = new Float32Array(count);
   let n = 0, tries = 0;
   while (n < count && tries < count * 10) {
@@ -212,6 +209,13 @@ export function makeFallenPetals(world, center, count, avoid) {
     tint[n] = rng();
     n++;
   }
+  return { pos, rot, tint, n };
+}
+
+export function makeFallenPetals({ pos, rot, tint, n }) {
+  const g = petalGeometry();
+  const ig = new THREE.InstancedBufferGeometry();
+  ig.index = g.index; ig.attributes.position = g.attributes.position; ig.attributes.normal = g.attributes.normal;
   ig.setAttribute('iPos', new THREE.InstancedBufferAttribute(pos, 3));
   ig.setAttribute('iRot', new THREE.InstancedBufferAttribute(rot, 4));
   ig.setAttribute('iTint', new THREE.InstancedBufferAttribute(tint, 1));

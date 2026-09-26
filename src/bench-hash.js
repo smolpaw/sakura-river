@@ -9,6 +9,11 @@ async function sha(view) {
 function texturePixels(tex) {
   const img = tex.image;
   if (!img) return null;
+  if (img.data && tex.userData.rowsFlipped) { // stored bottom-up (canvas flipY layout): hash top-down like a canvas
+    const row = img.width * 4, out = new Uint8Array(img.data.length);
+    for (let y = 0; y < img.height; y++) out.set(img.data.subarray(y * row, y * row + row), (img.height - 1 - y) * row);
+    return out;
+  }
   if (img.data) return img.data; // DataTexture: logical top-down rows
   const w = img.width, h = img.height;
   const c = new OffscreenCanvas(w, h);
@@ -40,7 +45,7 @@ export async function hashScene(scene, extra = {}) {
       if (!t || seenTex.has(t)) continue;
       seenTex.add(t);
       const px = texturePixels(t);
-      if (px) add(`tex.${key}.${t.image.width}x${t.image.height}.flip${t.flipY ? 1 : 0}`, px);
+      if (px) add(`tex.${key}.${t.image.width}x${t.image.height}`, px);
     }
     if (o.material && o.material.uniforms) for (const k in o.material.uniforms) {
       const t = o.material.uniforms[k].value;

@@ -45,10 +45,12 @@ const runs = [];
 let clockLock = null;
 
 async function oneRun(job) {
+  let contended = null;
   for (let attempt = 0; ; attempt++) {
     const c = contention(idle, own());
     if (!c.busy) break;
-    if (attempt >= 30) throw new Error('GPU contention persisted: ' + JSON.stringify(c));
+    // persistent load (e.g. a media app) must not stall the campaign: run anyway and flag it
+    if (attempt >= 30) { contended = { fresh: c.fresh.map((p) => p.name), load: c.load.map((p) => `${p.name}:${p.sm}%`) }; log('contention persisted; running flagged'); break; }
     log('contention, backing off:', JSON.stringify({ fresh: c.fresh.map((p) => p.name), load: c.load.map((p) => `${p.name}:${p.sm}%`) }));
     await sleep(20000);
   }
@@ -58,7 +60,7 @@ async function oneRun(job) {
     engine: `./builds/${arms[job.arm].label}/engine.js`, cssW: W.cssW, cssH: W.cssH, quality: W.quality, backend: o.backend, stress: arms[job.arm].stress,
     settings: V.defaults,
   });
-  const out = { arm: job.arm, i: job.i, setup, views: {} };
+  const out = { arm: job.arm, i: job.i, setup, views: {}, contended };
   for (const v of views) {
     await page.evaluate((v) => H.view(v, 120), v);
     let warm = await page.evaluate((n) => H.frames(n), WARMUP);
@@ -103,7 +105,7 @@ async function oneRun(job) {
   await page.evaluate(() => H.dispose());
   await page.close();
   const after = contention(idle, own());
-  out.contaminated = after.busy;
+  out.contaminated = after.busy && !contended;
   return out;
 }
 
@@ -153,7 +155,7 @@ const result = {
     B: { gpu: r.B.gpu && { median: r.B.gpu.median, runMedians: r.B.gpu.runMedians, bimodality: r.B.gpu.bimodality }, cpu: r.B.cpu && { median: r.B.cpu.median, min: r.B.cpu.min, runMedians: r.B.cpu.runMedians, bimodality: r.B.cpu.bimodality } },
     labelsA: r.labelsA, labelsB: r.labelsB, counters: r.counters,
   }])),
-  runs: runs.map((r) => ({ arm: r.arm, i: r.i, createMs: r.setup.createMs, canvas: r.setup.canvas, backend: r.setup.backend, contaminated: r.contaminated, clocks: r.clocks, logs: r.logs,
+  runs: runs.map((r) => ({ arm: r.arm, i: r.i, contended: r.contended, createMs: r.setup.createMs, canvas: r.setup.canvas, backend: r.setup.backend, contaminated: r.contaminated, clocks: r.clocks, logs: r.logs,
     views: Object.fromEntries(Object.entries(r.views).map(([id, v]) => [id, { rejected: v.rejected, grMedian: v.grMedian, n: v.cpu.length, gpuMedian: median(v.gpu), cpuMedian: median(v.cpu) }])) })),
 };
 const name = o.out || `perf-${o.workload}-${o.backend}-${o.a}-vs-${o.b}`;
