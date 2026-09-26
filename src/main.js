@@ -18,6 +18,7 @@ import { GodRaysPass, GradeShader } from './post.js';
 import { mulberry32, clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
 import { createBenchProbe } from './bench-probe.js';
+import { tessellate, tessellateTree, makeStressObjects, makeRain } from './stress.js';
 
 const TIERS = {
   high: { pr: 2.0, terrain: [420, 440], grass: 40000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1 },
@@ -44,6 +45,7 @@ export function create(canvas, opts = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   const tierName = opts.quality || detectTier(renderer);
   const Q = { ...TIERS[tierName] };
+  const ST = opts.stress || null; // bench-only future-content scenario
   const dpr = Math.min(window.devicePixelRatio || 1, Q.pr);
   let resScale = 1;
   renderer.setPixelRatio(dpr);
@@ -130,12 +132,12 @@ export function create(canvas, opts = {}) {
       outgoingLight += diffuseColor.rgb * (vec3(0.16) + uSkyAmb * 0.1);`,
   });
   const blossomDepth = windDepthMaterial('aFlex', 'blossom', { map: atlas, alphaTest: 0.4 });
-  const cardGeo = buildBlossomCardGeometry();
+  const cardGeo = ST ? tessellate(buildBlossomCardGeometry(), ST.triMul) : buildBlossomCardGeometry();
 
   function buildTreeObject(seed, cfg, pos, blossomScale = 1, castShadow = true) {
     const groundAt = (x, z) => world.height(x + pos.x, z + pos.z);
     const t = growTree(seed, cfg, groundAt);
-    const bg = buildBarkGeometry(t, groundAt);
+    const bg = ST ? tessellate(buildBarkGeometry(t, groundAt), ST.triMul) : buildBarkGeometry(t, groundAt);
     const group = new THREE.Group();
     group.position.copy(pos);
     const barkMesh = new THREE.Mesh(bg, barkMat);
@@ -205,18 +207,20 @@ export function create(canvas, opts = {}) {
   scene.add(bridge.mesh);
   const pagoda = makePagoda(world, world.pagoda.x, world.pagoda.z, 1.0);
   scene.add(pagoda);
+  if (ST) [lantern.group, bridge.mesh, pagoda].forEach((o) => tessellateTree(o, ST.triMul));
 
   // ---------- ground cover ----------
   const trunkAvoid = (x, z) => Math.hypot(x - TX, z - TZ) < 0.95 || Math.hypot(x - LX, z - LZ) < 0.75;
   const rocks = makeRocks(world, tierName, treePos);
   scene.add(rocks.group);
+  if (ST) tessellateTree(rocks.group, ST.triMul);
   const rockAvoid = (x, z) => {
     if (trunkAvoid(x, z)) return true;
     for (const r of rocks.blockers) { if (r.sc > 0.3 && Math.abs(x - r.x) < r.sc && Math.abs(z - r.z) < r.sc && Math.hypot(x - r.x, z - r.z) < r.sc * 0.9) return true; }
     return false;
   };
   const focus = new THREE.Vector3(TX + 8, 0, TZ + 8);
-  const grass = makeGrass(world, Q.grass, { focus, radius: 62, avoid: rockAvoid });
+  const grass = makeGrass(world, Q.grass * (ST ? ST.grass : 1), { focus, radius: 62, avoid: rockAvoid });
   world.buildHeightCache();
   scene.add(grass);
   const flowers = makeFlowers(world, Q.flowers, { focus, radius: 48, avoid: rockAvoid });
@@ -239,6 +243,10 @@ export function create(canvas, opts = {}) {
   scene.add(fallen);
   const motes = makeMotes(new THREE.Vector3(TX + 3, 0, TZ + 2), Q.motes);
   scene.add(motes);
+  if (ST) {
+    scene.add(makeStressObjects(world, ST.objects, focus));
+    scene.add(makeRain(ST.particles));
+  }
 
   // ---------- post ----------
   const rtSize = new THREE.Vector2(2, 2);

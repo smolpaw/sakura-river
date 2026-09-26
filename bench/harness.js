@@ -85,9 +85,18 @@ H.capture = async (path, dt = 0) => {
   await raf();
   eng.tick(1, dt);
   const blob = await new Promise((r) => canvas.toBlob(r, 'image/png')); // snapshot is taken synchronously
-  const res = await fetch('/save?path=' + encodeURIComponent(path), { method: 'POST', body: blob });
-  if (!res.ok) throw new Error('save failed: ' + (await res.text()));
-  return blob.size;
+  if (!blob) throw new Error('toBlob returned null (context lost?)');
+  const body = await blob.arrayBuffer();
+  for (let i = 0; ; i++) {
+    try {
+      const res = await fetch('/save?path=' + encodeURIComponent(path), { method: 'POST', body });
+      if (!res.ok) throw new Error('save failed: ' + (await res.text()));
+      return blob.size;
+    } catch (e) {
+      if (i >= 4) throw new Error(`upload of ${path} (${body.byteLength} B) failed: ${e.message}`);
+      await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+    }
+  }
 };
 
 // free-running mode (engine's own RAF loop + adaptive controller): sample fps/quality for `sec` seconds

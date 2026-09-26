@@ -21,7 +21,8 @@ const S = o.golden ? V.visual.supersample : 1;
 const cssW = V.visual.cssW * S, cssH = V.visual.cssH * S;
 const name = o.golden ? 'goldens/raw' : `out/visual/${o.build}-${o.backend}${o.angle !== 'default' ? '-' + o.angle : ''}${o.tag ? '-' + o.tag : ''}`;
 const outDir = path.join(BENCH, name);
-fs.rmSync(outDir, { recursive: true, force: true });
+if (!o.only) fs.rmSync(outDir, { recursive: true, force: true });
+else fs.rmSync(path.join(outDir, o.only === 'seq' ? 'seq' : 'stills'), { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const extra = o.extra ? JSON.parse(o.extra) : {};
@@ -98,7 +99,12 @@ if (o.only !== 'stills') {
 await browser.close();
 server.close();
 manifest.seconds = (Date.now() - t0) / 1000;
-fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 1));
+const prevFile = path.join(outDir, 'manifest.json');
+if (o.only && fs.existsSync(prevFile)) {
+  const prev = JSON.parse(fs.readFileSync(prevFile, 'utf8'));
+  if (o.only === 'seq') manifest.stills = prev.stills; else manifest.sequences = prev.sequences;
+}
+fs.writeFileSync(prevFile, JSON.stringify(manifest, null, 1));
 log('rendered', manifest.stills.length, 'stills +', Object.values(manifest.sequences).reduce((a, s) => a + s.length, 0), 'sequence frames in', manifest.seconds, 's ->', name);
 if (manifest.logs.length) log('page warnings/errors:', manifest.logs.slice(0, 10));
 

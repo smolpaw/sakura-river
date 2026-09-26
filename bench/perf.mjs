@@ -14,7 +14,7 @@ const { values: o } = parseArgs({ options: {
   a: { type: 'string' }, b: { type: 'string' }, workload: { type: 'string', default: 'hero' }, backend: { type: 'string', default: 'webgl' },
   runs: { type: 'string', default: '5' }, frames: { type: 'string', default: '300' }, warmup: { type: 'string', default: '120' },
   views: { type: 'string' }, out: { type: 'string' }, seed: { type: 'string', default: '1' }, angle: { type: 'string', default: 'default' },
-  'clock-tol': { type: 'string', default: '0.05' }, 'no-throttle-reject': { type: 'boolean', default: false },
+  'clock-tol': { type: 'string', default: '0.05' }, 'stress-a': { type: 'string' }, 'stress-b': { type: 'string' }, 'no-throttle-reject': { type: 'boolean', default: false },
 } });
 if (!o.a || !o.b) { console.error('need --a and --b'); process.exit(1); }
 
@@ -24,7 +24,8 @@ if (!W) throw new Error('unknown workload ' + o.workload);
 const views = (o.views ? o.views.split(',') : V.perfViews).map((id) => V.views.find((v) => v.id === id));
 const RUNS = +o.runs, FRAMES = +o.frames, WARMUP = +o.warmup, TOL = +o['clock-tol'];
 const meta = (label) => JSON.parse(fs.readFileSync(path.join(BENCH, 'builds', label, 'meta.json'), 'utf8'));
-const arms = { A: { label: o.a, build: meta(o.a) }, B: { label: o.b, build: meta(o.b) } };
+const stressOf = (s) => (s === undefined ? W.stress : s === 'none' ? undefined : JSON.parse(s));
+const arms = { A: { label: o.a, build: meta(o.a), stress: stressOf(o['stress-a']) }, B: { label: o.b, build: meta(o.b), stress: stressOf(o['stress-b']) } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -54,7 +55,7 @@ async function oneRun(job) {
   const logger = startLogger(100);
   page = await openHarness(browser, url);
   const setup = await page.evaluate((p) => H.setup(p), {
-    engine: `./builds/${arms[job.arm].label}/engine.js`, cssW: W.cssW, cssH: W.cssH, quality: W.quality, backend: o.backend, stress: W.stress,
+    engine: `./builds/${arms[job.arm].label}/engine.js`, cssW: W.cssW, cssH: W.cssH, quality: W.quality, backend: o.backend, stress: arms[job.arm].stress,
     settings: V.defaults,
   });
   const out = { arm: job.arm, i: job.i, setup, views: {} };
