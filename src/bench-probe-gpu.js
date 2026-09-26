@@ -84,6 +84,15 @@ export function createGPUProbe(renderer) {
   }
   renderer.inspector = new Probe();
 
+  // WebGPU: getCurrentTexture() blocks while the swapchain is full (GPU backpressure). That wait is not
+  // main-thread work, so it is timed separately and the harness subtracts it from the frame's CPU time.
+  let blocked = 0, lastBlocked = 0;
+  const ctx = webgpu ? backend.context : null;
+  if (ctx) {
+    const orig = ctx.getCurrentTexture.bind(ctx);
+    ctx.getCurrentTexture = () => { const t0 = performance.now(); const t = orig(); blocked += performance.now() - t0; return t; };
+  }
+
   let resolving = false;
   const done = [];
   async function resolveWebGPU() {
@@ -107,7 +116,7 @@ export function createGPUProbe(renderer) {
       const open = new Set([...byUid.values()].map((r) => r.frame));
       for (const [fr, f] of frames) if (fr < frame && !open.has(fr) && f.seen) { done.push({ frame: fr, gpu: f.gpu, total: f.total }); frames.delete(fr); }
       // uids that never got a timestamp (e.g. skipped passes) must not block completion forever
-      for (const [uid, r] of byUid) if (r.frame < frame - 30) byUid.delete(uid);
+      for (const [uid, r] of byUid) if (r.frame < frame - 240) byUid.delete(uid);
     } finally { resolving = false; }
   }
 
@@ -115,13 +124,13 @@ export function createGPUProbe(renderer) {
     hasTimer: webgpu ? backend.trackTimestamp === true : !!ext,
     backend: webgpu ? 'webgpu' : 'webgl',
     beginFrame() {
-      frame++; inFrame = true; passes = [];
+      frame++; inFrame = true; passes = []; blocked = 0;
       drawStart = renderer.info.render.drawCalls; triStart = renderer.info.render.triangles;
       if (!webgpu && ext) { stack.length = 0; beginSeg('other'); }
     },
     endFrame() {
       if (!webgpu && ext) { endSeg(); const f = frames.get(frame); if (f) f.closed = true; }
-      inFrame = false;
+      inFrame = false; lastBlocked = blocked;
       lastCounters = { drawCalls: renderer.info.render.drawCalls - drawStart, triangles: renderer.info.render.triangles - triStart, passes: passes.slice() };
     },
     poll() {
@@ -149,6 +158,7 @@ export function createGPUProbe(renderer) {
     get pending() { return webgpu ? byUid.size : pending.length; },
     get disjointFrames() { return disjointFrames; },
     get frame() { return frame; },
+    get blockedMs() { return lastBlocked; },
     counters() {
       const c = lastCounters || { drawCalls: 0, triangles: 0, passes: [] };
       let rtMem = canvas.width * canvas.height * 4;

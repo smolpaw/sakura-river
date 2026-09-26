@@ -47,18 +47,19 @@ H.cinematic = (on) => eng.setCinematic(on);
 
 // render n frames; returns per-frame { cpu, t, pf } plus GPU samples keyed by probe frame
 H.frames = async (n, dt = 1 / 60) => {
-  const cpu = new Float64Array(n), t = new Float64Array(n), pf = new Int32Array(n);
+  const cpu = new Float64Array(n), cpuTotal = new Float64Array(n), t = new Float64Array(n), pf = new Int32Array(n);
   const gpu = [];
   for (let i = 0; i < n; i++) {
     await raf();
     const t0 = performance.now();
     eng.tick(1, dt);
-    cpu[i] = performance.now() - t0;
+    cpuTotal[i] = performance.now() - t0;
+    cpu[i] = cpuTotal[i] - (eng.bench && eng.bench.blockedMs ? eng.bench.blockedMs : 0); // minus swapchain waits
     t[i] = now();
     pf[i] = eng.bench ? eng.bench.frame : i;
     if (eng.bench) gpu.push(...eng.bench.poll());
   }
-  return { cpu: [...cpu], t: [...t], pf: [...pf], gpu };
+  return { cpu: [...cpu], cpuTotal: [...cpuTotal], t: [...t], pf: [...pf], gpu };
 };
 
 // wait for outstanding GPU timer results without rendering (the CPU can run ~20 frames ahead of the GPU)

@@ -87,12 +87,12 @@ async function oneRun(job) {
       if (Math.abs(c.gr - grMed) / grMed > TOL) { rejected.clock++; return; }
       if (!o['no-throttle-reject'] && (c.reasons & THROTTLE)) { rejected.throttle++; return; }
       if (!g && setup.timer) { rejected.noGpu++; }
-      frames.push({ cpu, gpu: g ? g.total : null, labels: g ? g.gpu : null });
+      frames.push({ cpu, cpuTotal: m.cpuTotal ? m.cpuTotal[i] : cpu, gpu: g ? g.total : null, labels: g ? g.gpu : null });
     });
     const labels = {};
     for (const f of frames) if (f.labels) for (const k in f.labels) (labels[k] ||= []).push(f.labels[k]);
     out.views[v.id] = {
-      cpu: frames.map((f) => f.cpu), gpu: frames.filter((f) => f.gpu !== null).map((f) => f.gpu),
+      cpu: frames.map((f) => f.cpu), cpuTotal: frames.map((f) => f.cpuTotal), gpu: frames.filter((f) => f.gpu !== null).map((f) => f.gpu),
       labels: Object.fromEntries(Object.entries(labels).map(([k, xs]) => [k, median(xs)])),
       rejected, grMedian: grMed, counters, disjoint,
       reasons: clocks.filter(Boolean).reduce((h, c) => { const k = '0x' + c.reasons.toString(16); h[k] = (h[k] || 0) + 1; return h; }, {}),
@@ -159,7 +159,7 @@ const result = {
     labelsA: r.labelsA, labelsB: r.labelsB, counters: r.counters,
   }])),
   runs: runs.map((r) => ({ arm: r.arm, i: r.i, contended: r.contended, createMs: r.setup.createMs, canvas: r.setup.canvas, backend: r.setup.backend, contaminated: r.contaminated, clocks: r.clocks, logs: r.logs,
-    views: Object.fromEntries(Object.entries(r.views).map(([id, v]) => [id, { rejected: v.rejected, grMedian: v.grMedian, n: v.cpu.length, gpuMedian: median(v.gpu), cpuMedian: median(v.cpu) }])) })),
+    views: Object.fromEntries(Object.entries(r.views).map(([id, v]) => [id, { rejected: v.rejected, grMedian: v.grMedian, n: v.cpu.length, gpuMedian: median(v.gpu), cpuMedian: median(v.cpu), cpuTotalMedian: median(v.cpuTotal) }])) })),
 };
 const name = o.out || `perf-${o.workload}-${o.backend}-${o.a}-vs-${o.b}`;
 fs.mkdirSync(path.join(BENCH, 'results'), { recursive: true });
