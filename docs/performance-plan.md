@@ -15,6 +15,16 @@ Make the engine fast now and structurally ready for future content without frame
 
 Context: the owner's desktop (RTX 2060) runs the scene at 90–120 fps. A laptop, probably with integrated graphics, runs it at 18–25 fps. The fix must be structural, not a one-time tune.
 
+**It must run well across GPUs, including integrated Intel GPUs.** Target device classes:
+
+| Class | Example hardware | Requirement |
+|---|---|---|
+| Desktop discrete | RTX 2060 (this machine) | Best quality. Largest headroom for future content. |
+| Modern integrated | Intel Iris Xe / Arc iGPU (Gen12+), AMD Radeon 680M-class, Apple M-series | Sustained 60 fps at 1080p, looking at least as good as the baseline did on the same hardware. The stretch goal is desktop-`high` quality. |
+| Older integrated | Intel UHD 620-class (Gen9), often only reachable through the WebGL2 fallback | Runs correctly and adapts to a sustained 30 fps or better. |
+
+Integrated GPUs share limited memory bandwidth (about 40–70 GB/s) with the CPU, and have much less compute and vertex throughput than a desktop GPU. **So memory bandwidth decides performance there:** render-target formats, MSAA, the number of fullscreen passes, shadow-map size and overdraw. Optimize with that in mind, not only for the RTX 2060.
+
 ## How to work
 
 - **The owner cares only about results.** They don't need to know the code.
@@ -33,6 +43,11 @@ Context: the owner's desktop (RTX 2060) runs the scene at 90–120 fps. A laptop
 5. **Never update the live artifact** (https://claude.ai/artifact/UmQeKrrzEj1KMDrSshWq6z). Sandbox checks go to *new private* artifacts only.
 6. **Don't fake numbers.** If a target is unreachable, stop pushing on it. Record the evidence, what you tried and the best result achieved, then continue with the rest of the plan.
 7. **Dependencies:** add them through the pnpm CLI. Pin `three` exactly (`pnpm add -E`).
+8. **Correct on every vendor.**
+   - Stay within the WebGPU *default* limits, which every adapter guarantees.
+   - Gate every optional feature and keep a working path without it: `timestamp-query`, `shader-f16`, `float32-filterable`, `rg11b10ufloat-renderable`, and similar.
+   - Don't rely on NVIDIA-specific behaviour: precision, uniformity, or undefined reads of uninitialized memory.
+   - As a correctness smoke test (not for performance), also run the visual gate on the other Chrome backends available here: WebGL2 through ANGLE's GL and Vulkan paths, and the software renderer (SwiftShader). It should render correctly, even if slowly.
 
 ## Stack direction (decided; revisit only on the triggers below)
 
@@ -101,6 +116,9 @@ The owner's machine runs processes with spiky load, including another agent sess
 
 - Chromium 150 on Wayland (Hyprland); NVIDIA driver 610; RTX 2060; `nvidia-smi` is available.
 - **The GPU is not idle at rest:** at idle it reported P8 / 405 MHz and `utilization.gpu` 35%, from the compositor and apps. An absolute-utilization threshold therefore can't detect contention.
+- **There is no integrated GPU on this machine** (the Ryzen 5 3600 has none). Intel-class performance comes from two sources:
+  - the **iGPU emulation profile** (Isolation protocol) as a local proxy;
+  - **remote bench runs** on real laptops (Phase 0, step 6). Real-device results override the emulation whenever they disagree.
 - **WebGPU on NVIDIA Linux** has been on by default since Chrome 147, for Wayland with recent drivers (https://developer.chrome.com/blog/new-in-webgpu-147-148). Whether this Arch build enables it without flags is unverified. Check `chrome://gpu` and `navigator.gpu.requestAdapter()`. Fallback flags: `--enable-unsafe-webgpu --enable-features=Vulkan` (see https://github.com/gpuweb/gpuweb/wiki/Implementation-Status).
 
 ### Deterministic scene
@@ -151,7 +169,18 @@ The owner's machine runs processes with spiky load, including another agent sess
 - **Calibrate noise first** with an A/A run: baseline against itself.
 - **What counts as an improvement:** report ratios with bootstrap confidence intervals (Kalibera & Jones 2013, https://dl.acm.org/doi/10.1145/2464157.2464160). Accept an improvement only if the 95% CI excludes zero *and* the gain exceeds the A/A noise floor.
 - **Weak-GPU emulation:** a bench-only "ballast" pass that burns a configurable number of GPU milliseconds per frame. It tests the adaptive controller as if running on a slow laptop.
-- **GPU clock lock (optional, done by the owner):**
+- **iGPU emulation profile (done by the owner):**
+  - Command: `sudo nvidia-smi -lgc 600,600 && sudo nvidia-smi -lmc 810,810`.
+  - Result: about 2.3 TFLOPS of compute (1920 cores × 2 × 0.6 GHz) and about 39 GB/s of bandwidth (810/7001 × 336 GB/s). That's close to an Intel Iris Xe (about 2 TFLOPS, about 68 GB/s shared with the CPU), and deliberately pessimistic on bandwidth.
+  - Checked on this machine: memory clock switching works at runtime (`nvidia-smi -lmci`), and at an 810 MHz memory clock the supported graphics range is 300–2100 MHz.
+  - **Limits:**
+    - It doesn't reproduce Intel's architecture: the 2060 has its own dedicated memory, a larger L2 cache, and different drivers and rasterizer.
+    - It can't go low enough to imitate UHD 620-class GPUs (about 0.4 TFLOPS).
+    - So treat it as a proxy that ranks costs and catches bandwidth problems. Real devices decide.
+  - **Verify the lock each session:** `nvidia-smi --query-gpu=clocks.gr,clocks.mem --format=csv` must read 600 and 810 under load.
+  - **Reset with** `sudo nvidia-smi -rgc && sudo nvidia-smi -rmc`, or a reboot. The whole desktop is slow while it's active.
+  - **Ask the owner once** at the start of Phase 0 to enable it for the iGPU runs. Batch those runs so the owner doesn't have to toggle it often.
+- **Stable-clock lock (optional, done by the owner):**
   - The owner may lock the graphics clock with `sudo nvidia-smi -lgc 1500,1500`.
   - This machine reports a 2145 MHz maximum, but that's the top of the boost range. Under sustained load the 170 W power limit and temperature pull the clock down. 1500 MHz is below the RTX 2060's 1680 MHz rated boost clock, so it's a speed the card can hold.
   - The lock applies system-wide and lasts until `sudo nvidia-smi -rgc` or a reboot.
@@ -164,6 +193,7 @@ The owner's machine runs processes with spiky load, including another agent sess
   - **hero:** `high` tier at 1920×1080, device scale 2 (worst case, like a laptop with a high-density screen);
   - **1080p:** device scale 1;
   - **future-content stress:** see Phase 0.
+  - **igpu:** the hero view and the 1080p workload at device scale 1, on the iGPU emulation profile, with the adaptive controller enabled. Record its steady-state fps, render scale and visual score.
   - Report both backends for every workload.
 
 ### Visual gate (`pnpm bench:visual`)
@@ -206,6 +236,14 @@ Each phase ends with its gate passing, results in `bench/results/<phase>-<step>.
    - Expect `crossOriginIsolated` to be false. A host that can't set COOP/COEP headers can't use SharedArrayBuffer, so **plan for no WASM threads**; parallelism comes from multiple workers with transferables.
    - Later phases must respect whatever this spike finds.
 5. Update the "Verifying changes" section of `CLAUDE.md` and the README with the bench commands.
+6. **Remote bench page for real hardware.**
+   - Publish a **new private** artifact that runs the bench on whatever machine opens it.
+   - It records GPU/adapter info, backend, per-pass GPU times (when `timestamp-query` or the WebGL timer extension exists; otherwise frame times), the controller's steady state, and a thumbnail of the hero view for a visual sanity check.
+   - It should run the *current* build, and a toggle should let the same page also run the *baseline* build, so every device gets a before/after pair.
+   - **Results must reach the agent without the owner copying anything.** Load the `artifact-capabilities` skill and use the artifact database capability, so runs are stored where `ArtifactData` can read them. Fall back to copyable JSON if that isn't possible.
+   - Tell the owner the link and ask them to open it on any Intel or AMD integrated-GPU laptops available (the cousin's included). Collect runs throughout the project; don't wait until the end.
+   - Republish this page to the same URL after each phase.
+7. Record the baseline on the iGPU emulation profile (the **igpu** workload), together with the ladder's steady state. This is the "baseline on the same hardware" that the modern-integrated requirement is judged against.
 
 **Gate:** the A/A noise floor of GPU median time is below 3%, or the achievable floor is documented with its cause. Goldens exist. Baseline numbers are committed.
 
@@ -260,9 +298,22 @@ Do these in order, measuring each separately.
    - Replace the frame-time ladder with a controller that reads GPU timestamps and scales internal resolution continuously, adjusting second-order settings after that.
    - Include a "panic" drop and a TAA history reset after N consecutive over-budget frames (as in Unreal: https://dev.epicgames.com/documentation/en-us/unreal-engine/dynamic-resolution-in-unreal-engine).
    - Replace `detectTier` with a short GPU micro-benchmark that runs behind the veil, combined with the adapter info. Integrated GPUs must no longer land on `high`.
+   - Laptops with two GPUs often run the browser on the integrated one. Request the high-performance adapter (`powerPreference: 'high-performance'` on the WebGPU adapter and the WebGL context). Verify what Chrome honours on Windows, macOS and Linux; don't assume.
+   - Tune the controller on the iGPU emulation profile. It must reach steady state within a few seconds and never oscillate.
    - **Ballast test:** with 10, 20 and 30 ms of ballast, the controller holds the target frame time without oscillating. Record the visual metric at each steady state.
 
-**Gate:** the visual gate passes after every step. After step 5, hero-workload GPU time on WebGPU is at most 50% of baseline, with visual metrics equal or better.
+6. **Bandwidth pass for integrated GPUs.** On the **igpu** workload:
+   - Measure bytes per frame for every render target and pass.
+   - Cut them where the gate allows: narrower formats (decision D10), fewer or cheaper fullscreen passes, smaller or cached shadow maps, and less overdraw in grass and blossoms.
+
+**Gate:**
+- The visual gate passes after every step.
+- After step 6, hero-workload GPU time on WebGPU is at most 50% of baseline, with visual metrics equal or better.
+- On the **igpu** workload:
+  - the adaptive controller holds a sustained 60 fps at 1080p;
+  - its steady-state image scores no worse on FLIP-vs-golden than the baseline's steady state on the same profile;
+  - stretch goal: no worse than the baseline `high` tier on the unconstrained desktop.
+- Remote real-device results, where available, confirm the direction.
 
 ### Phase 4: Scalability architecture (WebGPU compute, with fallbacks)
 
@@ -290,7 +341,7 @@ Do these in order, measuring each separately.
 ### Phase 5: Delivery
 
 1. The single-file build works, with workers inlined (and WASM, if adopted). Verify it in a **new private** test artifact against the Phase 0 spike checks.
-2. A `?bench` page mode runs a short benchmark on any machine and shows copyable JSON: GPU, backend, per-pass times and controller steady state. The owner can send it to the laptop user.
+2. The shipped page keeps a `?bench` mode (the same benchmark as the Phase 0 remote bench page). Republish the remote bench page with the final build, and summarize all real-device runs in Status.
 3. Update `README.md` and `CLAUDE.md` (architecture, bench commands, performance budgets), and close out the Status log.
 
 ## Open decisions (research, measure, record)
@@ -336,6 +387,16 @@ Each decision has a starting hypothesis. Measurement and the gates decide; the h
 - **D9: Renderer in a worker via OffscreenCanvas.**
   - Only if Phase 4 main-thread measurements need it, and only if the Phase 0 spike shows it works in the artifact.
   - There's no official WebGPURenderer worker example, so budget time for issues.
+- **D10: Precision and formats for bandwidth.**
+  - Candidates:
+    - 16-bit shader arithmetic via `shader-f16` where available (Intel Gen12+ runs 16-bit math at double rate);
+    - `rg11b10ufloat` render targets instead of RGBA16F where alpha isn't needed and `rg11b10ufloat-renderable` exists;
+    - 8-bit targets after tone mapping;
+    - smaller or packed G-buffer and velocity formats.
+  - Each needs a fallback when the feature is missing, and must pass the visual gate, which will catch banding.
+- **D11: Older integrated GPUs.**
+  - Chrome's WebGPU "compatibility mode" (`featureLevel: 'compatibility'`) targets older D3D11/OpenGL ES devices. Research whether Chrome ships it and whether three supports it.
+  - Otherwise these devices go through WebGL2, where the goal is a clean, adaptive 30 fps. Consider a lighter default configuration for this class (for example precomputed shadows, no reflection re-render) that still passes the gate against the baseline's `low` tier.
 - **Anything else** your research turns up with measured benefit is in scope, for example `compileAsync` preloading, texture compression, or `DirectRenderPipeline`.
 
 ## Definition of Done
@@ -349,12 +410,15 @@ All true, with evidence in `bench/results/` and the Status log:
 5. The future-content stress scenario meets the Phase 4 gate.
 6. No main-thread long task over 50 ms during generation. D1–D9 are recorded with their evidence.
 7. The adaptive controller passes the ballast test.
-8. Any target found unreachable is documented with evidence (constraint 6).
+8. The **igpu** workload meets the Phase 3 gate. The remote bench page is live, and any real-device runs collected are summarized in Status. If none arrived, say so explicitly.
+9. Correctness smoke tests pass on every backend available here (constraint 8).
+10. Any target found unreachable is documented with evidence (constraint 6).
 
 ## For the owner (never blocks the work)
 
-- Optionally lock the GPU clock for tighter benchmarks: `sudo nvidia-smi -lgc 1500,1500` before the run, and `sudo nvidia-smi -rgc` afterwards (a reboot also resets it).
-- Run the `?bench` page on the laptop that gets 18–25 fps and share the JSON.
+- **When asked, enable the iGPU emulation profile:** `sudo nvidia-smi -lgc 600,600 && sudo nvidia-smi -lmc 810,810`. Reset it with `sudo nvidia-smi -rgc && sudo nvidia-smi -rmc`.
+- Optionally lock a stable clock for normal benchmarks: `sudo nvidia-smi -lgc 1500,1500`, reset with `sudo nvidia-smi -rgc`. A reboot also resets both.
+- Open the remote bench link on any integrated-GPU laptops you can reach, including the cousin's.
 - Review the "better but different" gallery (constraint 2).
 - Republish the live artifact when satisfied.
 
