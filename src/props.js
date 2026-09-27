@@ -1,4 +1,4 @@
-// Japanese set pieces: Fuji-style volcano, vermilion arched bridge (taiko-bashi), five-storey pagoda
+// Japanese set pieces: Fuji-style volcano, vermilion arched bridge (taiko-bashi); the temple is in temple.js
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeNoise, mulberry32, clamp, lerp, smoothstep } from './noise.js';
@@ -29,45 +29,9 @@ function lathe(profile, segs, c, phi = 0) {
   const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segs, phi);
   return colorize(g, c);
 }
-// polygonal roof with concave profile and upturned corners (the signature eave line)
-function roof(sides, R, H, upturn, c, phi = Math.PI / 4, thick = 0.12) {
-  const P = [], I = [];
-  const K = 9, M = 12;
-  const corners = [];
-  for (let e = 0; e < sides; e++) { const a = phi + (e / sides) * Math.PI * 2; corners.push([Math.cos(a), Math.sin(a)]); }
-  let base = 0;
-  for (const layer of [0, 1]) {
-    for (let e = 0; e < sides; e++) {
-      const c0 = corners[e], c1 = corners[(e + 1) % sides];
-      for (let k = 0; k <= K; k++) {
-        const u = k / K; // 0 rim -> 1 apex
-        const r = lerp(1, 0.08, u);
-        const y = H * (1 - Math.pow(1 - u, 2.2)) - layer * thick * (1 - u);
-        for (let m = 0; m <= M; m++) {
-          const t = m / M;
-          const px = lerp(c0[0], c1[0], t), pz = lerp(c0[1], c1[1], t);
-          const edge = Math.pow(Math.abs(2 * t - 1), 3.5);
-          const lift = upturn * edge * Math.pow(1 - u, 3);
-          P.push(px * R * r, y + lift, pz * R * r);
-        }
-      }
-      for (let k = 0; k < K; k++) for (let m = 0; m < M; m++) {
-        const a = base + k * (M + 1) + m, b = a + 1, cc = a + M + 1, d = cc + 1;
-        if (layer === 0) I.push(a, b, cc, b, d, cc); else I.push(a, cc, b, b, cc, d);
-      }
-      base += (K + 1) * (M + 1);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-  g.setIndex(I);
-  g.computeVertexNormals();
-  return colorize(g, c);
-}
-
 const STONE = [0.33, 0.31, 0.29];
 const VERM = [0.62, 0.055, 0.02], VERM_D = [0.38, 0.03, 0.012];
-const WOOD = [0.16, 0.1, 0.07], ROOF = [0.07, 0.07, 0.075], WALL = [0.8, 0.74, 0.62], BRONZE = [0.42, 0.3, 0.1], LACQUER = [0.03, 0.025, 0.025];
+const BRONZE = [0.42, 0.3, 0.1], LACQUER = [0.03, 0.025, 0.025];
 
 // ---------------- vermilion arched bridge (taiko-bashi) ----------------
 // Lacquered arch with kōran railings (a bronze giboshi on every post), ribs and cross beams under the deck, braced
@@ -205,46 +169,6 @@ export function makeBridge(d, mat) {
   const mesh = new THREE.Mesh(d.geo, mat);
   mesh.castShadow = true; mesh.receiveShadow = true;
   return { mesh, center: new V().fromArray(d.center), half: d.half, across: new V().fromArray(d.across), endY: d.endY, rise: d.rise };
-}
-
-// ---------------- five-storey pagoda ----------------
-export function pagodaGeometry() {
-  const parts = [];
-  let y = 0;
-  const base = 7.2;
-  parts.push(lathe([[0, -3], [base * 0.95, -3], [base * 0.95, 0.9], [base * 0.8, 1.1], [0, 1.1]], 4, STONE, Math.PI / 4));
-  y = 1.1;
-  for (let i = 0; i < 5; i++) {
-    const w = base * (0.62 - i * 0.07);
-    const h = i === 0 ? 3.4 : 2.6;
-    // walls + vermilion corner pillars
-    parts.push(lathe([[0, y], [w * 0.98, y], [w * 0.98, y + h], [0, y + h]], 4, WALL, Math.PI / 4));
-    for (let k = 0; k < 4; k++) {
-      const a = Math.PI / 4 + (k / 4) * Math.PI * 2;
-      const r = w * 1.0;
-      parts.push(beam(new V(Math.cos(a) * r, y, Math.sin(a) * r), new V(Math.cos(a) * r, y + h, Math.sin(a) * r), 0.45, 0.45, VERM));
-    }
-    // vermilion band + bracket block under eaves
-    parts.push(lathe([[0, y + h - 0.6], [w * 1.08, y + h - 0.6], [w * 1.2, y + h], [0, y + h]], 4, VERM, Math.PI / 4));
-    const R = w * 1.75 + 1.4;
-    parts.push(roof(4, R, 1.6, 0.9, ROOF, Math.PI / 4, 0.3).translate(0, y + h, 0));
-    y += h + 0.9;
-  }
-  // sorin spire
-  const spire = [[0, y], [0.5, y], [0.4, y + 0.6], [0.18, y + 0.8]];
-  for (let k = 0; k < 9; k++) { const yy = y + 0.9 + k * 0.55; spire.push([0.18, yy], [0.42, yy + 0.08], [0.42, yy + 0.18], [0.18, yy + 0.26]); }
-  spire.push([0.14, y + 6.2], [0.3, y + 6.5], [0.2, y + 7.0], [0, y + 7.4]);
-  parts.push(lathe(spire, 12, BRONZE));
-  return mergeGeometries(parts);
-}
-
-export function makePagoda(world, g, x, z, scale, mat) {
-  const mesh = new THREE.Mesh(g, mat);
-  mesh.scale.setScalar(scale);
-  mesh.position.set(x, world.height(x, z) - 0.3, z);
-  mesh.rotation.y = 0.35;
-  mesh.castShadow = false; mesh.receiveShadow = false;
-  return mesh;
 }
 
 // ---------------- Fuji-style stratovolcano (own radial mesh for crisp snow streaks) ----------------

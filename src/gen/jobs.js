@@ -3,7 +3,8 @@
 import { createWorld } from '../world.js';
 import { paintFlowerAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
 import { grassData, flowersData, rocksData, rockPlan, forestData } from '../vegetation.js';
-import { fujiGeometry, bridgeData, bridgeRopeAnchors, pagodaGeometry, BRIDGE_Z } from '../props.js';
+import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.js';
+import { templeData } from '../temple.js';
 import { fallenData } from '../petals.js';
 import { lanternData, lanternGeometry } from '../lanterns.js';
 import { tessellate } from '../stress.js';
@@ -27,7 +28,10 @@ export const JOBS = {
   props: ({ triMul }) => {
     const b = bridgeData(world(), BRIDGE_Z);
     b.geo = tess(b.geo, triMul);
-    return { bridge: b, pagoda: tess(pagodaGeometry(), triMul) };
+    const t = templeData(world());
+    t.geo = tess(t.geo, triMul);
+    t.y = world().temple.y;
+    return { bridge: b, temple: t };
   },
   rocks: ({ tier, triMul }) => rocksData(world(), tier, xz(L().tree), triMul),
   grass: ({ count, tier }) => {

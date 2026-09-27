@@ -1,7 +1,7 @@
 // Sound: Japanese background music and the scene's ambience, mixed from the weather, the clock and the camera.
 // Loops (river, wind, rain, birds by day, frogs at night, water lapping under the bridge) play from decoded buffers, loaded when first heard and
 // dropped after a minute unheard; thunder follows each lightning strike after the sound's travel time; bush
-// warblers sing in short bouts by day; the pagoda's bell tolls as the lanterns come on at dusk. Music streams through a media element. Files: public/audio/, built by
+// warblers sing in short bouts by day; the temple's bell tolls as the lanterns come on at dusk. Music streams through a media element. Files: public/audio/, built by
 // tools/audio.mjs. Nothing is fetched or created until sound is turned on.
 import { clamp, lerp, smoothstep } from './noise.js';
 
@@ -14,7 +14,7 @@ const THUNDER_NEAR = 4, THUNDER_FAR = 3, SONGS = 4;
 const SPEED_OF_SOUND = 343;
 const TICK = 0.1; // mix update interval, s
 
-// world: river and pagoda positions; bridge: the bridge's centre (a Vector3)
+// world: river and temple positions; bridge: the bridge's centre (a Vector3)
 export function createSound(world, bridge) {
   const base = new URL('audio/', document.baseURI);
   const url = (name) => new URL(name + '.mp3', base).href;
@@ -213,14 +213,14 @@ export function createSound(world, bridge) {
     setBed(beds.lapping, 1.5 * bn * (0.7 + 0.5 * st.river));
     lapLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, bn * 1.6)), ctx.currentTime, 0.3);
     lapPan.pan.setTargetAtTime(clamp(panTo(st.camera, bridge.x, bridge.z) * 0.7 * (1 - bn * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
-    // the evening bell: three strikes from the pagoda when the lanterns come on
+    // the evening bell: three strikes from the temple when the lanterns come on
     keepShots(shots.bell, h > 15 && h < 21.5);
     if (lights >= 0 && lights < 0.5 && st.lights >= 0.5) toll = 10;
     lights = st.lights;
     if (toll > 0 && shots.bell.state === 'ready') {
       toll = 0;
-      const pd = Math.hypot(world.pagoda.x - st.camera.position.x, world.pagoda.z - st.camera.position.z);
-      play(shots.bell.bufs[0], { gain: 0.9, pan: panTo(st.camera, world.pagoda.x, world.pagoda.z) * 0.6, lowpass: lerp(4000, 2200, clamp(pd / 400, 0, 1)) });
+      const pd = Math.hypot(world.temple.x - st.camera.position.x, world.temple.z - st.camera.position.z);
+      play(shots.bell.bufs[0], { gain: 0.9, pan: panTo(st.camera, world.temple.x, world.temple.z) * 0.6, lowpass: lerp(4000, 2200, clamp(pd / 400, 0, 1)) });
     } else toll = Math.max(0, toll - TICK);
     keepShots(shots.songs, lv.birds > 0.2);
     lv.lightning = st.lightning;

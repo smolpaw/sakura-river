@@ -3,7 +3,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty,
-  cameraPosition, cameraViewMatrix, positionWorld, normalView, normalLocal, diffuseColor,
+  cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection,
 } from 'three/tsl';
 import { U, vnoise, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
@@ -123,8 +123,35 @@ export function forestMaterial() {
   return new LitMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, colorNode: vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8)) });
 }
 
-export function propMaterial(key, extra = {}) {
-  return new LitMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, side: THREE.DoubleSide, ...extra, colorNode: vec3(vnoise(wp.xz.mul(4.0).add(wp.y.mul(6.0))).mul(0.24).add(0.88)) });
+// the temple (temple.js). After dusk the hall's paper doors and the lanterns' fireboxes glow (aGlow: strength), the
+// lanterns light what is near them, and floodlights in the gravel wash the pagoda from below (fading with height).
+export function templeMaterial(d) {
+  const pts = (a) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(vec3(a[i], a[i + 1], a[i + 2])); return out; };
+  const lamps = pts(d.lamps), flood = pts(d.flood);
+  const glow = attribute('aGlow', 'float');
+  // age: grime streaks run down the walls from the eaves, damp at their feet, moss and lichen on what faces up
+  const colorNode = Fn(() => {
+    const c = attribute('color', 'vec3').mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(5.0))).mul(0.3).add(0.85)).toVar();
+    const side = float(1.0).sub(normalWorld.y.abs());
+    const streak = sstep(0.4, 0.95, vnoise(vec2(wp.x.add(wp.z).mul(2.3), wp.y.mul(0.22))));
+    c.mulAssign(mix(1.0, 0.7, streak.mul(side)));
+    c.mulAssign(mix(1.0, 0.8, sstep(1.2, 0.0, wp.y.sub(d.y)).mul(side)));
+    const moss = sstep(0.45, 0.8, vnoise(wp.xz.mul(0.7)).mul(0.6).add(vnoise(wp.xz.mul(3.3)).mul(0.4))).mul(sstep(0.3, 0.8, normalWorld.y));
+    c.assign(mix(c, vec3(0.16, 0.2, 0.09).mul(vnoise(wp.xz.mul(9.0)).mul(0.6).add(0.7)), moss.mul(0.6)));
+    return c;
+  })();
+  return new LitMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, colorNode }, (out) => Fn(() => {
+    const o = out.toVar();
+    If(U.uLights.greaterThan(0.0), () => {
+      const near = float(0).toVar(), up = float(0).toVar();
+      for (const c of lamps) { const v = wp.sub(c); near.addAssign(float(1.0).div(dot(v, v).mul(1.5).add(0.3))); }
+      for (const c of flood) { const v = c.sub(wp); const q = dot(v, v); up.addAssign(max(dot(normalWorld, v.div(q.sqrt())), 0.0).div(q.mul(1 / 180).add(1.0))); }
+      const flicker = sin(U.uTime.mul(9.0).add(wp.x.mul(3.7))).mul(0.08).add(0.92);
+      o.addAssign(diffuseColor.rgb.mul(U.uLightColor.mul(near.mul(flicker).mul(0.6)).add(vec3(1.0, 0.82, 0.6).mul(up).mul(0.55))).mul(U.uLights));
+      o.addAssign(vec3(1.0, 0.62, 0.3).mul(glow).mul(U.uLights).mul(mix(1.0, flicker, sstep(1.5, 2.0, glow))));
+    });
+    return o;
+  })());
 }
 
 // the bridge: prop material lit by its own lanterns after dusk (a sum over their centres, skipped by day)

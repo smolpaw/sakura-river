@@ -360,7 +360,7 @@ export function forestData(world, count) {
     const ri = world.riverInfo(x, z);
     if (Math.abs(ri.d) < 55 + Math.max(0, -z) * 0.05) continue;
     if (Math.hypot(x + 10, z - 10) < 85) continue;
-    if (world.pagoda && Math.hypot(x - world.pagoda.x, z - world.pagoda.z) < 30) continue;
+    if (world.templeDist(x, z) < 4) continue;
     const y = world.height(x, z);
     if (y < 4 || y > 170) continue;
     // clustered stands

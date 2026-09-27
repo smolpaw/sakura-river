@@ -12,7 +12,9 @@ export function createWorld(seed = 7) {
 
   // main mountain peak sits at the river's source
   const peakZ = -3100, peakX = 560, fujiR = 1950;
-  const pagoda = { x: 38, z: -300 };
+  // the old temple on its knoll: centre, facing (yaw), terrace half-extents; y (terrace top) is set below
+  const temple = { x: 22, z: -192, yaw: -0.6, hw: 17, hd: 12, y: Infinity };
+  const tc = Math.cos(temple.yaw), ts = Math.sin(temple.yaw);
 
   function meadow(x, z) {
     return 1.05 + 0.85 * N.fbm2(x * 0.012, z * 0.012, 4) + 0.22 * N.fbm2(x * 0.07 + 11, z * 0.07, 3) + 0.05 * N.noise2(x * 0.6, z * 0.6);
@@ -47,14 +49,22 @@ export function createWorld(seed = 7) {
     const carve = lerp(smoothstep(hw * 3, hw * 3 + 160 + 0.35 * Math.max(0, -z - 600), d), 1, smoothstep(-1000, -1700, z));
     const mv = mountains(x, z) * carve;
     g += mv;
-    // knoll for the pagoda
-    const pdx = x - pagoda.x, pdz = z - pagoda.z;
+    // knoll for the temple, its terrace cut into it: nothing rises above the gravel, a bank behind
+    const pdx = x - temple.x, pdz = z - temple.z;
     g += 16 * Math.exp(-(pdx * pdx + pdz * pdz) / (2 * 38 * 38));
+    g = Math.min(g, temple.y - 0.4 + 0.5 * Math.max(0, templeDist(x, z) - 1.5));
     // river channel
     const t = d / hw;
     const bank = smoothstep(0.74, 1.22, t);
     const bed = -1.75 * (1 - 0.65 * t * t) + 0.28 * N.fbm2(x * 0.25, z * 0.25, 3);
     return lerp(bed, g, bank);
+  }
+
+  temple.y = height(temple.x, temple.z) + 1.6;
+  // distance outside the temple's terrace (0 on it)
+  function templeDist(x, z) {
+    const dx = x - temple.x, dz = z - temple.z;
+    return Math.hypot(Math.max(0, Math.abs(dx * tc - dz * ts) - temple.hw), Math.max(0, Math.abs(dx * ts + dz * tc) - temple.hd));
   }
 
   function riverInfo(x, z) {
@@ -252,7 +262,7 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = HC.data, k = j * HC.nx + i;
     return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + HC.nx] * (1 - u) + d[k + HC.nx + 1] * u) * v;
   }
-  return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, pagoda };
+  return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist };
 }
 
 // water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map (G = rock foam)

@@ -164,3 +164,27 @@ export function makeLanterns(d, lanternGeo) {
   group.add(halos);
   return { group, halos, uFocal };
 }
+
+// soft round glows on fixed lamps (the temple's lanterns), the lantern halos' look for lights that do not swing;
+// uFocal is the lanterns' (drawing-buffer pixels per unit at unit distance)
+export function makeGlows(pos, uFocal) {
+  const centre = instancedBufferAttribute(new THREE.InstancedBufferAttribute(pos, 3), 'vec3');
+  const mvz = cameraViewMatrix.mul(vec4(centre, 1.0)).z.negate();
+  const m = new THREE.PointsNodeMaterial({
+    transparent: true, depthWrite: false, sizeAttenuation: false, fog: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
+  });
+  m.positionNode = centre;
+  m.sizeNode = clamp(uFocal.mul(2.2).div(mvz), 6.0, 400.0).div(screenDPR);
+  m.colorNode = Fn(() => {
+    const c = uv().sub(0.5);
+    const flicker = sin(U.uTime.mul(9.0).add(centre.x.mul(3.7))).mul(0.08).add(0.92);
+    return vec4(vec3(1.0, 0.6, 0.28).mul(dot(c, c).mul(-20.0).exp().mul(0.5).mul(flicker)), U.uLights);
+  })();
+  const glows = new THREE.Sprite(m);
+  glows.count = pos.length / 3;
+  glows.frustumCulled = false;
+  glows.layers.set(1);
+  return glows;
+}

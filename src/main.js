@@ -9,11 +9,12 @@ import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
-import { petalMaterial, makeMotes, makeLanterns } from './fx.js';
+import { petalMaterial, makeMotes, makeLanterns, makeGlows } from './fx.js';
 import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
 import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
-import { makeBridge, makePagoda, makeFuji } from './props.js';
+import { makeBridge, makeFuji } from './props.js';
+import { makeTemple } from './temple.js';
 import { makeKoi, koiClearing } from './koi.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
@@ -240,9 +241,12 @@ export async function create(canvas, opts = {}) {
   const bridge = makeBridge(G.props.bridge, M.bridgeMaterial(G.props.bridge.lamps.hang));
   bridge.mesh.name = 'bridge';
   scene.add(bridge.mesh);
-  const pagoda = makePagoda(world, G.props.pagoda, world.pagoda.x, world.pagoda.z, 1.0, M.propMaterial('pagoda', { roughness: 0.7 }));
-  pagoda.name = 'pagoda';
-  scene.add(pagoda);
+  const temple = makeTemple(G.props.temple, M.templeMaterial(G.props.temple));
+  temple.name = 'temple';
+  scene.add(temple);
+  const templeGlows = makeGlows(G.props.temple.lamps, lanterns.uFocal);
+  templeGlows.name = 'templeGlows';
+  scene.add(templeGlows);
 
   await yieldTask();
   // ---------- ground cover ----------
@@ -560,7 +564,7 @@ export async function create(canvas, opts = {}) {
     koi.update(dt, U.uTime.value);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
-    lanterns.halos.visible = warming || U.uLights.value > 0.001;
+    lanterns.halos.visible = templeGlows.visible = warming || U.uLights.value > 0.001;
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
     // camera
