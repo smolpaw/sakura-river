@@ -11,24 +11,42 @@ import { WEATHERS, TIMES } from './weather.js';
 
   // ---------- weather ----------
   var wi = 0; // clear
-  function showWeather() { $('w-kanji').textContent = WEATHERS[wi].kanji; $('w-name').textContent = WEATHERS[wi].name; }
+  var wBtns = WEATHERS.map(function (w, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.title = w.name; b.setAttribute('aria-label', w.name);
+    b.innerHTML = '<b lang="ja"></b>'; b.firstChild.textContent = w.kanji;
+    b.addEventListener('click', function () { pickWeather(i); });
+    $('weathers').appendChild(b);
+    return b;
+  });
+  function showWeather() {
+    $('w-name').textContent = WEATHERS[wi].name;
+    wBtns.forEach(function (b, i) { setPressed(b, i === wi); });
+  }
   function pickWeather(i) {
-    wi = (i + WEATHERS.length) % WEATHERS.length;
+    wi = i;
     showWeather();
     if (engine) engine.setWeather(WEATHERS[wi].id, 6);
   }
   showWeather();
-  $('w-prev').addEventListener('click', function () { pickWeather(wi - 1); });
-  $('w-next').addEventListener('click', function () { pickWeather(wi + 1); });
-  $('w-random').addEventListener('click', function () { pickWeather(wi + 1 + Math.floor(Math.random() * (WEATHERS.length - 1))); });
+  $('w-random').addEventListener('click', function () { pickWeather((wi + 1 + Math.floor(Math.random() * (WEATHERS.length - 1))) % WEATHERS.length); });
 
   // ---------- time of day ----------
-  TIMES.forEach(function (t) {
+  var tBtns = TIMES.map(function (t) {
     var b = document.createElement('button');
-    b.type = 'button'; b.className = 'btn'; b.textContent = t.name;
+    b.type = 'button'; b.setAttribute('aria-label', t.name);
+    b.innerHTML = '<b lang="ja"></b><span></span>'; b.firstChild.textContent = t.kanji; b.lastChild.textContent = t.name;
     b.addEventListener('click', function () { if (engine) engine.setTimeOfDay(t.hour); });
     $('times').appendChild(b);
+    return b;
   });
+  // the period the clock is in: dawn 04:30-09:00, afternoon to 17:00, dusk to 19:30, then night
+  function period(h) { return h >= 4.5 && h < 9 ? 'dawn' : h >= 9 && h < 17 ? 'afternoon' : h >= 17 && h < 19.5 ? 'dusk' : 'night'; }
+  function showTime() {
+    var h = engine.timeOfDay(), p = period(h);
+    $('clock').textContent = clock(h);
+    tBtns.forEach(function (b, i) { setPressed(b, TIMES[i].id === p); });
+  }
   function clock(h) {
     var m = Math.floor(h * 60) % 1440, hh = Math.floor(m / 60), mm = m % 60;
     return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
@@ -94,8 +112,8 @@ import { WEATHERS, TIMES } from './weather.js';
       engine = e;
       engine.setWeather(WEATHERS[wi].id, 0);
       engine.setClockRunning($('t-run').getAttribute('aria-pressed') === 'true');
-      $('clock').textContent = clock(engine.timeOfDay());
-      setInterval(function () { $('clock').textContent = clock(engine.timeOfDay()); }, 250);
+      showTime();
+      setInterval(showTime, 250);
       $('veil').classList.add('done');
     }).catch(function () {
       $('veil-text').textContent = 'This device could not start WebGL. Try a desktop browser with hardware acceleration on.';
