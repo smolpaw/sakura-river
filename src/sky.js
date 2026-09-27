@@ -61,6 +61,7 @@ export function makeSky() {
 
 // keyframes by sun elevation (degrees). Linear HDR colours.
 const KF = [
+  { e: -14, zen: [0.008, 0.014, 0.045], hor: [0.04, 0.05, 0.11], sun: [0.5, 0.55, 0.8], si: 0.0, fog: [0.035, 0.045, 0.08], fogS: [0.05, 0.055, 0.1], cl: [0.06, 0.07, 0.12], cs: [0.02, 0.025, 0.05] },
   { e: -5, zen: [0.02, 0.03, 0.09], hor: [0.5, 0.2, 0.26], sun: [1.0, 0.28, 0.14], si: 0.0, fog: [0.14, 0.11, 0.18], fogS: [0.6, 0.24, 0.2], cl: [0.5, 0.22, 0.3], cs: [0.08, 0.07, 0.14] },
   { e: 1.5, zen: [0.04, 0.07, 0.24], hor: [1.25, 0.46, 0.34], sun: [1.0, 0.4, 0.18], si: 1.7, fog: [0.28, 0.2, 0.3], fogS: [0.75, 0.36, 0.24], cl: [1.5, 0.62, 0.42], cs: [0.2, 0.14, 0.26] },
   { e: 9, zen: [0.05, 0.12, 0.38], hor: [1.1, 0.6, 0.46], sun: [1.0, 0.62, 0.36], si: 3.2, fog: [0.34, 0.31, 0.43], fogS: [0.72, 0.44, 0.36], cl: [1.6, 0.95, 0.68], cs: [0.26, 0.22, 0.38] },
@@ -69,7 +70,7 @@ const KF = [
 ];
 
 export function skyState(t) {
-  const el = -4 + 62 * Math.sin(Math.PI * clampJS(t, 0, 1));
+  const el = -4 + 62 * Math.sin(Math.PI * clampJS(t, -0.08, 1.08)); // past 0 / 1: into the night
   const az = THREE.MathUtils.degToRad(lerp(60, -40, t));
   const er = THREE.MathUtils.degToRad(el);
   const dir = new THREE.Vector3(Math.sin(az) * Math.cos(er), Math.sin(er), -Math.cos(az) * Math.cos(er)).normalize();

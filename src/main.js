@@ -582,7 +582,7 @@ export async function create(canvas, opts = {}) {
 
   return {
     set(name, v) {
-      v = clamp(+v, 0, 1);
+      v = name === 'time' ? clamp(+v, -0.08, 1.08) : clamp(+v, 0, 1); // time: 04:50 .. 20:10
       if (name === 'wind') P.wind = v * 1.6;
       else if (name === 'petals') { P.petals = v; petals.setAmount(v); }
       else if (name === 'river') P.river = v * 2.2;
