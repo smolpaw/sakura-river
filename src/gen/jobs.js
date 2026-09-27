@@ -7,6 +7,7 @@ import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.
 import { templeData } from '../temple.js';
 import { fallenData } from '../petals.js';
 import { lanternData, lanternGeometry } from '../lanterns.js';
+import { kittenBodyData, kittenEyeData, kittenWhiskerData } from '../kitten-body.js';
 import { tessellate } from '../stress.js';
 import { layout, rockAvoid, trunkAvoid, underTree } from './layout.js';
 
@@ -52,7 +53,13 @@ export const JOBS = {
     return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world())), lantern: lanternGeometry() };
   },
   fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L()), underTree(L())),
+  // one body for both kittens, and the rocks round the tree they walk around
+  kitten: ({ cell, tier }) => {
+    const l = L();
+    const rocks = rockPlan(world(), tier, xz(l.tree)).placements.filter((r) => Math.hypot(r.x - l.TX, r.z - l.TZ) < 7).map(({ x, z, sc }) => ({ x, z, sc }));
+    return { body: kittenBodyData(cell), eyes: kittenEyeData(), whiskers: kittenWhiskerData(), rocks };
+  },
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 330, depth: 220, grass: 150, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 25, rocks: 25, lanterns: 20, forest: 11, flowers: 10, fallen: 7, river: 3 };
+export const COST = { terrain: 330, depth: 220, grass: 150, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 25, rocks: 25, lanterns: 20, forest: 11, flowers: 10, fallen: 7, river: 3, kitten: 200 };
