@@ -514,3 +514,7 @@ After every step, add: date, step, result with a link to its results file, decis
   - Lanterns: two red bands across the middle of the paper (colour only, no cost).
   - Controls restyled (glass panel, segmented choices); subtitle and orbit hint removed.
   - The riverside lantern lines now start at the bridge: each bank's first rope ties onto the bridge's downstream corner post (props.js bridgeRopeAnchors).
+- 2026-09-27, old temple (owner), checked by eye only (headless look renders, WebGL; WebGPU compiles without errors):
+  - The lone pagoda (~10k triangles, z -300) is replaced by a temple compound on the knoll at z -192 (src/temple.js): stone-walled terrace, five-storey pagoda, main hall under an irimoya roof, bell tower, boundary walls, ten lanterns. 84k triangles (91k vertices, indexed), one draw, no shadows; generated in the props job (~140 ms in node, was ~10 ms).
+  - Its material sums 10 lamp and 4 floodlight terms, only after dusk (uniform branch) and only on temple pixels, plus world-space weathering noise (5 value-noise taps) at all times. Ten glow sprites from dusk, one draw.
+  - The terrain cuts the terrace into the knoll (world.js templeDist): one extra rectangle distance per height sample.

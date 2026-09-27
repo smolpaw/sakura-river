@@ -1,6 +1,6 @@
 # Sakura River
 
-A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain under a crescent moon at night, with a lantern-lit vermilion drum bridge, a pagoda, paper lanterns strung along both banks and koi in the river. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), water lapping under the bridge, wind, rain, thunder after each lightning strike, birds and bush warblers by day, rice-paddy frogs at night, and the pagoda's temple bell as the lanterns come on. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used; the sounds are recordings (see Sound).
+A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain under a crescent moon at night, with a lantern-lit vermilion drum bridge, an old temple on a knoll (five-storey pagoda, main hall, bell tower, stone lanterns, lit up at night), paper lanterns strung along both banks and koi in the river. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), water lapping under the bridge, wind, rain, thunder after each lightning strike, birds and bush warblers by day, rice-paddy frogs at night, and the temple bell as the lanterns come on. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used; the sounds are recordings (see Sound).
 
 Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on every push to `main`).
 
@@ -22,14 +22,15 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/world.js`: height field, river path, terrain mesh, river ribbon, water-depth map and the finer map of rocks in the water (with the white water where the current breaks on them).
 - `src/tree.js`: procedural cherry tree (Somei Yoshino form), single-flower blossoms, bark and flower textures.
 - `src/vegetation.js`: instanced grass (split into tiles for frustum culling), wildflowers, rocks and distant forest.
-- `src/props.js`: Fuji-style volcano, arched bridge (with its lanterns' hanging points) and pagoda.
+- `src/props.js`: Fuji-style volcano and arched bridge (with its lanterns' hanging points).
+- `src/temple.js`: the old temple compound on its terrace (generation), with its lamp and floodlight positions.
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
 - `src/water.js`: river shader and planar reflections.
 - `src/koi.js`: koi swimming under the river surface.
 - `src/sky.js`: sky dome, moon, clouds and time-of-day palette.
 - `src/weather.js`: weather presets and times of day, the sky under cloud cover, rain streaks and lightning.
 - `src/petals.js`: simulated falling petals and the fallen-petal carpet.
-- `src/fx.js`: petal, pollen-mote and lantern materials.
+- `src/fx.js`: petal, pollen-mote and lantern materials, the temple lamps' glows.
 - `src/post.js`: light shafts pass and final grade (sharpening, local contrast, vignette).
 - `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera, thunder, bird songs, the evening bell.
 - `public/audio/`: the sound files, built by `tools/audio.mjs` (`node tools/audio.mjs`, needs ffmpeg) from the sources below.
