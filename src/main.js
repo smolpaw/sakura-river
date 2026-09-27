@@ -360,6 +360,12 @@ export async function create(canvas, opts = {}) {
   function startTween(toPos, toTarget, dur) {
     tween = { fp: camera.position.clone(), ft: controls.target.clone(), tp: toPos.clone(), tt: toTarget.clone(), t: 0, dur };
   }
+  // settle the default view under the controls' limits (it looks up past maxPolarAngle), so the intro and reset
+  // flights end exactly where the camera then rests instead of jumping on the first controls update
+  const introPos = camera.position.clone(), introTarget = controls.target.clone();
+  camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); clampCamera();
+  DEFAULT.pos.copy(camera.position); DEFAULT.target.copy(controls.target);
+  camera.position.copy(introPos); controls.target.copy(introTarget); controls.update();
   startTween(DEFAULT.pos, DEFAULT.target, opts.introDuration ?? 6.5);
 
   canvas.addEventListener('pointerdown', () => {
@@ -566,8 +572,10 @@ export async function create(canvas, opts = {}) {
       const e = easeInOut(Math.min(1, tween.t));
       camera.position.lerpVectors(tween.fp, tween.tp, e);
       controls.target.lerpVectors(tween.ft, tween.tt, e);
+      controls.update(); // the flight stays within the controls' limits (and spends any leftover drag momentum)
+      clampCamera();
       camera.lookAt(controls.target);
-      if (tween.t >= 1) { tween = null; controls.update(); }
+      if (tween.t >= 1) tween = null;
     } else {
       controls.autoRotate = autoOrbit;
       controls.update();
