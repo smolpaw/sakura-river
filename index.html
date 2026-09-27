@@ -22,6 +22,15 @@
 
 <div class="top-right">
   <span class="stats" id="stats"></span>
+  <label class="quality" title="Rendering quality (changing it reloads the scene)">
+    <span class="quality-label">Quality</span>
+    <select id="quality" aria-label="Rendering quality">
+      <option value="auto">Auto</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+    </select>
+  </label>
   <button type="button" class="btn icon" id="btn-full" aria-label="Enter full screen">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>
   </button>
@@ -30,16 +39,33 @@
   </button>
 </div>
 
-<div class="bar" id="bar">
-  <div class="sliders">
-    <label class="ctl" for="s-wind"><span class="ctl-head"><span class="ctl-name"><span class="kanji">風</span><span class="label">Wind</span></span><span class="val" id="v-wind"></span></span><input type="range" id="s-wind" min="0" max="100" step="1" value="38"></label>
-    <label class="ctl" for="s-petals"><span class="ctl-head"><span class="ctl-name"><span class="kanji">花</span><span class="label">Petals</span></span><span class="val" id="v-petals"></span></span><input type="range" id="s-petals" min="0" max="100" step="1" value="60"></label>
-    <label class="ctl" for="s-river"><span class="ctl-head"><span class="ctl-name"><span class="kanji">川</span><span class="label">River</span></span><span class="val" id="v-river"></span></span><input type="range" id="s-river" min="0" max="100" step="1" value="45"></label>
-    <label class="ctl" for="s-time"><span class="ctl-head"><span class="ctl-name"><span class="kanji">刻</span><span class="label">Time</span></span><span class="val" id="v-time"></span></span><input type="range" id="s-time" min="-8" max="108" step="1" value="92"></label>
-    <label class="ctl" for="s-fog"><span class="ctl-head"><span class="ctl-name"><span class="kanji">霞</span><span class="label">Mist</span></span><span class="val" id="v-fog"></span></span><input type="range" id="s-fog" min="0" max="100" step="1" value="25"></label>
-    <label class="ctl" for="s-bloom"><span class="ctl-head"><span class="ctl-name"><span class="kanji">光</span><span class="label">Glow</span></span><span class="val" id="v-bloom"></span></span><input type="range" id="s-bloom" min="0" max="100" step="1" value="40"></label>
+<div class="side" id="side">
+  <div class="panel">
+    <section class="row" aria-label="Weather">
+      <div class="row-head"><span class="kanji">天</span><span class="label">Weather</span></div>
+      <div class="weather">
+        <div class="weather-now" aria-live="polite"><span class="weather-kanji" id="w-kanji"></span><span class="weather-name" id="w-name"></span></div>
+        <button type="button" class="btn icon small" id="w-prev" aria-label="Previous weather">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+        </button>
+        <button type="button" class="btn icon small" id="w-next" aria-label="Next weather">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg>
+        </button>
+        <button type="button" class="btn icon small" id="w-random" aria-label="Random weather" title="Random weather">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path></svg>
+        </button>
+      </div>
+    </section>
+    <section class="row" aria-label="Time of day">
+      <div class="row-head"><span class="kanji">刻</span><span class="label">Time</span><span class="clock" id="clock"></span>
+        <button type="button" class="btn icon small" id="t-run" aria-pressed="true" aria-label="Pause the clock" title="The clock runs a minute per second">
+          <svg class="i-pause" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
+          <svg class="i-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+        </button>
+      </div>
+      <div class="times" id="times"></div>
+    </section>
   </div>
-  <div class="divider"></div>
   <div class="actions">
     <button type="button" class="btn" id="btn-cine" aria-pressed="false">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="M16 10l5-3v10l-5-3"></path></svg>
