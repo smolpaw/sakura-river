@@ -20,4 +20,5 @@ Procedural Three.js scene (cherry tree, river, Fuji-style mountain). See README.
 
 ## Publishing
 
-- Not hosted as a claude.ai artifact any more (owner decision, 2026-09-27): don't publish anything to claude.ai. `pnpm build` still produces one self-contained `dist/index.html`; the final host is undecided.
+- Hosted on GitHub Pages at https://smolpaw.github.io/sakura-river/ (repo `smolpaw/sakura-river`, public). `.github/workflows/pages.yml` runs `pnpm build` and deploys `dist/` on every push to `main`, so pushing is publishing.
+- Don't publish anything to claude.ai (owner decision, 2026-09-27).

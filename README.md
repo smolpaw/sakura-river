@@ -2,6 +2,8 @@
 
 A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain, with a vermilion bridge, a stone lantern and a pagoda. Everything is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used.
 
+Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on every push to `main`).
+
 ## Develop
 
     pnpm install
