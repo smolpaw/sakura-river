@@ -1,6 +1,6 @@
-// Sky dome with sun, glow and drifting procedural clouds + time-of-day palette
+// Sky dome with sun, a crescent moon, glow and drifting procedural clouds + time-of-day palette
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, positionWorld, cameraPosition, If } from 'three/tsl';
+import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, positionWorld, cameraPosition, If } from 'three/tsl';
 import { U, vnoise, sstep } from './tsl.js';
 import { clamp as clampJS, lerp, smoothstep } from './noise.js';
 
@@ -11,6 +11,8 @@ const cfbm = Fn(([p0]) => {
   return s;
 });
 
+const MOON_R = Math.tan(THREE.MathUtils.degToRad(1.0)); // drawn about 4x its real size
+
 export function makeSky() {
   const uniforms = {
     uZenith: uniform(new THREE.Color()),
@@ -20,8 +22,10 @@ export function makeSky() {
     uCloudShade: uniform(new THREE.Color()),
     uCover: uniform(0.35), // cloud cover 0..1 (0.35: the original sky)
     uBoltDir: uniform(new THREE.Vector3(0, 0.3, -1).normalize()), // where lightning flashes
+    uMoonDir: uniform(new THREE.Vector3(0, 0.4, -1).normalize()),
+    uMoonVis: uniform(0),
   };
-  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade, uCover, uBoltDir } = uniforms;
+  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade, uCover, uBoltDir, uMoonDir, uMoonVis } = uniforms;
   const skyColor = Fn(() => {
     const d = normalize(positionWorld.sub(cameraPosition)).toVar();
     const h = d.y, mu = dot(d, U.uSunDir).toVar();
@@ -37,6 +41,28 @@ export function makeSky() {
     const hidden = float(1.0).sub(sstep(0.5, 0.9, uCover));
     col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2).mul(hidden))).mul(U.uSunVis));
     col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis).mul(hidden));
+    // moon: a waxing crescent lit from the sun's side, faint grey maria, a soft halo
+    If(uMoonVis.greaterThan(0.0), () => {
+      const right = normalize(cross(uMoonDir, vec3(0.0, 1.0, 0.0))).toVar();
+      const up = cross(right, uMoonDir).toVar();
+      const p = vec2(dot(d, right), dot(d, up)).div(MOON_R).toVar(); // disc coordinates, radius 1
+      const r = length(p).toVar();
+      const mv = uMoonVis.mul(hidden).mul(sstep(-0.01, 0.03, h)).toVar();
+      If(r.lessThan(1.0).and(dot(d, uMoonDir).greaterThan(0.0)), () => {
+        const n = vec3(p, sqrt(float(1.0).sub(r.mul(r))));
+        // light from the sun's direction across the disc, mostly from behind: about a third lit
+        const s = vec2(dot(U.uSunDir, right), dot(U.uSunDir, up)).toVar();
+        const sd = s.div(max(length(s), 1e-4));
+        const L = vec3(sd.mul(0.93), -0.37);
+        const lit = sstep(-0.04, 0.12, dot(n, L));
+        const maria = float(1.0).sub(sstep(0.45, 0.75, vnoise(p.mul(2.3).add(4.1))).mul(0.28)).sub(sstep(0.55, 0.8, vnoise(p.mul(5.0).sub(1.3))).mul(0.12));
+        const disc = sstep(1.0, 0.94, r);
+        const moon = vec3(1.0, 0.95, 0.86).mul(lit.mul(maria).mul(1.7).add(0.02)); // + earthshine
+        col.assign(mix(col, col.add(moon), disc.mul(mv)));
+      });
+      const g = max(dot(d, uMoonDir), 0.0);
+      col.addAssign(vec3(0.55, 0.62, 0.8).mul(pow(g, 3000.0).mul(0.12).add(pow(g, 300.0).mul(0.025))).mul(mv));
+    });
     // clouds on a virtual plane; cover moves the density thresholds (no shift at 0.35)
     const sh = uCover.sub(0.35).mul(0.5);
     const dens = float(0).toVar();
@@ -95,4 +121,14 @@ export function skyState(t) {
     fog: mix3('fog'), fogSun: mix3('fogS'), cloudLit: mix3('cl'), cloudShade: mix3('cs'),
     vis: smoothstep(-3.5, 2.5, el),
   };
+}
+
+// The moon by clock hour: high in the south-west at dusk, sinking west to set around 02:00; drawn only while the
+// sky is darkening (sunElev in degrees).
+export function moonState(hour, sunElev) {
+  const u = (((hour - 17) % 24) + 24) % 24 / 9; // 17:00 -> 0, 02:00 -> 1
+  const el = THREE.MathUtils.degToRad(lerp(34, -6, Math.pow(clampJS(u, 0, 1), 1.2)));
+  const az = THREE.MathUtils.degToRad(lerp(-8, -62, clampJS(u, 0, 1)));
+  const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+  return { dir, vis: u <= 1 ? smoothstep(22, 2, sunElev) : 0 };
 }

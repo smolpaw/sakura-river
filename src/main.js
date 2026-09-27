@@ -6,7 +6,7 @@ import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
-import { makeSky, skyState } from './sky.js';
+import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
 import { petalMaterial, makeMotes, makeLanterns } from './fx.js';
@@ -390,6 +390,9 @@ export async function create(canvas, opts = {}) {
   function applyTimeOfDay(t) {
     const st = overcast(skyState(t), S.clouds);
     sky.uniforms.uCover.value = S.clouds;
+    const moon = moonState(tToHour(t), st.elev);
+    sky.uniforms.uMoonDir.value.copy(moon.dir);
+    sky.uniforms.uMoonVis.value = moon.vis;
     U.uSunDir.value.copy(st.dir);
     U.uSunColor.value.copy(st.sun);
     U.uSunVis.value = st.vis;
