@@ -187,21 +187,32 @@ export function createWorld(seed = 7) {
       const z = HB.z0 + ((j + 0.5) / H) * (HB.z1 - HB.z0);
       depths[j * W + i] = Math.max(0, -height(x, z));
     }
-    // stamp rocks sitting in the water
-    for (const r of rocks) {
-      const i0 = Math.floor(((r.x - r.r - HB.x0) / (HB.x1 - HB.x0)) * W), i1 = Math.ceil(((r.x + r.r - HB.x0) / (HB.x1 - HB.x0)) * W);
-      const j0 = Math.floor(((r.z - r.r - HB.z0) / (HB.z1 - HB.z0)) * H), j1 = Math.ceil(((r.z + r.r - HB.z0) / (HB.z1 - HB.z0)) * H);
-      for (let j = Math.max(0, j0); j <= Math.min(H - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(W - 1, i1); i++) {
-        const x = HB.x0 + ((i + 0.5) / W) * (HB.x1 - HB.x0), z = HB.z0 + ((j + 0.5) / H) * (HB.z1 - HB.z0);
-        const dd = Math.hypot(x - r.x, z - r.z) / r.r;
-        if (dd < 1.35) depths[j * W + i] = Math.min(depths[j * W + i], Math.max(0, (dd - 0.85) * 0.8));
-      }
-    }
     for (let k = 0; k < W * H; k++) {
       const v = Math.min(255, Math.round((depths[k] / 4) * 255));
       data[k * 4] = v; data[k * 4 + 1] = v; data[k * 4 + 2] = v; data[k * 4 + 3] = 255;
     }
-    return { data, W, H, bounds: [HB.x0, HB.z0, 1 / (HB.x1 - HB.x0), 1 / (HB.z1 - HB.z0)] };
+    return { data, W, H, bounds: [HB.x0, HB.z0, 1 / (HB.x1 - HB.x0), 1 / (HB.z1 - HB.z0)], rocks: buildRockMap(rocks) };
+  }
+
+  // Rocks sitting in the water, as the water depth they leave (R = depth/4, 255 = no rock) on a fine grid of
+  // their own: stamped into the coarse depth map above (~0.9 m texels) they showed as square foam blocks
+  function buildRockMap(rocks) {
+    const S = 0.125;
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const r of rocks) { x0 = Math.min(x0, r.x - r.r * 4); x1 = Math.max(x1, r.x + r.r * 4); z0 = Math.min(z0, r.z - r.r * 4); z1 = Math.max(z1, r.z + r.r * 4); }
+    if (!rocks.length) { x0 = z0 = 0; x1 = z1 = 1; }
+    const W = Math.ceil((x1 - x0) / S), H = Math.ceil((z1 - z0) / S);
+    const data = new Uint8Array(W * H).fill(255);
+    for (const r of rocks) {
+      const i0 = Math.floor((r.x - r.r * 4 - x0) / S), i1 = Math.ceil((r.x + r.r * 4 - x0) / S);
+      const j0 = Math.floor((r.z - r.r * 4 - z0) / S), j1 = Math.ceil((r.z + r.r * 4 - z0) / S);
+      for (let j = Math.max(0, j0); j <= Math.min(H - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(W - 1, i1); i++) {
+        const dd = Math.hypot(x0 + (i + 0.5) * S - r.x, z0 + (j + 0.5) * S - r.z) / r.r;
+        // the slope runs out to full depth, so the rock's footprint has no edge against the river bed
+        if (dd < 4) data[j * W + i] = Math.min(data[j * W + i], Math.round((Math.max(0, (dd - 0.85) * 0.8) / 4) * 255));
+      }
+    }
+    return { data, W, H, bounds: [x0, z0, 1 / (W * S), 1 / (H * S)] };
   }
 
   // cached height grid for hot paths (petal sim, camera clamp)
@@ -224,11 +235,17 @@ export function createWorld(seed = 7) {
   return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, pagoda };
 }
 
-// water depth texture (R = depth / 4) from buildDepthMap's data
+// water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map
 export function depthTexture(d) {
-  const tex = new THREE.DataTexture(d.data, d.W, d.H, THREE.RGBAFormat);
-  tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.needsUpdate = true;
-  return { tex, bounds: new THREE.Vector4(...d.bounds) };
+  const make = (data, W, H, format) => {
+    const tex = new THREE.DataTexture(data, W, H, format);
+    tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.needsUpdate = true;
+    return tex;
+  };
+  return {
+    tex: make(d.data, d.W, d.H, THREE.RGBAFormat), bounds: new THREE.Vector4(...d.bounds),
+    rockTex: make(d.rocks.data, d.rocks.W, d.rocks.H, THREE.RedFormat), rockBounds: new THREE.Vector4(...d.rocks.bounds),
+  };
 }

@@ -1,7 +1,7 @@
 // Flowing river: planar reflection (reflector()), flow-aligned ripples, depth-based colour, shore foam, sun glints
 import * as THREE from 'three/webgpu';
 import {
-  Fn, float, vec2, vec3, vec4, uniform, texture, attribute, mix, max, pow, dot, normalize, clamp, length, reflect, sin,
+  Fn, float, vec2, vec3, vec4, uniform, texture, attribute, mix, max, min, pow, dot, normalize, clamp, length, reflect, sin,
   positionWorld, cameraPosition, reflector, If, select,
 } from 'three/tsl';
 import { U, vnoise, sstep, applyFog } from './tsl.js';
@@ -9,13 +9,18 @@ import { U, vnoise, sstep, applyFog } from './tsl.js';
 export function makeWater(geometry, depthMap, sky, { reflectionScale = 0 } = {}) {
   const uniforms = { uHasRefl: uniform(0), uSpeed: uniform(1) };
   const { uZenith, uHorizon } = sky.uniforms;
-  const uHB = uniform(depthMap.bounds);
-  const depthTex = texture(depthMap.tex);
+  const uHB = uniform(depthMap.bounds), uRB = uniform(depthMap.rockBounds);
+  const depthTex = texture(depthMap.tex), rockTex = texture(depthMap.rockTex);
+  const within = (uv) => uv.x.greaterThanEqual(0.0).and(uv.y.greaterThanEqual(0.0)).and(uv.x.lessThanEqual(1.0)).and(uv.y.lessThanEqual(1.0));
 
-  const waterDepth = Fn(([xz]) => {
+  const bedDepth = Fn(([xz]) => {
     const duv = xz.sub(uHB.xy).mul(uHB.zw).toVar();
-    const inside = duv.x.greaterThanEqual(0.0).and(duv.y.greaterThanEqual(0.0)).and(duv.x.lessThanEqual(1.0)).and(duv.y.lessThanEqual(1.0));
-    return select(inside, depthTex.sample(duv).r.mul(4.0), float(2.5));
+    return select(within(duv), depthTex.sample(duv).r.mul(4.0), float(2.5));
+  });
+  // water left above rocks sitting in the river (4 = no rock)
+  const rockDepth = Fn(([xz]) => {
+    const ruv = xz.sub(uRB.xy).mul(uRB.zw).toVar();
+    return select(within(ruv), rockTex.sample(ruv).r.mul(4.0), float(4.0));
   });
   const hfield = Fn(([p]) => {
     // p.x across (m), p.y along (m, increases upstream)
@@ -57,7 +62,8 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0 } = {})
     const dist = length(cameraPosition.sub(vW));
     // calm distant water to avoid aliasing
     N.assign(normalize(mix(N, vec3(0.0, 1.0, 0.0), sstep(40.0, 260.0, dist))));
-    const depth = waterDepth(vW.xz).toVar();
+    const bed = bedDepth(vW.xz).toVar(), rock = rockDepth(vW.xz).toVar();
+    const depth = min(bed, rock).toVar();
     // base clamped: a dot of unit vectors can exceed 1 by rounding, and pow of a negative is NaN on many GPUs
     const fres = float(0.02).add(pow(max(float(1.0).sub(max(dot(N, V), 0.0)), 0.0), 5.0).mul(0.98)).toVar();
     const R = reflect(V.negate(), N).toVar();
@@ -81,11 +87,14 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0 } = {})
     col.addAssign(U.uSunColor.mul(U.uSunVis).mul(pow(sd, 900.0).mul(7.0).add(pow(sd, 90.0).mul(0.35))));
     // shore & rock foam
     const foamN = vnoise(vec2(p.x.mul(2.2), p.y.add(U.uFlow.mul(1.1)).mul(1.6))).mul(0.6).add(vnoise(vec2(p.x.mul(7.0), p.y.add(U.uFlow.mul(1.2)).mul(5.0))).mul(0.4));
-    const foam = sstep(0.32, 0.02, depth).mul(sstep(0.35, 0.7, foamN.add(float(1.0).sub(sstep(0.0, 0.2, depth)).mul(0.25)))).toVar();
+    // a ring around rocks (none on the rock itself), a band along the shore
+    // (the shallow-water boost that makes the shore band solid is left out next to rocks: rings would look drawn)
+    const boost = float(1.0).sub(sstep(0.0, 0.2, depth)).mul(0.25).mul(sstep(0.25, 0.6, rock));
+    const foam = sstep(0.32, 0.02, depth).mul(sstep(0.35, 0.7, foamN.add(boost))).mul(sstep(0.0, 0.05, rock)).toVar();
     col.assign(mix(col, vec3(0.85, 0.85, 0.82).mul(U.uSunVis.mul(0.6).add(0.4)).add(U.uSunColor.mul(0.12)), foam.mul(0.55)));
     const alpha = mix(0.35, 0.96, sstep(0.0, 1.1, depth)).toVar();
     alpha.assign(max(alpha, fres));
-    alpha.mulAssign(sstep(0.0, 0.06, depth));
+    alpha.mulAssign(sstep(0.0, 0.06, bed)); // shoreline fade; over rocks a thin film stays
     alpha.assign(max(alpha, foam.mul(0.6).mul(sstep(0.0, 0.03, depth))));
     return vec4(applyFog(col, vW), alpha);
   });
