@@ -22,6 +22,7 @@ import { hashScene } from './bench-hash.js';
 import { tessellate, makeStressObjects } from './stress.js';
 import { runJobs } from './gen/pool.js';
 import { layout } from './gen/layout.js';
+import { createSound } from './audio.js';
 
 const TIERS = {
   high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1, koi: 12, rain: 24000 },
@@ -296,7 +297,8 @@ export async function create(canvas, opts = {}) {
   rain.name = 'rain';
   rain.visible = false;
   scene.add(rain);
-  const lightning = makeLightning();
+  const sound = createSound(world);
+  const lightning = makeLightning((x, z, dist, bolt) => sound.thunder(x, z, dist, bolt, camera));
   lightning.mesh.name = 'lightning';
   scene.add(lightning.mesh);
   if (ST) {
@@ -557,6 +559,7 @@ export async function create(canvas, opts = {}) {
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = warming || U.uLights.value > 0.001;
+    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, camera });
 
     // camera
     if (cinematic) {
@@ -695,6 +698,10 @@ export async function create(canvas, opts = {}) {
       } else controls.update();
     },
     setAutoOrbit(on) { autoOrbit = !!on; },
+    // music and ambience; sound starts with the page's first click or key press if it has not had one yet
+    setSound(on) { sound.setEnabled(on); },
+    setVolume(which, v) { sound.setVolume(which, v); },
+    soundInfo() { return sound.info(); },
     cineView(u) { const p = posCurve.getPointAt(u), t = tgtCurve.getPointAt(u); tween = null; camera.position.copy(p); controls.target.copy(t); clampCamera(); controls.update(); },
     setView(pos, target) { tween = null; camera.position.set(...pos); controls.target.set(...target); controls.update(); },
     heroView() { cinematic = false; controls.enabled = true; tween = null; camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); },
@@ -721,7 +728,7 @@ export async function create(canvas, opts = {}) {
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
     backend: backendName,
     info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
-    dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); },
+    dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); sound.dispose(); },
   };
 }
 

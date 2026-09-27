@@ -47,6 +47,8 @@ Integrated GPUs share limited memory bandwidth (about 40–70 GB/s) with the CPU
   - Verification: one short visual check per change (a few stills), no long perf queues; anything heavy runs only when the owner says it is a good time.
   - The strict gates below (A/A noise floors, 5+5 interleaved timing, full sequence gate per step, iGPU clock-lock sessions, hero GPU <= 50%) are no longer required; they remain available tools. DoD items 1, 4, 7 and 8 are read in that light.
 
+- **2026-09-27: sound.** Music and ambience files (about 26 MB) are served next to the page from `dist/audio/`, not inlined: they would multiply the page's size and load time, and they are fetched only once sound plays. `dist/index.html` alone still runs everything else (silent). Constraint 3 is read with that exception. Decoded loops cost memory (about 10–20 MB each, stereo float): `src/audio.js` decodes a loop when it is first heard and drops it after a minute unheard.
+
 ## Hard constraints
 
 1. **No visual degradation.** Every change that affects rendering must pass the visual gate (see Measurement). A change that fails is reworked or reverted, never merged with a note.

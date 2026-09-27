@@ -86,7 +86,8 @@ function rainMaterial() {
 
 // Lightning: a jagged bolt with branches (rebuilt per strike, facing the camera), a few flickering pulses per
 // strike, and some strikes only light the clouds. update() returns the flash level, which lights the sky and scene.
-export function makeLightning() {
+// onStrike(x, z, distance, bolt) hears each strike (its thunder).
+export function makeLightning(onStrike) {
   const MAX = 2400;
   const pos = new Float32Array(MAX * 3), glow = new Float32Array(MAX);
   const geo = new THREE.BufferGeometry();
@@ -147,7 +148,8 @@ export function makeLightning() {
     pulses = [{ at: 0, amp: 1, decay: 0.07 }, { at: 0.08 + rng() * 0.06, amp: 0.6 + rng() * 0.3, decay: 0.05 }];
     if (rng() < 0.7) pulses.push({ at: 0.2 + rng() * 0.15, amp: 0.5 + rng() * 0.6, decay: 0.12 });
     n = 0;
-    if (rng() < 0.65) { // a visible bolt; otherwise only the clouds flash
+    const bolt = rng() < 0.65;
+    if (bolt) { // a visible bolt; otherwise only the clouds flash
       const top = new THREE.Vector3(cx + (rng() - 0.5) * 80, 260 + rng() * 80, cz + (rng() - 0.5) * 80);
       const main = jag(top, new THREE.Vector3(cx, -2, cz), 7, 0.45);
       ribbon(main, 2.4, 1, camera.position);
@@ -160,6 +162,7 @@ export function makeLightning() {
       aPos.needsUpdate = true; aGlow.needsUpdate = true;
     }
     geo.setDrawRange(0, n);
+    if (onStrike) onStrike(cx, cz, dist, bolt);
   }
 
   return {

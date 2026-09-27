@@ -62,6 +62,22 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .mini:hover { background: rgba(255, 255, 255, 0.14); }
 #t-run .i-play, #t-run[aria-pressed="false"] .i-pause { display: none; }
 #t-run[aria-pressed="false"] .i-play { display: block; }
+#btn-sound .i-off, #btn-sound[aria-pressed="false"] .i-on { display: none; }
+#btn-sound[aria-pressed="false"] .i-off { display: block; }
+#btn-sound[aria-pressed="true"] { background: var(--glass); color: var(--washi); border-color: var(--glass-edge); }
+#btn-sound[aria-pressed="true"]:hover { background: rgba(60, 50, 70, 0.66); }
+
+/* volume sliders */
+.mix { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.vol { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; color: var(--washi-dim); }
+.vol b { font-family: var(--serif); font-weight: 700; font-size: 15px; color: var(--washi); }
+.vol input { flex: 1 1 auto; min-width: 0; margin: 0; height: 22px; background: transparent; cursor: pointer; -webkit-appearance: none; appearance: none; }
+.vol input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--sakura) var(--v, 50%), rgba(255, 255, 255, 0.16) var(--v, 50%)); }
+.vol input::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); }
+.vol input::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--sakura); }
+.vol input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; border: 0; background: var(--washi); box-shadow: 0 1px 4px rgba(10, 5, 15, 0.4); }
+.vol input::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; border: 0; background: var(--washi); box-shadow: 0 1px 4px rgba(10, 5, 15, 0.4); }
+.muted .mix { opacity: 0.45; }
 
 /* segmented choice: the chosen option turns to washi */
 .seg { display: flex; background: rgba(255, 255, 255, 0.06); border-radius: 10px; padding: 3px; gap: 2px; }
@@ -95,6 +111,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
   .brand-title { font-size: 32px; }
   .stats, .quality-label { display: none; }
   .brand { left: 16px; }
+  .vol span { display: none; }
 }
 @media (max-width: 400px) {
   #times button span { display: none; }

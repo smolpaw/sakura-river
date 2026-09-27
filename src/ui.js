@@ -58,6 +58,34 @@ import { WEATHERS, TIMES } from './weather.js';
     if (engine) engine.setClockRunning(on);
   });
 
+  // ---------- sound: on unless muted before; it starts with the first click or key press ----------
+  var soundOn = load('sr.sound') !== 'off';
+  var vols = { music: +(load('sr.vol.music') || 0.7), nature: +(load('sr.vol.nature') || 0.8) };
+  function showSound() {
+    setPressed($('btn-sound'), soundOn);
+    $('btn-sound').setAttribute('aria-label', soundOn ? 'Mute sound' : 'Turn sound on');
+    document.body.classList.toggle('muted', !soundOn);
+  }
+  showSound();
+  $('btn-sound').addEventListener('click', function () {
+    soundOn = !soundOn;
+    save('sr.sound', soundOn ? 'on' : 'off');
+    showSound();
+    if (engine) engine.setSound(soundOn);
+  });
+  ['music', 'nature'].forEach(function (k) {
+    var input = $('v-' + k);
+    function fill() { input.style.setProperty('--v', (input.value * 100) + '%'); }
+    input.value = vols[k]; fill();
+    input.addEventListener('input', function () {
+      vols[k] = +this.value; fill();
+      save('sr.vol.' + k, this.value);
+      if (engine) engine.setVolume(k, vols[k]);
+      // moving a slider while muted turns sound on
+      if (!soundOn) $('btn-sound').click();
+    });
+  });
+
   // ---------- quality: a fixed tier, or auto (detected tier + adaptive resolution); changing it reloads ----------
   var quality = load('sr.quality');
   if (['high', 'medium', 'low'].indexOf(quality) < 0) quality = 'auto';
@@ -112,6 +140,9 @@ import { WEATHERS, TIMES } from './weather.js';
       engine = e;
       engine.setWeather(WEATHERS[wi].id, 0);
       engine.setClockRunning($('t-run').getAttribute('aria-pressed') === 'true');
+      engine.setVolume('music', vols.music);
+      engine.setVolume('nature', vols.nature);
+      engine.setSound(soundOn);
       showTime();
       setInterval(showTime, 250);
       $('veil').classList.add('done');
