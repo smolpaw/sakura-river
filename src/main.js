@@ -41,7 +41,7 @@ function detectTier(renderer) {
     else { const gl = b.gl; const ext = gl.getExtension('WEBGL_debug_renderer_info'); gpu = (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || ''; }
   } catch (e) { /* ignore */ }
   if (/SwiftShader|llvmpipe|Software|Basic Render|Mali-[4T]|Adreno \(TM\) [3-5]\d\d|PowerVR/i.test(gpu)) return 'low';
-  if (mobile) return 'medium';
+  if (mobile) return cores >= 8 ? 'medium' : 'low';
   const compat = renderer.backend.isWebGPUBackend && renderer.backend.compatibilityMode; // older GPUs / APIs
   const integrated = /intel(?!.*(arc|xe-hpg))|iris|uhd graphics|hd graphics|radeon\(tm\) graphics|radeon graphics|vega \d+ graphics|apple/i.test(gpu);
   if (compat || integrated || cores <= 4) return 'medium';
