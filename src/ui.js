@@ -10,7 +10,7 @@ import { WEATHERS, TIMES } from './weather.js';
   function setPressed(btn, on) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
 
   // ---------- weather ----------
-  var wi = 0; // clear
+  var wi = WEATHERS.findIndex(function (w) { return w.id === 'fubuki'; }); // opens in a petal storm
   var wBtns = WEATHERS.map(function (w, i) {
     var b = document.createElement('button');
     b.type = 'button'; b.title = w.name; b.setAttribute('aria-label', w.name);
@@ -147,7 +147,7 @@ import { WEATHERS, TIMES } from './weather.js';
     create($('scene'), {
       quality: fixed ? quality : undefined,
       fixedQuality: fixed,
-      hour: TIMES.find(function (t) { return t.id === 'night'; }).hour, // open on a clear night
+      hour: TIMES.find(function (t) { return t.id === 'night'; }).hour, // open at night
       onStats: function (s) { $('stats').textContent = s.fps + ' fps'; },
       onCinematicChange: function (on) { setPressed($('btn-cine'), on); },
       onReady: function (r) { if (!fixed) $('quality').options[0].textContent = 'Auto · ' + r.quality; },
