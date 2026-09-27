@@ -1,5 +1,5 @@
 // Sound: Japanese background music and the scene's ambience, mixed from the weather, the clock and the camera.
-// Loops (river, wind, rain, birds by day, frogs at night, water lapping under the bridge) play from decoded buffers, loaded when first heard and
+// Loops (river, wind, rain, birds by day, water lapping under the bridge) play from decoded buffers, loaded when first heard and
 // dropped after a minute unheard; thunder follows each lightning strike after the sound's travel time; bush
 // warblers sing in short bouts by day; the temple's bell tolls as the lanterns come on at dusk. Music streams through a media element. Files: public/audio/, built by
 // tools/audio.mjs. Nothing is fetched or created until sound is turned on.
@@ -120,7 +120,7 @@ export function createSound(world, bridge) {
     riverLP = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 18000, Q: 0.5 });
     riverPan = new StereoPannerNode(ctx);
     bed('river', [riverLP, riverPan]);
-    for (const n of ['breeze', 'gale', 'drizzle', 'rain', 'birds', 'frogs']) bed(n);
+    for (const n of ['breeze', 'gale', 'drizzle', 'rain', 'birds']) bed(n);
     lapLP = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 16000, Q: 0.5 });
     lapPan = new StereoPannerNode(ctx);
     bed('lapping', [lapLP, lapPan]);
@@ -174,7 +174,6 @@ export function createSound(world, bridge) {
 
   // ---------- the mix ----------
   const dayOf = (h) => smoothstep(4.6, 5.8, h) * (1 - smoothstep(18.3, 19.4, h));
-  const nightOf = (h) => Math.max(smoothstep(18.9, 20.2, h), 1 - smoothstep(3.6, 4.9, h));
   // pan (-1 left .. 1 right) of world point x, z from the camera
   function panTo(cam, x, z) {
     const p = cam.position, e = cam.matrixWorld.elements;
@@ -207,7 +206,6 @@ export function createSound(world, bridge) {
     const dawn = 1 + 0.5 * smoothstep(5, 6, h) * (1 - smoothstep(7, 8.5, h));
     lv.birds = dayOf(h) * dawn * (1 - smoothstep(0.05, 0.4, rain)) * (1 - 0.7 * gale);
     setBed(beds.birds, 0.8 * lv.birds);
-    setBed(beds.frogs, 0.9 * nightOf(h) * (1 - 0.5 * gale));
     // water lapping around the bridge's posts, heard only close to it
     const bd = st.camera.position.distanceTo(bridge), bn = Math.max(0, 1 / (1 + (bd / 9) ** 2) - 0.02);
     setBed(beds.lapping, 1.5 * bn * (0.7 + 0.5 * st.river));

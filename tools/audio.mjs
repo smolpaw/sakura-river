@@ -1,7 +1,7 @@
 // Builds public/audio/ from the source recordings credited in README.md (Sound).
 //   node tools/audio.mjs
 // Needs ffmpeg with libmp3lame. Sources are downloaded once into tools/.audio-cache/.
-// - Beds (river, wind, rain, birds, frogs, lapping) become seamless loops: the segment's tail is crossfaded into its head,
+// - Beds (river, wind, rain, birds, lapping) become seamless loops: the segment's tail is crossfaded into its head,
 //   and the file carries PAD seconds of the loop's own end before it and of its start after it, so the page can
 //   loop [PAD, PAD + length] and stay seamless whatever the MP3 decoder does with encoder delay and padding.
 //   They are levelled to BED_LUFS, with the peak held under -1 dBFS.
@@ -25,7 +25,6 @@ const SRC = {
   drizzle: 'https://archive.org/download/aporee_69094_80175/LDoltonChoishiMichiTrailForestRainBirds250611.wav',
   rain: 'https://opengameart.org/sites/default/files/amb_rain2.flac',
   birds: 'https://archive.org/download/aporee_68851_79871/LDoltonKamikosawaForestBirdsQuiet250612.wav',
-  frogs: 'https://archive.org/download/aporee_68909_79946/LDoltonKudoyamaRiceFieldsEveChorusCloser250612.wav',
   uguisu: 'https://xeno-canto.org/993079/download',
   lapping: 'https://archive.org/download/aporee_24924_28918/12140612binaural2496.mp3',
   bell: 'https://archive.org/download/aporee_31518_36212/54Miidera.mp3',
@@ -41,7 +40,6 @@ const BEDS = [
   // GoPro recording: heavy low-frequency rumble under the rain
   { out: 'rain', src: 'rain', at: 440, len: 40, af: 'highpass=f=140' },
   { out: 'birds', src: 'birds', at: 60, len: 50, af: 'highpass=f=150' },
-  { out: 'frogs', src: 'frogs', at: 15, len: 50, af: 'highpass=f=150' },
   // calm water lapping on rocks, between the recording's bird calls
   { out: 'lapping', src: 'lapping', at: 19, len: 34, af: 'highpass=f=90,acompressor=threshold=0.03:ratio=4:attack=3:release=150' },
 ];
