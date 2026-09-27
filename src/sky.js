@@ -12,6 +12,7 @@ const cfbm = Fn(([p0]) => {
 });
 
 const MOON_R = Math.tan(THREE.MathUtils.degToRad(1.15)); // drawn about 4x its real size
+const CUT_R = 1.35, CUT_K = 0.9; // the circle that cuts the crescent, in moon radii
 
 // one crater per cell at most: a darker floor inside a bright rim
 const crater = Fn(([q]) => {
@@ -59,29 +60,31 @@ export function makeSky() {
     const hidden = float(1.0).sub(sstep(0.5, 0.9, uCover));
     col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2).mul(hidden))).mul(U.uSunVis));
     col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis).mul(hidden));
-    // moon: a lit sphere (Lommel-Seeliger, as the regolith scatters) with seas and craters, a slightly ragged
-    // terminator, faint earthshine on the dark side, and a glow outside the disc on the lit side
+    // moon: a crescent cut from the disc by a larger circle (a gentle inner arc), shaded as a sphere with seas and
+    // craters and a slightly ragged inner edge; the dark part is left to the sky; a glow off the lit limb
     If(uMoonVis.greaterThan(0.0), () => {
       const right = normalize(cross(uMoonDir, vec3(0.0, 1.0, 0.0))).toVar();
       const up = cross(right, uMoonDir).toVar();
       const p = vec2(dot(d, right), dot(d, up)).div(MOON_R).toVar(); // disc coordinates, radius 1
       const r = length(p).toVar();
       const mv = uMoonVis.mul(hidden).mul(sstep(-0.01, 0.03, h)).mul(sstep(0.0, 0.2, dot(d, uMoonDir))).toVar();
-      // lit from the side the sun set on, tilted down: a crescent about 30% lit
+      // lit towards the side the sun set on, tilted down
       const sx = dot(U.uSunDir, right);
-      const s2 = vec2(mix(float(-0.82), float(0.82), sstep(-0.001, 0.001, sx)), -0.57);
-      const L = vec3(s2.mul(0.91), -0.42);
+      const s2 = vec2(mix(float(-0.82), float(0.82), sstep(-0.001, 0.001, sx)), -0.57).toVar();
       If(r.lessThan(1.0), () => {
         const n = vec3(p, sqrt(float(1.0).sub(r.mul(r)))).toVar();
         const uv = vec2(atan(n.x, n.z), asin(n.y)).toVar();
-        const mu0 = dot(n, L).add(vnoise(uv.mul(9.0)).sub(0.5).mul(0.06));
-        const ls = max(mu0, 0.0).div(max(mu0, 0.0).add(n.z).add(0.02)).mul(2.0).mul(sstep(-0.02, 0.07, mu0));
-        const a = moonAlbedo(uv);
-        const lit = vec3(1.0, 0.96, 0.9).mul(a).mul(ls.mul(1.05).add(0.0035)); // + earthshine
-        col.addAssign(lit.mul(sstep(1.0, float(1.0).sub(fwidth(r).mul(1.5)), r)).mul(mv));
+        // outside the cutting circle (radius CUT_R, centre CUT_K back from the lit side): 0.55 thick at the middle
+        const rc = length(p.add(s2.mul(CUT_K))).add(vnoise(uv.mul(9.0)).sub(0.5).mul(0.035)).toVar();
+        const inner = sstep(CUT_R, CUT_R + 0.07, rc).mul(sstep(CUT_R - 0.02, CUT_R + 0.03, rc).mul(0.7).add(0.3));
+        const edge = sstep(1.0, float(1.0).sub(fwidth(r).mul(1.5)), r);
+        // brighter towards the lit limb, dimmer into the inner edge
+        const shade = mix(float(0.72), float(1.08), sstep(-0.3, 0.95, dot(p, s2)));
+        const lit = vec3(1.0, 0.96, 0.9).mul(moonAlbedo(uv)).mul(shade).mul(1.25);
+        col.addAssign(lit.mul(inner).mul(edge).mul(mv));
       });
-      // the glow is air in front of the moon: it lies over the disc too, strongest off the lit limb
-      const x = length(p.sub(s2.mul(0.55))).sub(0.45).max(0.0);
+      // the glow is air in front of the moon, strongest off the lit limb (no edge anywhere, so no disc shows)
+      const x = length(p.sub(s2.mul(0.7))).sub(0.35).max(0.0);
       col.addAssign(vec3(0.6, 0.68, 0.86).mul(exp(x.mul(-3.0)).mul(0.035).add(exp(x.mul(-0.45)).mul(0.01))).mul(mv));
     });
     // clouds on a virtual plane; cover moves the density thresholds (no shift at 0.35)
