@@ -28,7 +28,7 @@ for (const extra of o.extra) {
   const g = [...f.gpu, ...(await page.evaluate(() => H.drain()))];
   const labels = [...new Set(g.flatMap((x) => Object.keys(x.gpu)))];
   const per = Object.fromEntries(labels.map((l) => [l, median(g.map((x) => x.gpu[l] || 0))]));
-  rows.push({ extra, n: g.length, total: median(g.map((x) => x.total)), per, counters: await page.evaluate(() => { const c = H.counters(); if (c) delete c.renderTargets; return c; }) });
+  rows.push({ extra, n: g.length, total: median(g.map((x) => x.total)), passSum: median(g.map((x) => x.passes ?? x.total)), period: median(g.map((x) => x.period ?? x.total)), per, counters: await page.evaluate(() => { const c = H.counters(); if (c) delete c.renderTargets; return c; }) });
   await page.close();
 }
 await browser.close(); server.close();
@@ -36,7 +36,9 @@ const labels = [...new Set(rows.flatMap((r) => Object.keys(r.per)))].sort((a, b)
 console.log(`${build} ${o.backend} ${o.workload} ${o.view}`);
 console.log('label'.padEnd(18) + rows.map((r) => r.extra.slice(0, 22).padStart(24)).join(''));
 for (const l of labels) console.log(l.padEnd(18) + rows.map((r) => (r.per[l] ?? 0).toFixed(3).padStart(24)).join(''));
-console.log('TOTAL'.padEnd(18) + rows.map((r) => r.total.toFixed(3).padStart(24)).join(''));
+console.log('pass sum'.padEnd(18) + rows.map((r) => r.passSum.toFixed(3).padStart(24)).join(''));
+console.log('TOTAL (span)'.padEnd(18) + rows.map((r) => r.total.toFixed(3).padStart(24)).join(''));
+console.log('period'.padEnd(18) + rows.map((r) => r.period.toFixed(3).padStart(24)).join(''));
 console.log('frames'.padEnd(18) + rows.map((r) => String(r.n).padStart(24)).join(''));
 console.log('drawCalls'.padEnd(18) + rows.map((r) => String(r.counters && r.counters.drawCalls).padStart(24)).join(''));
 console.log('triangles'.padEnd(18) + rows.map((r) => String(r.counters && r.counters.triangles).padStart(24)).join(''));

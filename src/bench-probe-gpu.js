@@ -96,13 +96,42 @@ export function createGPUProbe(renderer) {
     ctx.getCurrentTexture = () => { const t0 = performance.now(); const t = orig(); blocked += performance.now() - t0; return t; };
   }
 
-  let resolving = false;
+  // Pass timestamps miss work between passes (texture copies such as TAA history), which the WebGL probe's
+  // contiguous segments include. So a frame's GPU time is its span, from its first pass's begin to its last pass's
+  // end: with the GPU the bottleneck (queue always full, bench unthrottled) nothing idles inside it. Like the WebGL
+  // segments it leaves out the browser compositor's work between frames; the period (first begin to the next
+  // frame's) includes that and is reported too. three's pool keeps only durations, so its resolve is replaced by a
+  // copy (r186) that keeps begin and end.
+  const spans = new Map(); // uid -> [begin, end] (BigInt ns)
+  function patchPool(pool) {
+    if (!pool || pool.probePatched) return;
+    pool.probePatched = true;
+    pool._resolveQueries = async function () {
+      if (this.isDisposed || this.resultBuffer.mapState !== 'unmapped') return this.lastValue;
+      const offsets = new Map(this.queryOffsets), count = this.currentQueryIndex, bytes = count * 8;
+      this.currentQueryIndex = 0; this.queryOffsets.clear();
+      const enc = this.device.createCommandEncoder();
+      enc.resolveQuerySet(this.querySet, 0, count, this.resolveBuffer, 0);
+      enc.copyBufferToBuffer(this.resolveBuffer, 0, this.resultBuffer, 0, bytes);
+      this.device.queue.submit([enc.finish()]);
+      await this.resultBuffer.mapAsync(GPUMapMode.READ, 0, bytes);
+      if (this.isDisposed) { if (this.resultBuffer.mapState === 'mapped') this.resultBuffer.unmap(); return this.lastValue; }
+      const t = new BigUint64Array(this.resultBuffer.getMappedRange(0, bytes));
+      this.timestamps.clear();
+      for (const [uid, o] of offsets) { this.timestamps.set(uid, Number(t[o + 1] - t[o]) / 1e6); spans.set(uid, [t[o], t[o + 1]]); }
+      this.resultBuffer.unmap();
+      return this.lastValue;
+    };
+  }
+  let resolving = false, prev = null;
   const done = [];
   async function resolveWebGPU() {
     if (resolving || !backend.trackTimestamp) return;
     resolving = true;
+    const upTo = frame; // every query of frames rendered so far is in this resolve (it runs between frames)
     try {
       for (const type of [TimestampQuery.RENDER, TimestampQuery.COMPUTE]) {
+        patchPool(backend.timestampQueryPool[type]);
         await renderer.resolveTimestampsAsync(type);
         for (const [uid, r] of byUid) {
           if (!backend.hasTimestampQuery(uid)) continue;
@@ -110,16 +139,29 @@ export function createGPUProbe(renderer) {
           const f = frames.get(r.frame) || { gpu: {}, total: 0 };
           f.gpu[r.lbl] = (f.gpu[r.lbl] || 0) + ms;
           f.total += ms;
+          const sp = spans.get(uid);
+          if (sp) { if (f.begin === undefined || sp[0] < f.begin) f.begin = sp[0]; if (f.end === undefined || sp[1] > f.end) f.end = sp[1]; spans.delete(uid); }
           f.seen = true;
           frames.set(r.frame, f);
           byUid.delete(uid);
         }
       }
-      // a frame is complete once none of its uids are outstanding
+      // uids of those frames still without a timestamp never had a query (e.g. passes three does not time): drop
+      // them now rather than holding their frame back
+      for (const [uid, r] of byUid) if (r.frame <= upTo) byUid.delete(uid);
+      // a frame is complete once none of its uids are outstanding: total = span, passes = sum of pass times, and
+      // period = begin minus the previous frame's begin when that frame was measured too; without begins
+      // (unpatched pool) total = passes
       const open = new Set([...byUid.values()].map((r) => r.frame));
-      for (const [fr, f] of frames) if (fr < frame && !open.has(fr) && f.seen) { done.push({ frame: fr, gpu: f.gpu, total: f.total }); frames.delete(fr); }
-      // uids that never got a timestamp (e.g. skipped passes) must not block completion forever
-      for (const [uid, r] of byUid) if (r.frame < frame - 240) byUid.delete(uid);
+      for (const fr of [...frames.keys()].sort((a, b) => a - b)) {
+        const f = frames.get(fr);
+        if (!(fr < frame && !open.has(fr) && f.seen)) continue;
+        const rec = { frame: fr, gpu: f.gpu, total: f.begin !== undefined ? Number(f.end - f.begin) / 1e6 : f.total, passes: f.total };
+        if (prev && prev.frame === fr - 1 && prev.begin !== undefined && f.begin !== undefined) rec.period = Number(f.begin - prev.begin) / 1e6;
+        done.push(rec);
+        prev = { frame: fr, begin: f.begin };
+        frames.delete(fr);
+      }
     } finally { resolving = false; }
   }
 

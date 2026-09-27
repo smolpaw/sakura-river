@@ -93,7 +93,7 @@ H.disjoint = () => (eng.bench ? eng.bench.disjointFrames : 0);
 H.info = () => eng.info();
 H.meshStats = () => eng.meshStats();
 H.quality = () => (eng.qualityState ? eng.qualityState() : null);
-H.setAdaptive = (on) => eng.setAdaptive(on);
+H.setAdaptive = (on) => eng.setAdaptive && eng.setAdaptive(on); // the baseline engine has no setter: its ladder keeps running
 H.setBallast = (ms) => eng.setBallast && eng.setBallast(ms);
 
 // Canvas contents right after a render. WebGL canvases are read back with readPixels and sent as raw RGBA (the

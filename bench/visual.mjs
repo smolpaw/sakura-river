@@ -15,6 +15,7 @@ const { values: o } = parseArgs({ options: {
   golden: { type: 'boolean', default: false }, only: { type: 'string' }, tag: { type: 'string' }, size: { type: 'string' },
   eval: { type: 'boolean', default: false }, base: { type: 'string' }, extra: { type: 'string' }, settings: { type: 'string' }, views: { type: 'string' },
   dpr: { type: 'string' }, // device scale factor (default views.json visual.scale): checks of DPR-dependent settings
+  profile: { type: 'string', default: 'visual' }, // browser profile dir: a second concurrent run needs its own
 } });
 if (!o.build) { console.error('need --build'); process.exit(1); }
 const V = JSON.parse(fs.readFileSync(path.join(BENCH, 'views.json'), 'utf8'));
@@ -31,7 +32,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const extra = o.extra ? JSON.parse(o.extra) : {};
 
 const { server, url } = await startServer();
-const { browser, args, version } = await launch({ scale: o.dpr ? +o.dpr : V.visual.scale, angle: o.angle, profile: 'visual' });
+const { browser, args, version } = await launch({ scale: o.dpr ? +o.dpr : V.visual.scale, angle: o.angle, profile: o.profile });
 const query = o.angle === 'vulkan' || o.angle === 'swiftshader' ? '?preserve' : '';
 let page = await openHarness(browser, url, query);
 const env = await page.evaluate(() => H.env());
