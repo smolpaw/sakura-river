@@ -5,7 +5,7 @@ import {
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select, cross,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
-import { U, sstep, applyFog, LitMaterial } from './tsl.js';
+import { U, sstep, applyFog, LitMaterial, lanternLight } from './tsl.js';
 import { mulberry32 } from './noise.js';
 
 // rotY(a) * rotX(b) * rotZ(c) * v, as the GLSL column-major mat3 products of the old petal shader
@@ -35,7 +35,7 @@ export function petalMaterial() {
     const ndl = dot(N, U.uSunDir);
     const diff = max(ndl, 0.0).mul(0.7).add(ndl.mul(0.5).add(0.5).mul(0.3));
     const trans = pow(max(dot(V.negate(), U.uSunDir), 0.0), 3.0).mul(1.3).add(0.12);
-    const col = alb.mul(U.uSkyAmb.mul(0.9).add(U.uSunColor.mul(U.uSunVis).mul(diff.add(trans)).mul(0.9)));
+    const col = alb.mul(U.uSkyAmb.mul(0.9).add(U.uSunColor.mul(U.uSunVis).mul(diff.add(trans)).mul(0.9)).add(lanternLight(positionWorld).mul(1.4)));
     return vec4(applyFog(col, positionWorld), 1.0);
   });
   const m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, fog: false });
