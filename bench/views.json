@@ -18,7 +18,7 @@
     { "id": "fog090", "set": { "fog": 0.9 } }
   ],
   "perfViews": ["hero", "cine000", "cine250", "cine500", "cine750"],
-  "still": { "settle": 120, "converge": 24, "dt": 0.016666666666666666 },
+  "still": { "settle": 120, "converge": 64, "dt": 0.016666666666666666 },
   "sequences": [
     { "id": "a-cine", "kind": "cine", "start": 0.1, "settle": 120, "warm": 30, "frames": 120, "every": 3 },
     { "id": "b-wind", "kind": "wind", "settle": 120, "warm": 30, "frames": 120, "every": 3 },

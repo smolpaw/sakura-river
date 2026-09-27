@@ -8,3 +8,4 @@ bench/builds/
 bench/out/
 bench/goldens/
 __pycache__/
+bench/goldens-*/

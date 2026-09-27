@@ -91,6 +91,7 @@ H.drain = async (maxMs = 5000) => {
 H.counters = () => (eng.bench ? eng.bench.counters() : null);
 H.disjoint = () => (eng.bench ? eng.bench.disjointFrames : 0);
 H.info = () => eng.info();
+H.meshStats = () => eng.meshStats();
 H.quality = () => (eng.qualityState ? eng.qualityState() : null);
 H.setAdaptive = (on) => eng.setAdaptive(on);
 H.setBallast = (ms) => eng.setBallast && eng.setBallast(ms);
@@ -103,8 +104,11 @@ async function snapshot(c) {
   if (!gl) return { body: await new Promise((r) => c.toBlob(r, 'image/png')), query: '' };
   const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
   const px = new Uint8Array(w * h * 4), out = new Uint8Array(w * h * 4), row = w * 4;
+  // restore the bindings afterwards: the renderer caches them and may be mid-loop
+  const rb = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING), db = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, rb); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, db);
   for (let y = 0; y < h; y++) out.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row);
   return { body: out, query: `&w=${w}&h=${h}` };
 }
@@ -126,6 +130,15 @@ H.capture = async (path, dt = 0) => {
       await new Promise((r) => setTimeout(r, 500 * (i + 1)));
     }
   }
+};
+
+// capture the frame the engine's own loop just rendered (its rAF callback runs before ours)
+H.captureLive = async (path) => {
+  await raf();
+  const snap = await snapshot(canvas);
+  const body = snap.body instanceof Blob ? await snap.body.arrayBuffer() : snap.body;
+  const res = await fetch('/save?path=' + encodeURIComponent(path) + snap.query, { method: 'POST', body });
+  if (!res.ok) throw new Error('save failed');
 };
 
 // free-running mode (engine's own RAF loop + adaptive controller): sample fps/quality for `sec` seconds

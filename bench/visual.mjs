@@ -1,5 +1,5 @@
 // pnpm bench:visual -- --build <label> [--backend webgl|webgpu] [--angle default|gl|vulkan|swiftshader]
-//   [--golden] [--only stills|seq] [--tag <suffix>] [--eval] [--base <dir-name>]
+//   [--golden] [--only stills|seq] [--tag <suffix>] [--eval] [--base <dir-name>] [--dpr 2]
 // Renders every still (views x settings) and sequence frame listed in bench/views.json into
 // bench/out/visual/<build>-<backend>[-<angle>][-<tag>]/. With --golden it renders at the supersampled size into
 // bench/goldens/ and box-downsamples in linear light. With --eval it then runs the FLIP gate (flip_eval.py).
@@ -12,14 +12,17 @@ import { launch, openHarness, assertHardware } from './lib/browser.mjs';
 
 const { values: o } = parseArgs({ options: {
   build: { type: 'string' }, backend: { type: 'string', default: 'webgl' }, angle: { type: 'string', default: 'default' },
-  golden: { type: 'boolean', default: false }, only: { type: 'string' }, tag: { type: 'string' },
+  golden: { type: 'boolean', default: false }, only: { type: 'string' }, tag: { type: 'string' }, size: { type: 'string' },
   eval: { type: 'boolean', default: false }, base: { type: 'string' }, extra: { type: 'string' }, settings: { type: 'string' }, views: { type: 'string' },
+  dpr: { type: 'string' }, // device scale factor (default views.json visual.scale): checks of DPR-dependent settings
 } });
 if (!o.build) { console.error('need --build'); process.exit(1); }
 const V = JSON.parse(fs.readFileSync(path.join(BENCH, 'views.json'), 'utf8'));
 const S = o.golden ? V.visual.supersample : 1;
-const cssW = V.visual.cssW * S, cssH = V.visual.cssH * S;
-const name = o.golden ? 'goldens/raw' : `out/visual/${o.build}-${o.backend}${o.angle !== 'default' ? '-' + o.angle : ''}${o.tag ? '-' + o.tag : ''}`;
+const [bw, bh] = o.size ? o.size.split('x').map(Number) : [V.visual.cssW, V.visual.cssH];
+const cssW = bw * S, cssH = bh * S;
+const gdir = o.size ? `goldens-${bh}` : 'goldens';
+const name = o.golden ? `${gdir}/raw` : `out/visual/${o.build}-${o.backend}${o.angle !== 'default' ? '-' + o.angle : ''}${o.tag ? '-' + o.tag : ''}`;
 const outDir = path.join(BENCH, name);
 if (!o.only) fs.rmSync(outDir, { recursive: true, force: true });
 else fs.rmSync(path.join(outDir, o.only === 'seq' ? 'seq' : 'stills'), { recursive: true, force: true });
@@ -28,7 +31,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const extra = o.extra ? JSON.parse(o.extra) : {};
 
 const { server, url } = await startServer();
-const { browser, args, version } = await launch({ scale: V.visual.scale, angle: o.angle, profile: 'visual' });
+const { browser, args, version } = await launch({ scale: o.dpr ? +o.dpr : V.visual.scale, angle: o.angle, profile: 'visual' });
 const query = o.angle === 'vulkan' || o.angle === 'swiftshader' ? '?preserve' : '';
 let page = await openHarness(browser, url, query);
 const env = await page.evaluate(() => H.env());
@@ -111,7 +114,7 @@ if (manifest.logs.length) log('page warnings/errors:', manifest.logs.slice(0, 10
 
 const PY = path.join(BENCH, '.venv/bin/python');
 if (o.golden) {
-  execFileSync(PY, [path.join(BENCH, 'flip_eval.py'), 'downsample', '--src', outDir, '--dst', path.join(BENCH, 'goldens'), '--factor', String(S)], { stdio: 'inherit' });
+  execFileSync(PY, [path.join(BENCH, 'flip_eval.py'), 'downsample', '--src', outDir, '--dst', path.join(BENCH, gdir), '--factor', String(S)], { stdio: 'inherit' });
 }
 if (o.eval) {
   const a = [path.join(BENCH, 'flip_eval.py'), 'gate', '--cand', outDir];
