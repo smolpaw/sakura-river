@@ -126,9 +126,10 @@ export function makeLanterns(d, lanternGeo) {
   mat.positionNode = pose(positionGeometry).add(hang);
   mat.normalNode = transformNormalToView(pose(normalGeometry)).normalize();
   mat.colorNode = Fn(() => {
-    // white or pink washi, red bands at top and bottom, thin bamboo ribs
+    // white or pink washi, red bands at top and bottom and two across the middle, thin bamboo ribs
     const paper = mix(vec3(0.9, 0.86, 0.78), vec3(0.92, 0.42, 0.52), look.y);
-    const band = sstep(0.16, 0.13, vv).add(sstep(0.84, 0.87, vv)).min(1.0);
+    const mid = sstep(0.05, 0.035, vv.sub(0.35).abs()).add(sstep(0.05, 0.035, vv.sub(0.65).abs()));
+    const band = sstep(0.16, 0.13, vv).add(sstep(0.84, 0.87, vv)).add(mid).min(1.0);
     const rib = sstep(0.75, 1.0, sin(vv.mul(Math.PI * 26)).abs());
     const col = mix(paper, vec3(0.62, 0.04, 0.03), band).mul(float(1.0).sub(rib.mul(0.3)));
     return vec4(select(part.lessThan(0.5), col, vec3(0.02, 0.018, 0.016)), 1.0);
