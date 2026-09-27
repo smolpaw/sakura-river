@@ -1,10 +1,11 @@
-// Node materials for the custom-shaded effects: petals (flying + fallen), pollen motes, bench rain
+// Node materials for the custom-shaded effects: petals (flying + fallen), pollen motes, lanterns, bench rain
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod,
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select, cross,
+  diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
-import { U, sstep, applyFog, windOffset } from './tsl.js';
+import { U, sstep, applyFog, LitMaterial } from './tsl.js';
 import { mulberry32 } from './noise.js';
 
 // rotY(a) * rotX(b) * rotZ(c) * v, as the GLSL column-major mat3 products of the old petal shader
@@ -87,36 +88,80 @@ export function makeMotes(center, count) {
   return { mesh: sprite, uPx };
 }
 
-// string lights: one round glow sprite per bulb (a bright core and a soft halo), swaying with its branch.
-// Drawn as sprites rather than tiny meshes: bloom turns sub-pixel points into blocky squares.
-export function makeStringLights(pos, flex, origin) {
-  const n = flex.length;
-  const p = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { p[i * 3] = pos[i * 3] + origin.x; p[i * 3 + 1] = pos[i * 3 + 1] + origin.y; p[i * 3 + 2] = pos[i * 3 + 2] + origin.z; }
+// Paper lanterns (see lanterns.js): the rope and bamboo frame, the lanterns swinging in the wind, and at dusk a
+// soft round halo per lantern. The halo keeps distant lanterns round: bloom turns sub-pixel bright points into
+// blocky squares, so the paper's own glow also dims with distance to stay under the bloom threshold.
+export function makeLanterns(d, lanternGeo) {
+  const group = new THREE.Group();
+  const frame = new THREE.Mesh(d.frame, new LitMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 }));
+  frame.castShadow = true; frame.receiveShadow = true;
+  group.add(frame);
+
+  const geo = new THREE.InstancedBufferGeometry().copy(lanternGeo);
+  geo.instanceCount = d.n;
+  geo.setAttribute('aHang', new THREE.InstancedBufferAttribute(d.hang, 3));
+  geo.setAttribute('aLook', new THREE.InstancedBufferAttribute(d.look, 4));
+  const hang = attribute('aHang', 'vec3'), look = attribute('aLook', 'vec4');
+  const part = attribute('aPart', 'float'), vv = attribute('aV', 'float');
+  // swing about the hanging point, downwind, plus a slow idle sway; yaw per lantern
+  const wd = vec3(U.uWindDir.x, 0.0, U.uWindDir.y);
+  const swing = U.uWind.mul(sin(U.uTime.mul(1.4).add(look.x)).mul(0.07).add(0.1)).add(sin(U.uTime.mul(0.8).add(look.x.mul(1.7))).mul(0.03));
+  const cs = cos(swing), sn = sin(swing), cy = cos(look.w), sy = sin(look.w);
+  const pose = (v) => {
+    const r = vec3(v.x.mul(cy).add(v.z.mul(sy)), v.y, v.z.mul(cy).sub(v.x.mul(sy)));
+    const a = dot(r.xz, U.uWindDir);
+    const a2 = a.mul(cs).sub(r.y.mul(sn)), y2 = a.mul(sn).add(r.y.mul(cs));
+    return vec3(r.x.add(U.uWindDir.x.mul(a2.sub(a))), y2, r.z.add(U.uWindDir.y.mul(a2.sub(a))));
+  };
+  const mat = new LitMaterial({ roughness: 0.65, metalness: 0, side: THREE.DoubleSide }, (out) => Fn(() => {
+    // lit from inside: warm through the paper, fainter along the ribs and towards the silhouette
+    const dist = length(cameraPosition.sub(positionWorld));
+    const facing = normalView.z.abs();
+    const glow = U.uLights.mul(look.z).mul(mix(1.0, 0.5, sstep(14.0, 50.0, dist))).mul(facing.mul(0.35).add(0.65)).mul(2.6);
+    // by day the thin paper lets light through: sun from behind, and sky light scattered inside
+    const back = pow(max(dot(normalize(positionWorld.sub(cameraPosition)), U.uSunDir), 0.0), 2.0);
+    const through = U.uSunColor.mul(U.uSunVis).mul(back.mul(0.9).add(0.25)).add(U.uSkyAmb.mul(0.35));
+    return out.add(diffuseColor.rgb.mul(vec3(1.0, 0.8, 0.55).mul(glow).add(through)).mul(sstep(0.5, 0.4, part)));
+  })());
+  mat.positionNode = pose(positionGeometry).add(hang);
+  mat.normalNode = transformNormalToView(pose(normalGeometry)).normalize();
+  mat.colorNode = Fn(() => {
+    // white or pink washi, red bands at top and bottom, thin bamboo ribs
+    const paper = mix(vec3(0.9, 0.86, 0.78), vec3(0.92, 0.42, 0.52), look.y);
+    const band = sstep(0.16, 0.13, vv).add(sstep(0.84, 0.87, vv)).min(1.0);
+    const rib = sstep(0.75, 1.0, sin(vv.mul(Math.PI * 26)).abs());
+    const col = mix(paper, vec3(0.62, 0.04, 0.03), band).mul(float(1.0).sub(rib.mul(0.3)));
+    return vec4(select(part.lessThan(0.5), col, vec3(0.02, 0.018, 0.016)), 1.0);
+  })();
+  const lamps = new THREE.Mesh(geo, mat);
+  lamps.frustumCulled = false;
+  group.add(lamps);
+
+  // halos at the lantern centres (layer 1: not in the reflection)
   const uFocal = uniform(500); // drawing-buffer pixels per unit at unit distance
-  const base = instancedBufferAttribute(new THREE.InstancedBufferAttribute(p, 3), 'vec3');
-  const fl = instancedBufferAttribute(new THREE.InstancedBufferAttribute(flex, 1), 'float');
-  const swayed = base.add(windOffset(base, fl, U.uTime));
-  // nudged towards the camera so the halo is not cut by the bark it sits on
-  const at = swayed.add(normalize(cameraPosition.sub(swayed)).mul(0.08));
+  const centre = instancedBufferAttribute(new THREE.InstancedBufferAttribute(d.hang, 3), 'vec3');
+  const seed = instancedBufferAttribute(new THREE.InstancedBufferAttribute(d.look, 4), 'vec4');
+  const cSwing = U.uWind.mul(sin(U.uTime.mul(1.4).add(seed.x)).mul(0.07).add(0.1)).add(sin(U.uTime.mul(0.8).add(seed.x.mul(1.7))).mul(0.03));
+  const at = centre.add(wd.mul(sin(cSwing).mul(0.36))).add(vec3(0.0, cos(cSwing).mul(-0.36), 0.0));
   const mvz = cameraViewMatrix.mul(vec4(at, 1.0)).z.negate();
-  const mat = new THREE.PointsNodeMaterial({
+  const hm = new THREE.PointsNodeMaterial({
     transparent: true, depthWrite: false, sizeAttenuation: false, fog: false,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
     blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
   });
-  mat.positionNode = at;
-  mat.sizeNode = clamp(uFocal.mul(0.3).div(mvz), 5.0, 140.0).div(screenDPR);
-  mat.colorNode = Fn(() => {
+  hm.positionNode = at;
+  hm.sizeNode = clamp(uFocal.mul(1.6).div(mvz), 7.0, 400.0).div(screenDPR);
+  hm.colorNode = Fn(() => {
     const c = uv().sub(0.5);
-    const r2 = dot(c, c);
-    const glow = r2.mul(-500.0).exp().mul(10.0).add(r2.mul(-30.0).exp().mul(0.9)); // core + halo
-    return vec4(U.uLightColor.mul(glow), U.uLights);
+    const tint = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.42, 0.36), seed.y);
+    return vec4(tint.mul(dot(c, c).mul(-22.0).exp().mul(0.45).mul(seed.z)), U.uLights);
   })();
-  const sprite = new THREE.Sprite(mat);
-  sprite.count = n;
-  sprite.frustumCulled = false;
-  return { mesh: sprite, uFocal };
+  const halos = new THREE.Sprite(hm);
+  halos.count = d.n;
+  halos.frustumCulled = false;
+  halos.layers.set(1);
+  group.add(halos);
+  return { group, halos, uFocal };
 }
 
 // bench-only rain placeholder: instanced streaks animated in the vertex stage, in a box around the camera

@@ -1,4 +1,4 @@
-// Japanese set pieces: Fuji-style volcano, stone lantern (kasuga-dōrō), vermilion arched bridge (taiko-bashi), five-storey pagoda
+// Japanese set pieces: Fuji-style volcano, vermilion arched bridge (taiko-bashi), five-storey pagoda
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeNoise, mulberry32, clamp, lerp, smoothstep } from './noise.js';
@@ -65,52 +65,9 @@ function roof(sides, R, H, upturn, c, phi = Math.PI / 4, thick = 0.12) {
   return colorize(g, c);
 }
 
-const STONE = [0.33, 0.31, 0.29], STONE_D = [0.22, 0.21, 0.2];
+const STONE = [0.33, 0.31, 0.29];
 const VERM = [0.62, 0.055, 0.02], VERM_D = [0.38, 0.03, 0.012];
 const WOOD = [0.16, 0.1, 0.07], ROOF = [0.07, 0.07, 0.075], WALL = [0.8, 0.74, 0.62], BRONZE = [0.42, 0.3, 0.1];
-
-// ---------------- stone lantern ----------------
-export function lanternGeometry() {
-  const parts = [];
-  const hexR = (r) => r / Math.cos(Math.PI / 6);
-  parts.push(lathe([[0, 0], [hexR(0.5), 0], [hexR(0.46), 0.1], [hexR(0.3), 0.26], [hexR(0.2), 0.3], [0, 0.3]], 6, STONE_D, Math.PI / 6)); // kiso
-  parts.push(lathe([[0, 0.28], [0.15, 0.28], [0.13, 0.62], [0.16, 0.66], [0.16, 0.72], [0.13, 0.76], [0.12, 1.12], [0, 1.12]], 20, STONE)); // sao
-  parts.push(lathe([[0, 1.08], [hexR(0.16), 1.08], [hexR(0.36), 1.22], [hexR(0.38), 1.3], [0, 1.3]], 6, STONE, Math.PI / 6)); // chudai
-  // hibukuro: six posts
-  for (let k = 0; k < 6; k++) {
-    const a = Math.PI / 6 + (k / 6) * Math.PI * 2;
-    const r = 0.25;
-    parts.push(beam(new V(Math.cos(a) * r, 1.3, Math.sin(a) * r), new V(Math.cos(a) * r, 1.74, Math.sin(a) * r), 0.07, 0.07, STONE));
-  }
-  parts.push(lathe([[0, 1.72], [hexR(0.3), 1.72], [hexR(0.3), 1.78], [0, 1.78]], 6, STONE, Math.PI / 6));
-  parts.push(roof(6, 0.72, 0.36, 0.1, STONE, Math.PI / 6, 0.09).translate(0, 1.78, 0)); // kasa
-  parts.push(lathe([[0, 2.1], [0.1, 2.1], [0.13, 2.17], [0.1, 2.24], [0.05, 2.3], [0, 2.34]], 16, STONE)); // hoju
-  return mergeGeometries(parts);
-}
-
-export function makeLantern(world, g, x, z, rot, mats) {
-  const mesh = new THREE.Mesh(g, mats.stone);
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  // glowing paper core
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 6, 1), mats.core);
-  core.position.y = 1.52;
-  const glowMat = core.material;
-  const light = new THREE.PointLight(0xffa860, 0, 14, 1.6);
-  light.position.y = 1.55;
-  const group = new THREE.Group();
-  group.add(mesh, core, light);
-  const y = world.height(x, z);
-  group.position.set(x, y - 0.08, z);
-  group.rotation.y = rot;
-  return {
-    group,
-    update(sunVis) {
-      const k = 1 - smoothstep(0.15, 0.95, sunVis) * 0.8;
-      glowMat.color.setRGB(1.0, 0.55, 0.22).multiplyScalar(0.6 + 4.5 * k);
-      light.intensity = 0.4 + 5 * k;
-    },
-  };
-}
 
 // ---------------- vermilion arched bridge ----------------
 export function bridgeData(world, zc) {

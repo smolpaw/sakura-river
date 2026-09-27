@@ -7,12 +7,11 @@ export const SMALL_SPOTS = [
 export function layout(world) {
   const TZ = 2;
   const TX = world.riverX(TZ) - world.riverHW(TZ) - 7.2;
-  const LX = TX + 5.2, LZ = TZ + 12;
   const small = SMALL_SPOTS.map((sp, k) => ({ ...sp, k, x: world.riverX(sp.z) + sp.side * (world.riverHW(sp.z) + sp.off) }));
-  return { TX, TZ, LX, LZ, tree: [TX, 0, TZ], focus: [TX + 8, 0, TZ + 8], motes: [TX + 3, 0, TZ + 2], small };
+  return { TX, TZ, tree: [TX, 0, TZ], focus: [TX + 8, 0, TZ + 8], motes: [TX + 3, 0, TZ + 2], small };
 }
 
-export const trunkAvoid = (L) => (x, z) => Math.hypot(x - L.TX, z - L.TZ) < 0.95 || Math.hypot(x - L.LX, z - L.LZ) < 0.75;
+export const trunkAvoid = (L) => (x, z) => Math.hypot(x - L.TX, z - L.TZ) < 0.95;
 
 export function rockAvoid(L, blockers) {
   const trunk = trunkAvoid(L);

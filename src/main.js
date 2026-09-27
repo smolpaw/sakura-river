@@ -9,10 +9,10 @@ import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
 import { makeSky, skyState } from './sky.js';
 import { makeWater } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
-import { petalMaterial, makeMotes, makeStringLights, rainMaterial } from './fx.js';
+import { petalMaterial, makeMotes, makeLanterns, rainMaterial } from './fx.js';
 import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
-import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
+import { makeBridge, makePagoda, makeFuji } from './props.js';
 import { makeKoi, koiClearing } from './koi.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
@@ -101,7 +101,7 @@ export async function create(canvas, opts = {}) {
   // ---------- procedural generation (worker pool) ----------
   const world = createWorld(7);
   const Lay = layout(world);
-  const { TX, TZ, LX, LZ } = Lay;
+  const { TX, TZ } = Lay;
   const treePos = new THREE.Vector3(...Lay.tree);
   const focus = new THREE.Vector3(...Lay.focus);
   const triMul = ST ? ST.triMul : 1;
@@ -118,6 +118,7 @@ export async function create(canvas, opts = {}) {
     bark: { name: 'bark' },
     fuji: { name: 'fuji' },
     props: { name: 'props', args: { triMul } },
+    lanterns: { name: 'lanterns', args: { tier: tierName } },
     rocks: { name: 'rocks', args: { tier: tierName, triMul } },
     grass: { name: 'grass', args: { count: Q.grass * (ST ? ST.grass : 1), tier: tierName } },
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
@@ -181,11 +182,10 @@ export async function create(canvas, opts = {}) {
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
     // one interleaved buffer for the per-flower attributes (fewer vertex buffers; WebGPU guarantees only 8)
-    const ib = new THREE.InstancedInterleavedBuffer(d.attrs, 7);
+    const ib = new THREE.InstancedInterleavedBuffer(d.attrs, 6);
     geo.setAttribute('aFlex', new THREE.InterleavedBufferAttribute(ib, 1, 0));
     geo.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(ib, 2, 1));
     geo.setAttribute('aCanopyN', new THREE.InterleavedBufferAttribute(ib, 3, 3));
-    geo.setAttribute('aGlow', new THREE.InterleavedBufferAttribute(ib, 1, 6));
     mesh.receiveShadow = castShadow;
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
@@ -212,10 +212,6 @@ export async function create(canvas, opts = {}) {
   const main = buildTreeObject(G.treeMain[0], treePos, true);
   main.group.name = 'tree';
   scene.add(main.group);
-  U.uTreePos.value.copy(treePos);
-  const lights = makeStringLights(main.data.lights.pos, main.data.lights.flex, treePos);
-  lights.mesh.name = 'lights';
-  scene.add(lights.mesh);
   const smallTrees = [];
   const smallData = [...G.treesA, ...G.treesB];
   Lay.small.forEach((sp, k) => {
@@ -232,9 +228,9 @@ export async function create(canvas, opts = {}) {
   const fuji = makeFuji(G.fuji, M.fujiMaterial());
   fuji.name = 'fuji';
   scene.add(fuji);
-  const lantern = makeLantern(world, G.props.lantern, LX, LZ, 0.3, { stone: M.propMaterial('stone'), core: M.lanternCoreMaterial() });
-  lantern.group.name = 'lantern';
-  scene.add(lantern.group);
+  const lanterns = makeLanterns(G.lanterns, G.lanterns.lantern);
+  lanterns.group.name = 'lanterns';
+  scene.add(lanterns.group);
   const bridge = makeBridge(G.props.bridge, M.propMaterial('wood', { roughness: 0.55 }));
   bridge.mesh.name = 'bridge';
   scene.add(bridge.mesh);
@@ -326,8 +322,6 @@ export async function create(canvas, opts = {}) {
     if (p.y < g + 0.8) p.y = g + 0.8;
     const dx = p.x - TX, dz = p.z - TZ, d = Math.hypot(dx, dz);
     if (p.y < trunkTop && d < 1.8) { const k = 1.8 / Math.max(d, 1e-3); p.x = TX + dx * k; p.z = TZ + dz * k; }
-    const lx = p.x - LX, lz = p.z - LZ, ld = Math.hypot(lx, lz);
-    if (p.y < 3.2 && ld < 1.3) { const k = 1.3 / Math.max(ld, 1e-3); p.x = LX + lx * k; p.z = LZ + lz * k; }
     const t = controls.target;
     t.x = clamp(t.x, -160, 160); t.z = clamp(t.z, -220, 90);
     t.y = clamp(t.y, Math.max(world.heightFast(t.x, t.z), 0) + 0.3, 40);
@@ -410,7 +404,7 @@ export async function create(canvas, opts = {}) {
     g.sharp.value = pr >= 1.75 ? 0.3 : pr >= 1.2 ? 0.45 : 0.6;
     rays.aspect.value = w / h;
     motes.uPx.value = pr * (h / 900) * 1.3;
-    lights.uFocal.value = (h * pr) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    lanterns.uFocal.value = (h * pr) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   }
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);
@@ -495,10 +489,9 @@ export async function create(canvas, opts = {}) {
 
     petals.update(dt, U.uTime.value, S.wind, S.river);
     koi.update(dt, U.uTime.value);
-    // string lights come on at dusk
+    // the lanterns come on at dusk
     U.uLights.value = smoothstep(7, -2.5, skyNow.elev);
-    lights.mesh.visible = warming || U.uLights.value > 0.001;
-    lantern.update(U.uSunVis.value * smoothstep(-2, 14, skyNow.elev));
+    lanterns.halos.visible = warming || U.uLights.value > 0.001;
 
     // camera
     if (cinematic) {

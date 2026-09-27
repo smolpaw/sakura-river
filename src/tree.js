@@ -14,7 +14,6 @@ export const MAIN_TREE = {
   maxDepth: 5,
   umbels: [0, 0, 0, 3, 5, 10], // blossom umbels per branch, by depth
   flowerSize: 1,
-  lights: true,
   minY: 2.2,
   roots: 6,
 };
@@ -26,7 +25,6 @@ export const SMALL_TREE = {
   maxDepth: 4,
   umbels: [0, 0, 2, 5, 9],
   flowerSize: 1.7, // seen from afar: fewer, larger flowers
-  lights: false,
   minY: 1.8,
   roots: 0,
 };
@@ -401,81 +399,15 @@ export function barkTextures({ size, map, bump }) {
   return { map: m, bump: make(bump) };
 }
 
-// String lights wrapped around the trunk and limbs (depth <= 2): bulbs every `gap` along a spiral wire.
-function stringLights(tree, k, groundAt) {
-  const pos = [], flex = [];
-  const gap = 0.26 * k;
-  for (const br of tree.branches) {
-    if (br.depth < 0 || br.depth > 2) continue;
-    const { pts, rad, flex: fl } = branchPath(br);
-    const { Ts, Ns } = frames(pts);
-    const pitch = (br.depth === 0 ? 0.9 : 1.3) * k; // length per turn
-    let a = br.depth * 2.1, wire = gap * 0.5;
-    const n = br.depth === 2 ? Math.ceil((pts.length - 1) * 0.7) : pts.length - 2; // outer twigs stay bare
-    for (let i = 0; i < n; i++) {
-      const seg = pts[i + 1].distanceTo(pts[i]);
-      const r = rad[i] + 0.02;
-      const da = (seg / pitch) * TAU;
-      const len = Math.hypot(seg, r * da);
-      const steps = Math.max(1, Math.ceil(len / (gap * 0.25)));
-      for (let j = 0; j < steps; j++) {
-        wire += len / steps; a += da / steps;
-        if (wire < gap) continue;
-        wire -= gap;
-        const u = (j + 0.5) / steps;
-        const p = pts[i].clone().lerp(pts[i + 1], u);
-        const Nv = Ns[i].clone().lerp(Ns[i + 1], u).normalize(), T = Ts[i].clone().lerp(Ts[i + 1], u).normalize();
-        const B = new V().crossVectors(T, Nv);
-        const rr = lerp(rad[i], rad[i + 1], u) * (br.depth === 0 ? 1.08 : 1) + 0.02;
-        p.addScaledVector(Nv, Math.cos(a) * rr).addScaledVector(B, Math.sin(a) * rr);
-        if (p.y < groundAt(p.x, p.z) + 0.4) continue;
-        pos.push(p.x, p.y, p.z); flex.push(flexOf(lerp(fl[i], fl[i + 1], u)));
-      }
-    }
-  }
-  return { pos: new Float32Array(pos), flex: new Float32Array(flex), n: flex.length };
-}
-
-// how much the string lights reach each point: a soft, saturating sum over nearby bulbs (spatial hash)
-function glowField(lights, sigma) {
-  const cell = sigma * 2.5, grid = new Map();
-  const key = (x, y, z) => (x + 512) * 1048576 + (y + 512) * 1024 + (z + 512);
-  for (let i = 0; i < lights.n; i++) {
-    const kk = key(Math.floor(lights.pos[i * 3] / cell), Math.floor(lights.pos[i * 3 + 1] / cell), Math.floor(lights.pos[i * 3 + 2] / cell));
-    if (!grid.has(kk)) grid.set(kk, []);
-    grid.get(kk).push(i);
-  }
-  const inv = 1 / (sigma * sigma), cut = cell * cell;
-  return (x, y, z) => {
-    const cx = Math.floor(x / cell), cy = Math.floor(y / cell), cz = Math.floor(z / cell);
-    let sum = 0;
-    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
-      const list = grid.get(key(cx + a, cy + b, cz + c));
-      if (!list) continue;
-      for (const i of list) {
-        const dx = lights.pos[i * 3] - x, dy = lights.pos[i * 3 + 1] - y, dz = lights.pos[i * 3 + 2] - z;
-        const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 < cut) sum += Math.exp(-d2 * inv);
-      }
-    }
-    return 1 - Math.exp(-sum * 0.2);
-  };
-}
-
 // flowers per umbel by quality tier
 const UMBEL = { high: [4, 7], medium: [3, 6], low: [2, 4] };
 
-// one tree: bark geometry, flower instance data and (main tree) string lights
+// one tree: bark geometry and flower instance data
 export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   const groundAt = (x, z) => world.height(x + pos.x, z + pos.z);
   const t = growTree(seed, cfg, groundAt);
   const bark = triMul > 1 ? tessellate(buildBarkGeometry(t, groundAt), triMul) : buildBarkGeometry(t, groundAt);
   const k = cfg.scale;
-  const lights = cfg.lights ? stringLights(t, k, groundAt) : { pos: new Float32Array(0), flex: new Float32Array(0), n: 0 };
-  const glow = lights.n ? glowField(lights, 0.55 * k) : () => 0;
-  const bp = bark.attributes.position, barkGlow = new Float32Array(bp.count);
-  if (lights.n) for (let i = 0; i < bp.count; i++) barkGlow[i] = glow(bp.getX(i), bp.getY(i), bp.getZ(i));
-  bark.setAttribute('aGlow', new THREE.BufferAttribute(barkGlow, 1));
 
   const rng = mulberry32(seed + 1);
   const rr = (a, b) => a + (b - a) * rng();
@@ -483,7 +415,7 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   if (cfg.flowerSize > 1) per = [1, Math.max(2, per[1] - 3)];
   const max = t.anchors.length * per[1];
   const matrix = new Float32Array(max * 16), color = new Float32Array(max * 3);
-  const attrs = new Float32Array(max * 7); // aFlex, aAtlas.xy, aCanopyN.xyz, aGlow
+  const attrs = new Float32Array(max * 6); // aFlex, aAtlas.xy, aCanopyN.xyz
   const spawn = [];
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), sv = new V(), col = new THREE.Color();
   const Z = new V(0, 0, 1), UP = new V(0, 1, 0);
@@ -504,11 +436,10 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
       const cn = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y * 0.8, (p.z - center.z) / ext.z);
       const r = cn.length();
       cn.normalize();
-      const o = n * 7;
+      const o = n * 6;
       attrs[o] = flex;
       attrs[o + 1] = rng() < 0.5 ? 0 : 0.5; attrs[o + 2] = rng() < 0.5 ? 0 : 0.5;
       attrs[o + 3] = cn.x; attrs[o + 4] = cn.y; attrs[o + 5] = cn.z;
-      attrs[o + 6] = glow(p.x, p.y, p.z);
       // inner flowers darker (canopy AO), white to blush
       const ao = lerp(0.45, 1.0, smoothstep(0.3, 1.05, r)) * (0.8 + 0.2 * clamp(cn.y + 0.5, 0, 1));
       const blush = Math.pow(rng(), 1.5);
@@ -519,7 +450,7 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
     }
   }
   return {
-    bark, n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * 7),
-    spawn: new Float64Array(spawn), lights,
+    bark, n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * 6),
+    spawn: new Float64Array(spawn),
   };
 }

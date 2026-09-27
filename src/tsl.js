@@ -2,10 +2,11 @@
 // post-lighting hook. One source compiles to WGSL (WebGPU) and GLSL (WebGL2 fallback).
 import * as THREE from 'three/webgpu';
 import {
-  Fn, float, vec2, vec3, vec4, uniform, mix, sin, fract, floor, dot, exp, max, abs, clamp, normalize, length, pow,
+  Fn, If, float, vec2, vec3, vec4, uniform, mix, sin, cos, sqrt, fract, floor, dot, exp, max, abs, clamp, normalize, length, pow,
   cameraPosition, positionWorld, positionLocal, modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, normalLocal, fog, varyingProperty,
   reference, renderGroup, texture, normalView, BRDF_GGX, BRDF_Lambert, specularColorBlended, specularF90, roughness, diffuseContribution,
 } from 'three/tsl';
+import { LINE } from './lanterns.js';
 
 export const U = {
   uTime: uniform(0),
@@ -21,15 +22,27 @@ export const U = {
   uSunVis: uniform(1),
   uSkyAmb: uniform(new THREE.Color(0.4, 0.45, 0.6)),
   uFlow: uniform(0),
-  uLights: uniform(0), // string lights on the main tree: 0 off .. 1 fully on (dusk)
-  uLightColor: uniform(new THREE.Color(1.0, 0.6, 0.3)), // warm-white bulbs
-  uTreePos: uniform(new THREE.Vector3()),
+  uLights: uniform(0), // riverside lanterns: 0 off .. 1 fully on (dusk)
+  uLightColor: uniform(new THREE.Color(1.0, 0.6, 0.3)), // warm light through the paper
 };
 
-// the string lights' soft pool of light on the ground under the main tree
-export const treeLightPool = Fn(([wp]) => {
-  const d = length(wp.xz.sub(U.uTreePos.xz));
-  return U.uLightColor.mul(U.uLights).mul(exp(d.mul(d).mul(-1.0 / 30.0))).mul(0.5);
+// Warm light from the lantern lines (lanterns.js) on whatever is near them: ground, grass, rocks, the tree. The
+// lines follow both banks, so the distance to them is |x - riverX(z)| against the bank offset (the river's
+// formulas from world.js), corrected for the river's slant; light falls off in 3D from the lanterns' height.
+export const lanternLight = Fn(([wp]) => {
+  const o = vec3(0.0).toVar();
+  If(U.uLights.greaterThan(0.0), () => {
+    const z = wp.z;
+    const a1 = z.mul(0.021).add(0.9), a2 = z.mul(0.0072).sub(0.35), a3 = z.mul(0.047).add(2.2);
+    const rx = sin(a1).mul(8.5).add(sin(a2).mul(20.0)).add(sin(a3).mul(3.5)).sub(4.0);
+    const slope = cos(a1).mul(8.5 * 0.021).add(cos(a2).mul(20 * 0.0072)).add(cos(a3).mul(3.5 * 0.047));
+    const hw = mix(float(7.6), float(3.4), sstep(20.0, -520.0, z));
+    const d = abs(wp.x.sub(rx)).sub(hw.mul(LINE.K).add(LINE.PAD)).div(sqrt(slope.mul(slope).add(1.0)));
+    const dy = wp.y.sub(LINE.lampY);
+    const along = sstep(LINE.z0 - 3, LINE.z0 + 1, z).mul(sstep(LINE.z1 + 3, LINE.z1 - 1, z));
+    o.assign(U.uLightColor.mul(U.uLights).mul(exp(d.mul(d).add(dy.mul(dy)).mul(-1.0 / 9.0))).mul(along).mul(0.6));
+  });
+  return o;
 });
 
 // ---------- noise (same math as the GLSL it replaces) ----------
