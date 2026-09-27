@@ -6,8 +6,9 @@ import { mulberry32, lerp } from './noise.js';
 
 const V = THREE.Vector3;
 
-// the lines follow each bank just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD), z0..z1
-export const LINE = { z0: -52, z1: 38, K: 1.38, PAD: 0.4, lampY: 3.2 };
+// the lines follow each bank just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD), from the bridge to z1
+// (z0: where their light on the ground starts, near the bridge's corner posts)
+export const LINE = { z0: -59, z1: 38, K: 1.38, PAD: 0.4, lampY: 3.2 };
 export const bankX = (world, z, side) => world.riverX(z) + side * (world.riverHW(z) * LINE.K + LINE.PAD);
 
 const SPAN = 6.4; // pole spacing (m)
@@ -42,15 +43,18 @@ function bamboo(h, r, rng) {
   return paint(g, (x, yy, z) => (Math.hypot(x, z) > r * 1.08 ? NODE : BAMBOO));
 }
 
-// blockers: [{x, z, r}] the poles keep clear of (boulders, tree trunks)
-export function lanternData(world, blockers) {
+// blockers: [{x, z, r}] the poles keep clear of (boulders, tree trunks); anchors: {-1, 1} where each bank's line
+// starts, tied to the bridge's corner post (props.js bridgeRopeAnchors)
+export function lanternData(world, blockers, anchors) {
   const rng = mulberry32(31);
   const parts = [], hang = [], look = [];
   const clear = (x, z) => blockers.every((b) => Math.hypot(x - b.x, z - b.z) > b.r + 0.3);
   for (const side of [-1, 1]) {
-    // poles about SPAN apart along the bank, nudged along it off rocks and trees
-    const poles = [];
-    let z = LINE.z0;
+    // from the bridge, poles about SPAN apart along the bank, nudged along it off rocks and trees
+    const a = anchors[side];
+    const poles = [new V(a.x, a.y, a.z)];
+    let z = a.z + 1;
+    while (Math.hypot(bankX(world, z, side) - a.x, z - a.z) < SPAN) z += 0.1;
     while (z <= LINE.z1) {
       let zz = z;
       for (let t = 0; t < 12 && !clear(bankX(world, zz, side), zz); t++) zz += 0.3;

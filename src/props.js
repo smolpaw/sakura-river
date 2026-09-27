@@ -73,7 +73,11 @@ const WOOD = [0.16, 0.1, 0.07], ROOF = [0.07, 0.07, 0.075], WALL = [0.8, 0.74, 0
 // Lacquered arch with kōran railings (a bronze giboshi on every post), ribs and cross beams under the deck, braced
 // piers on stone footings and stone abutments. Lanterns hang from brackets on the railing and from four tall corner
 // posts; they join the riverside lanterns (fx.js makeLanterns), so the bridge returns their hanging points.
-export function bridgeData(world, zc) {
+export const BRIDGE_Z = -60;
+
+// the bridge's frame: pt(u, side, dy) is u 0..1 across the river (may run past the ends), side along the flow,
+// dy above the deck line
+function bridgeFrame(world, zc) {
   const rx = world.riverX(zc), hw = world.riverHW(zc);
   const [fx, fz] = world.flowDir(zc);
   const across = new V(fz, 0, -fx).normalize(); // perpendicular to flow
@@ -83,15 +87,27 @@ export function bridgeData(world, zc) {
   const endY = Math.max(world.height(center.x + across.x * half, center.z + across.z * half), world.height(center.x - across.x * half, center.z - across.z * half), 0.6) + 0.15;
   const rise = 2.4;
   const width = 2.6;
-  const N = 40;
-  const rng = mulberry32(17);
-  const parts = [], hang = [], look = [];
-  // u: 0..1 across the river (may run past the ends); side: offset along the flow; dy: above the deck line
   const pt = (u, side = 0, dy = 0) => {
     const s = (u * 2 - 1) * half;
     const arch = rise * (1 - Math.pow(Math.min(1, Math.abs(u * 2 - 1)), 2.1));
     return center.clone().addScaledVector(across, s).addScaledVector(along, side).add(new V(0, endY + arch + dy, 0));
   };
+  return { center, across, along, half, endY, rise, width, pt };
+}
+const CORNER = 0.035; // corner lamp posts stand this far (in u) past the deck ends
+const cornerOff = (width) => width * 0.5 + 0.28;
+
+// where the riverside lantern ropes tie on: the downstream corner post at each end (side -1: u = 0, +1: u = 1)
+export function bridgeRopeAnchors(world) {
+  const { width, pt } = bridgeFrame(world, BRIDGE_Z);
+  return { [-1]: pt(-CORNER, cornerOff(width), 2.42), [1]: pt(1 + CORNER, cornerOff(width), 2.42) };
+}
+
+export function bridgeData(world, zc) {
+  const { center, across, along, half, endY, rise, width, pt } = bridgeFrame(world, zc);
+  const N = 40;
+  const rng = mulberry32(17);
+  const parts = [], hang = [], look = [];
   const lantern = (p, paper) => { hang.push(p.x, p.y, p.z); look.push(rng() * 6.28, paper, 1.0 + rng() * 0.15, rng() * 6.28); };
   const giboshi = (t, s = 1) => {
     const cap = lathe([[0, 0], [0.1, 0], [0.1, 0.05], [0.07, 0.07], [0.12, 0.13], [0.13, 0.19], [0.09, 0.27], [0.03, 0.34], [0.012, 0.42], [0, 0.44]], 14, BRONZE);
@@ -168,16 +184,17 @@ export function bridgeData(world, zc) {
         parts.push(colorize(new THREE.BoxGeometry(1.0, 0.32, 0.95).applyMatrix4(new THREE.Matrix4().makeRotationY(Math.atan2(across.x, across.z) + (rng() - 0.5) * 0.08)).translate(c.x, y, c.z), STONE.map((v) => v * tone)));
       }
     }
+    const u = e + dir * CORNER;
     for (const sd of [-1, 1]) {
-      const off = sd * (width * 0.5 + 0.28);
-      const b = pt(e + dir * 0.035, off, -0.3), t = pt(e + dir * 0.035, off, 2.5);
+      const off = sd * cornerOff(width);
+      const b = pt(u, off, -0.3), t = pt(u, off, 2.5);
       parts.push(beam(b, t, 0.18, 0.18, VERM));
-      parts.push(beam(pt(e + dir * 0.035, off, 2.4), pt(e + dir * 0.035, off, 2.5), 0.22, 0.22, LACQUER));
+      parts.push(beam(pt(u, off, 2.4), pt(u, off, 2.5), 0.22, 0.22, LACQUER));
       giboshi(t, 1.1);
       // arm out along the flow, lantern hanging from its tip
-      const tip = pt(e + dir * 0.035, off + sd * 0.55, 2.3);
-      parts.push(beam(pt(e + dir * 0.035, off, 2.3), tip, 0.08, 0.1, LACQUER));
-      parts.push(beam(pt(e + dir * 0.035, off + sd * 0.1, 1.95), pt(e + dir * 0.035, off + sd * 0.4, 2.28), 0.05, 0.05, LACQUER));
+      const tip = pt(u, off + sd * 0.55, 2.3);
+      parts.push(beam(pt(u, off, 2.3), tip, 0.08, 0.1, LACQUER));
+      parts.push(beam(pt(u, off + sd * 0.1, 1.95), pt(u, off + sd * 0.4, 2.28), 0.05, 0.05, LACQUER));
       lantern(tip.clone().add(new V(0, -0.05, 0)), 1);
     }
   }

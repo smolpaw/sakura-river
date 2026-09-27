@@ -511,3 +511,4 @@ After every step, add: date, step, result with a link to its results file, decis
   - Bridge redrawn as a taiko-bashi: railing posts with bronze giboshi, three rails and struts, ribs and cross beams under the deck, braced piers on stone footings, stone abutments; ~2x the old bridge's triangles (still one draw). 14 lanterns on railing brackets and four corner posts join the riverside lantern draw; the bridge material sums their light (14 terms, only after dusk, only on bridge pixels).
   - Lanterns: two red bands across the middle of the paper (colour only, no cost).
   - Controls restyled (glass panel, segmented choices); subtitle and orbit hint removed.
+  - The riverside lantern lines now start at the bridge: each bank's first rope ties onto the bridge's downstream corner post (props.js bridgeRopeAnchors).

@@ -3,7 +3,7 @@
 import { createWorld } from '../world.js';
 import { paintFlowerAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
 import { grassData, flowersData, rocksData, rockPlan, forestData } from '../vegetation.js';
-import { fujiGeometry, bridgeData, pagodaGeometry } from '../props.js';
+import { fujiGeometry, bridgeData, bridgeRopeAnchors, pagodaGeometry, BRIDGE_Z } from '../props.js';
 import { fallenData } from '../petals.js';
 import { lanternData, lanternGeometry } from '../lanterns.js';
 import { tessellate } from '../stress.js';
@@ -25,7 +25,7 @@ export const JOBS = {
   bark: () => paintBark(3),
   fuji: () => { const w = world(); return fujiGeometry(w.peak.x, w.peak.z, w.peak.R, 820, 30); },
   props: ({ triMul }) => {
-    const b = bridgeData(world(), -60);
+    const b = bridgeData(world(), BRIDGE_Z);
     b.geo = tess(b.geo, triMul);
     return { bridge: b, pagoda: tess(pagodaGeometry(), triMul) };
   },
@@ -45,7 +45,7 @@ export const JOBS = {
     const l = L();
     const trees = [l.tree, ...l.small.map((sp) => [sp.x, 0, sp.z])].map(([x, , z]) => ({ x, z, r: 1 }));
     const rocks = rockPlan(world(), tier, xz(l.tree)).placements.map((r) => ({ x: r.x, z: r.z, r: r.sc }));
-    return { ...lanternData(world(), rocks.concat(trees)), lantern: lanternGeometry() };
+    return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world())), lantern: lanternGeometry() };
   },
   fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L())),
 };
