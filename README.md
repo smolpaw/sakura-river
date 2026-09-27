@@ -1,6 +1,6 @@
 # Sakura River
 
-A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain, with a vermilion bridge, a pagoda, paper lanterns strung along both banks and koi in the river. From dusk into the night, the lanterns glow. Everything is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used.
+A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain, with a vermilion bridge, a pagoda, paper lanterns strung along both banks and koi in the river. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Everything is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used.
 
 Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on every push to `main`).
 
@@ -15,7 +15,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 
 ## Layout
 
-- `index.html`: page markup (title, control bar, buttons, loading veil).
+- `index.html`: page markup (title, weather and time panel, camera buttons, quality menu, loading veil).
 - `src/ui.js`: wires the page controls to the engine.
 - `src/style.css`: page styles.
 - `src/main.js`: engine entry point: renderer, scene assembly, camera and controls, post-processing chain, adaptive quality, and the public API.
@@ -27,6 +27,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/water.js`: river shader and planar reflections.
 - `src/koi.js`: koi swimming under the river surface.
 - `src/sky.js`: sky dome, clouds and time-of-day palette.
+- `src/weather.js`: weather presets and times of day, the sky under cloud cover, rain streaks and lightning.
 - `src/petals.js`: simulated falling petals and the fallen-petal carpet.
 - `src/fx.js`: petal, pollen-mote and lantern materials.
 - `src/post.js`: light shafts pass and final grade (sharpening, local contrast, vignette).
@@ -39,11 +40,15 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 ## Engine API
 
     import { create } from './src/main.js';   // also exposed as window.SakuraRiver.create
-    const scene = create(canvas, { quality, onStats, onCinematicChange });
-    scene.set('wind' | 'petals' | 'river' | 'time' | 'fog' | 'bloom', value0to1);
+    const scene = create(canvas, { quality, fixedQuality, hour, onStats, onCinematicChange });
+    scene.setWeather(id, seconds);        // a preset from WEATHERS in src/weather.js, blended in
+    scene.setTimeOfDay(hour, animate);    // 0..24; moves forward as an eased time-lapse
+    scene.setClockRunning(true | false);  // a minute per second
+    scene.timeOfDay();                    // current clock hour
+    scene.set('wind' | 'petals' | 'river' | 'time' | 'fog' | 'bloom' | 'clouds' | 'rain' | 'lightning', value0to1);
     scene.setCinematic(true | false);
     scene.setAutoOrbit(true | false);
     scene.resetCamera();
     scene.dispose();
 
-`quality` is optional ('high', 'medium' or 'low'). When it's left out, the quality level is picked from the device.
+`quality` is optional ('high', 'medium' or 'low'). When it's left out, the quality level is picked from the device. With `fixedQuality` the adaptive resolution controller is off (the page does this when a quality is chosen by hand). `hour` is the starting clock hour. `set('time', t)` takes the old 0..1 scale (05:00..19:00; -0.08..1.08 reaches into the night).
