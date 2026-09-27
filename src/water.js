@@ -6,7 +6,7 @@ import {
 } from 'three/tsl';
 import { U, vnoise, sstep, applyFog } from './tsl.js';
 
-export function makeWater(geometry, depthMap, sky, { reflectionScale = 0 } = {}) {
+export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null } = {}) {
   const uniforms = { uHasRefl: uniform(0), uSpeed: uniform(1) };
   const { uZenith, uHorizon } = sky.uniforms;
   const uHB = uniform(depthMap.bounds), uRB = uniform(depthMap.rockBounds);
@@ -95,6 +95,7 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0 } = {})
     const alpha = mix(0.35, 0.96, sstep(0.0, 1.1, depth)).toVar();
     alpha.assign(max(alpha, fres));
     alpha.mulAssign(sstep(0.0, 0.06, bed)); // shoreline fade; over rocks a thin film stays
+    if (clearing) alpha.mulAssign(float(1.0).sub(clearing(vW.xz).mul(0.75))); // koi just under the surface
     alpha.assign(max(alpha, foam.mul(0.6).mul(sstep(0.0, 0.03, depth))));
     return vec4(applyFog(col, vW), alpha);
   });

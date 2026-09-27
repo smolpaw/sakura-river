@@ -13,6 +13,7 @@ import { petalMaterial, makeMotes, makeStringLights, rainMaterial } from './fx.j
 import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
+import { makeKoi, koiClearing } from './koi.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
 import { QualityController } from './quality.js';
@@ -22,9 +23,9 @@ import { runJobs } from './gen/pool.js';
 import { layout } from './gen/layout.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], grass: 40000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1 },
-  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1500, bloomRes: 0.75 },
-  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 900, bloomRes: 0.5 },
+  high: { pr: 2.0, terrain: [420, 440], grass: 40000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1, koi: 12 },
+  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1500, bloomRes: 0.75, koi: 10 },
+  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 900, bloomRes: 0.5, koi: 6 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -259,9 +260,12 @@ export async function create(canvas, opts = {}) {
   await yieldTask();
   // ---------- river ----------
   const depthMap = depthTexture(G.depth);
+  const koi = makeKoi(world, Q.koi, focus);
+  koi.mesh.name = 'koi';
+  scene.add(koi.mesh);
   // reflection buffer per CSS pixel above DPR 1.4 (0.35 at DPR 2 passes against sub-pixel A/A, 0.25 does not;
   // bench/dpr_parity.py); the light shafts are per CSS pixel at every DPR (see buildPipeline below)
-  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr) });
+  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr), clearing: koiClearing(koi.state, koi.count) });
   water.mesh.name = 'water';
   scene.add(water.mesh);
   const reflector = water.reflector ? water.reflector.reflector : null;
@@ -490,6 +494,7 @@ export async function create(canvas, opts = {}) {
     post.grade.uniforms.time.value = U.uTime.value;
 
     petals.update(dt, U.uTime.value, S.wind, S.river);
+    koi.update(dt, U.uTime.value);
     // string lights come on at dusk
     U.uLights.value = smoothstep(7, -2.5, skyNow.elev);
     lights.mesh.visible = warming || U.uLights.value > 0.001;
