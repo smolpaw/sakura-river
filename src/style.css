@@ -66,6 +66,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 #btn-sound[aria-pressed="false"] .i-off { display: block; }
 #btn-sound[aria-pressed="true"] { background: var(--glass); color: var(--washi); border-color: var(--glass-edge); }
 #btn-sound[aria-pressed="true"]:hover { background: rgba(60, 50, 70, 0.66); }
+#btn-sound.waiting svg { animation: breathe 1.6s ease-in-out infinite; }
 
 /* volume sliders */
 .mix { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -101,7 +102,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .veil-mark { font-family: 'Shippori Mincho', serif; font-weight: 700; font-size: 56px; color: var(--sakura); animation: breathe 2.4s ease-in-out infinite; }
 .veil-text { font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--washi-dim); text-align: center; padding-inline: 16px; }
 @keyframes breathe { 50% { opacity: 0.55; transform: scale(0.96); } }
-@media (prefers-reduced-motion: reduce) { .veil-mark { animation: none; } .side, .veil { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .veil-mark, #btn-sound.waiting svg { animation: none; } .side, .veil { transition: none; } }
 
 @media (max-width: 560px) {
   .side { left: 12px; right: 12px; width: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }

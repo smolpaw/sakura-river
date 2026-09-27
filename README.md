@@ -1,6 +1,6 @@
 # Sakura River
 
-A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain, with a lantern-lit vermilion drum bridge, a pagoda, paper lanterns strung along both banks and koi in the river. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), wind, rain, thunder after each lightning strike, birds and bush warblers by day, rice-paddy frogs at night. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used; the sounds are recordings (see Sound).
+A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain under a crescent moon at night, with a lantern-lit vermilion drum bridge, a pagoda, paper lanterns strung along both banks and koi in the river. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), water lapping under the bridge, wind, rain, thunder after each lightning strike, birds and bush warblers by day, rice-paddy frogs at night, and the pagoda's temple bell as the lanterns come on. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used; the sounds are recordings (see Sound).
 
 Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on every push to `main`).
 
@@ -26,12 +26,12 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
 - `src/water.js`: river shader and planar reflections.
 - `src/koi.js`: koi swimming under the river surface.
-- `src/sky.js`: sky dome, clouds and time-of-day palette.
+- `src/sky.js`: sky dome, moon, clouds and time-of-day palette.
 - `src/weather.js`: weather presets and times of day, the sky under cloud cover, rain streaks and lightning.
 - `src/petals.js`: simulated falling petals and the fallen-petal carpet.
 - `src/fx.js`: petal, pollen-mote and lantern materials.
 - `src/post.js`: light shafts pass and final grade (sharpening, local contrast, vignette).
-- `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera, thunder, bird songs.
+- `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera, thunder, bird songs, the evening bell.
 - `public/audio/`: the sound files, built by `tools/audio.mjs` (`node tools/audio.mjs`, needs ffmpeg) from the sources below.
 - `src/tsl.js`: shared uniforms, noise, wind, height fog, the lanterns' light on their surroundings and the lit material (TSL: compiles to WGSL and GLSL).
 - `src/materials.js`: the scene's lit materials.
@@ -52,6 +52,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
     scene.setAutoOrbit(true | false);
     scene.setSound(true | false);         // starts with the page's first click or key press if it has had none
     scene.setVolume('music' | 'nature', value0to1);
+    scene.soundWaiting();                 // true while the browser holds sound back until a click or key press
     scene.resetCamera();
     scene.dispose();
 
@@ -75,4 +76,6 @@ Ambience:
 - Drizzle: "Choishi Michi Trail Forest Rain and Birds Near Koyasan Japan" by Lawrence Dolton, radio aporee, CC BY-NC-SA 3.0. https://archive.org/details/aporee_69094_80175
 - Birds: "Kamikosawa Canyon Forest Near Koyasan Japan - Forest Birds Quiet" by Lawrence Dolton, radio aporee, CC BY-NC-SA 3.0. https://archive.org/details/aporee_68851_79871
 - Frogs: "Evening Chorus Rice Fields Kudoyama Japan - Closer" by Lawrence Dolton, radio aporee, CC BY-NC-SA 3.0. https://archive.org/details/aporee_68909_79946
+- Water under the bridge: "easy lapping of waves on the rocks-birds, White Sea, Russia" by Nikolaj Terent'ev, radio aporee, CC BY 3.0. https://archive.org/details/aporee_24924_28918
+- Temple bell: "Mii-dera" (the evening bell of Mii-dera, Ōtsu), radio aporee, Public Domain Mark 1.0. https://archive.org/details/aporee_31518_36212
 - Bush warbler: XC993079, Japanese Bush Warbler (*Horornis diphone*), Karuizawa, by Xavier Riera, xeno-canto, CC BY-NC-SA 4.0. https://xeno-canto.org/993079

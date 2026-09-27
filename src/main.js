@@ -297,7 +297,7 @@ export async function create(canvas, opts = {}) {
   rain.name = 'rain';
   rain.visible = false;
   scene.add(rain);
-  const sound = createSound(world);
+  const sound = createSound(world, bridge.center);
   const lightning = makeLightning((x, z, dist, bolt) => sound.thunder(x, z, dist, bolt, camera));
   lightning.mesh.name = 'lightning';
   scene.add(lightning.mesh);
@@ -562,7 +562,7 @@ export async function create(canvas, opts = {}) {
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = warming || U.uLights.value > 0.001;
-    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, camera });
+    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
     // camera
     if (cinematic) {
@@ -704,6 +704,7 @@ export async function create(canvas, opts = {}) {
     // music and ambience; sound starts with the page's first click or key press if it has not had one yet
     setSound(on) { sound.setEnabled(on); },
     setVolume(which, v) { sound.setVolume(which, v); },
+    soundWaiting() { return sound.waiting; }, // on, but held back by the browser until a click or key press
     soundInfo() { return sound.info(); },
     cineView(u) { const p = posCurve.getPointAt(u), t = tgtCurve.getPointAt(u); tween = null; camera.position.copy(p); controls.target.copy(t); clampCamera(); controls.update(); },
     setView(pos, target) { tween = null; camera.position.set(...pos); controls.target.set(...target); controls.update(); },

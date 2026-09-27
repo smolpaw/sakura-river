@@ -44,6 +44,11 @@ import { WEATHERS, TIMES } from './weather.js';
   function period(h) { return h >= 4.5 && h < 9 ? 'dawn' : h >= 9 && h < 17 ? 'afternoon' : h >= 17 && h < 19.5 ? 'dusk' : 'night'; }
   function showTime() {
     var h = engine.timeOfDay(), p = period(h);
+    var waiting = engine.soundWaiting();
+    if (waiting !== $('btn-sound').classList.contains('waiting')) {
+      $('btn-sound').classList.toggle('waiting', waiting);
+      $('btn-sound').title = waiting ? 'Click anywhere to start the sound' : 'Music and ambience';
+    }
     $('clock').textContent = clock(h);
     tBtns.forEach(function (b, i) { setPressed(b, TIMES[i].id === p); });
   }
@@ -60,7 +65,7 @@ import { WEATHERS, TIMES } from './weather.js';
 
   // ---------- sound: on unless muted before; it starts with the first click or key press ----------
   var soundOn = load('sr.sound') !== 'off';
-  var vols = { music: +(load('sr.vol.music') || 0.7), nature: +(load('sr.vol.nature') || 0.8) };
+  var vols = { music: +(load('sr.vol.music') || 0.75), nature: +(load('sr.vol.nature') || 0.4) };
   function showSound() {
     setPressed($('btn-sound'), soundOn);
     $('btn-sound').setAttribute('aria-label', soundOn ? 'Mute sound' : 'Turn sound on');
@@ -68,6 +73,8 @@ import { WEATHERS, TIMES } from './weather.js';
   }
   showSound();
   $('btn-sound').addEventListener('click', function () {
+    // while the browser holds sound back, this click is the one that starts it
+    if (this.classList.contains('waiting')) { this.classList.remove('waiting'); return; }
     soundOn = !soundOn;
     save('sr.sound', soundOn ? 'on' : 'off');
     showSound();

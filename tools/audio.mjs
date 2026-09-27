@@ -1,11 +1,12 @@
 // Builds public/audio/ from the source recordings credited in README.md (Sound).
 //   node tools/audio.mjs
 // Needs ffmpeg with libmp3lame. Sources are downloaded once into tools/.audio-cache/.
-// - Beds (river, wind, rain, birds, frogs) become seamless loops: the segment's tail is crossfaded into its head,
+// - Beds (river, wind, rain, birds, frogs, lapping) become seamless loops: the segment's tail is crossfaded into its head,
 //   and the file carries PAD seconds of the loop's own end before it and of its start after it, so the page can
 //   loop [PAD, PAD + length] and stay seamless whatever the MP3 decoder does with encoder delay and padding.
 //   They are levelled to BED_LUFS, with the peak held under -1 dBFS.
-// - One-shots (thunder, bush-warbler songs) are trimmed, faded and peak-normalised; mono, panned by the page.
+// - One-shots (thunder, bush-warbler songs, the temple bell) are trimmed, faded and peak-normalised (the bell
+//   levelled); mono, panned by the page.
 // - Music tracks are copied without their tags; their loudness is printed for the gains in src/audio.js.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -26,6 +27,8 @@ const SRC = {
   birds: 'https://archive.org/download/aporee_68851_79871/LDoltonKamikosawaForestBirdsQuiet250612.wav',
   frogs: 'https://archive.org/download/aporee_68909_79946/LDoltonKudoyamaRiceFieldsEveChorusCloser250612.wav',
   uguisu: 'https://xeno-canto.org/993079/download',
+  lapping: 'https://archive.org/download/aporee_24924_28918/12140612binaural2496.mp3',
+  bell: 'https://archive.org/download/aporee_31518_36212/54Miidera.mp3',
 };
 
 // loops: source, start and length in seconds (plus XF of crossfade taken after it), filters
@@ -39,6 +42,8 @@ const BEDS = [
   { out: 'rain', src: 'rain', at: 440, len: 40, af: 'highpass=f=140' },
   { out: 'birds', src: 'birds', at: 60, len: 50, af: 'highpass=f=150' },
   { out: 'frogs', src: 'frogs', at: 15, len: 50, af: 'highpass=f=150' },
+  // calm water lapping on rocks, between the recording's bird calls
+  { out: 'lapping', src: 'lapping', at: 19, len: 34, af: 'highpass=f=90,acompressor=threshold=0.03:ratio=4:attack=3:release=150' },
 ];
 const XF = 3;
 
@@ -47,6 +52,8 @@ const SHOTS = [
   ...[['3179', 0, 14], ['3115', 0.3, 17], ['3114', 0.1, 11.2], ['3182', 0.2, 24]].map(([n, at, len], i) => ({ out: `thunder-near-${i + 1}`, url: BSB(n), at, len })),
   ...[['3116', 0, 22], ['2718', 0.2, 23], ['3181', 0, 26]].map(([n, at, len], i) => ({ out: `thunder-far-${i + 1}`, url: BSB(n), at, len })),
   ...[[3.6, 3.6], [11.4, 3.6], [55.0, 3.8], [18.2, 8.8]].map(([at, len], i) => ({ out: `uguisu-${i + 1}`, src: 'uguisu', at, len, af: 'highpass=f=700', peak: -6 })),
+  // the evening bell's last three strikes, about 21 s apart, the last one decaying fully; a faint 5 kHz insect line
+  { out: 'bell', src: 'bell', at: 100.0, len: 65, af: 'highpass=f=40,lowpass=f=4000', lufs: -20 },
 ];
 
 const MUSIC = [
@@ -126,10 +133,11 @@ for (const b of BEDS) {
 
 for (const s of SHOTS) {
   const [ch] = decode(fetchSource(s.url || SRC[s.src]), s.at, s.len, s.af, 1);
-  const fi = Math.round((s.src ? 0.25 : 0.02) * RATE), fo = Math.round(Math.min(2.5, s.len * 0.25) * RATE), n = ch.length;
+  const fi = Math.round((s.src === 'uguisu' ? 0.25 : 0.02) * RATE), fo = Math.round(Math.min(2.5, s.len * 0.25) * RATE), n = ch.length;
   for (let i = 0; i < fi; i++) ch[i] *= i / fi;
   for (let i = 0; i < fo; i++) ch[n - 1 - i] *= (i / fo) ** 2;
-  scale([ch], 10 ** ((s.peak ?? -1) / 20) / peakOf([ch]));
+  const pk = 10 ** ((s.peak ?? -1) / 20) / peakOf([ch]);
+  scale([ch], s.lufs ? Math.min(pk, 10 ** ((s.lufs - loudness([ch])) / 20)) : pk);
   encode([ch], s.out, 4);
   console.log(`${s.out}: ${(n / RATE).toFixed(1)}s`);
 }

@@ -1,7 +1,7 @@
 // Sound: Japanese background music and the scene's ambience, mixed from the weather, the clock and the camera.
-// Loops (river, wind, rain, birds by day, frogs at night) play from decoded buffers, loaded when first heard and
+// Loops (river, wind, rain, birds by day, frogs at night, water lapping under the bridge) play from decoded buffers, loaded when first heard and
 // dropped after a minute unheard; thunder follows each lightning strike after the sound's travel time; bush
-// warblers sing in short bouts by day. Music streams through a media element. Files: public/audio/, built by
+// warblers sing in short bouts by day; the pagoda's bell tolls as the lanterns come on at dusk. Music streams through a media element. Files: public/audio/, built by
 // tools/audio.mjs. Nothing is fetched or created until sound is turned on.
 import { clamp, lerp, smoothstep } from './noise.js';
 
@@ -14,15 +14,17 @@ const THUNDER_NEAR = 4, THUNDER_FAR = 3, SONGS = 4;
 const SPEED_OF_SOUND = 343;
 const TICK = 0.1; // mix update interval, s
 
-export function createSound(world) {
+// world: river and pagoda positions; bridge: the bridge's centre (a Vector3)
+export function createSound(world, bridge) {
   const base = new URL('audio/', document.baseURI);
   const url = (name) => new URL(name + '.mp3', base).href;
   let ctx = null, on = false;
-  let master, natureBus, musicBus, trackGain, el, riverLP, riverPan;
-  const vol = { music: 0.7, nature: 0.8 };
+  let master, natureBus, musicBus, trackGain, el, riverLP, riverPan, lapLP, lapPan;
+  const vol = { music: 0.75, nature: 0.4 };
   let order = [], ti = 0, nextTimer = 0;
   const beds = {};
-  const shots = { thunder: null, songs: null };
+  const shots = { thunder: null, songs: null, bell: null };
+  let lights = -1, toll = 0; // the lanterns' level at the last mix; a bell toll waiting for its file (s left)
   let since = TICK, bout = null, songWait = 4;
   const lv = { birds: 0, lightning: 0 };
 
@@ -119,8 +121,12 @@ export function createSound(world) {
     riverPan = new StereoPannerNode(ctx);
     bed('river', [riverLP, riverPan]);
     for (const n of ['breeze', 'gale', 'drizzle', 'rain', 'birds', 'frogs']) bed(n);
+    lapLP = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 16000, Q: 0.5 });
+    lapPan = new StereoPannerNode(ctx);
+    bed('lapping', [lapLP, lapPan]);
     shots.thunder = shotSet([...Array(THUNDER_NEAR)].map((_, i) => `thunder-near-${i + 1}`).concat([...Array(THUNDER_FAR)].map((_, i) => `thunder-far-${i + 1}`)));
     shots.songs = shotSet([...Array(SONGS)].map((_, i) => `uguisu-${i + 1}`));
+    shots.bell = shotSet(['bell']);
 
     el = new Audio();
     el.preload = 'auto';
@@ -154,20 +160,26 @@ export function createSound(world) {
       setTimeout(() => { if (ctx && !(on && !document.hidden) && ctx.state === 'running') ctx.suspend(); }, 400);
     }
   }
-  // browsers start audio only from a user gesture: until one comes, the next click or key starts it
-  function unlock() {
+  // Browsers may hold audio back until the page gets a click or key press (Chrome lets sites the user often plays
+  // sound on start at once). Sound is tried at once, and every gesture tries again until one has run it.
+  function unlock(e) {
     if (!on) return;
     if (!ctx) build();
     apply();
-    ctx.resume().then(() => { if (ctx && ctx.state === 'running') removeUnlock(); }, () => {});
+    if (e) ctx.resume().then(() => { if (ctx && ctx.state === 'running') removeUnlock(); }, () => {});
   }
-  const GESTURES = ['pointerdown', 'keydown', 'touchend'];
+  const GESTURES = ['pointerdown', 'keydown', 'touchend', 'click'];
   document.addEventListener('visibilitychange', apply);
   function removeUnlock() { for (const g of GESTURES) window.removeEventListener(g, unlock, true); }
 
   // ---------- the mix ----------
   const dayOf = (h) => smoothstep(4.6, 5.8, h) * (1 - smoothstep(18.3, 19.4, h));
   const nightOf = (h) => Math.max(smoothstep(18.9, 20.2, h), 1 - smoothstep(3.6, 4.9, h));
+  // pan (-1 left .. 1 right) of world point x, z from the camera
+  function panTo(cam, x, z) {
+    const p = cam.position, e = cam.matrixWorld.elements;
+    return ((x - p.x) * e[0] + (z - p.z) * e[2]) / ((Math.hypot(e[0], e[2]) || 1) * (Math.hypot(x - p.x, z - p.z) || 1));
+  }
   function riverPlace(cam) {
     // nearest point of the river (its centre line, less the half-width) along the camera's stretch of it
     const p = cam.position;
@@ -176,9 +188,7 @@ export function createSound(world) {
       const x = world.riverX(z), d = Math.max(0, Math.hypot(x - p.x, z - p.z) - world.riverHW(z));
       if (d < best) { best = d; bx = x; bz = z; }
     }
-    const e = cam.matrixWorld.elements, rl = Math.hypot(e[0], e[2]) || 1, dl = Math.hypot(bx - p.x, bz - p.z) || 1;
-    const pan = ((bx - p.x) * e[0] + (bz - p.z) * e[2]) / (rl * dl);
-    return { dist: Math.hypot(best, Math.max(0, p.y - 0.5)), pan };
+    return { dist: Math.hypot(best, Math.max(0, p.y - 0.5)), pan: panTo(cam, bx, bz) };
   }
 
   function mix(st) {
@@ -198,6 +208,20 @@ export function createSound(world) {
     lv.birds = dayOf(h) * dawn * (1 - smoothstep(0.05, 0.4, rain)) * (1 - 0.7 * gale);
     setBed(beds.birds, 0.8 * lv.birds);
     setBed(beds.frogs, 0.9 * nightOf(h) * (1 - 0.5 * gale));
+    // water lapping around the bridge's posts, heard only close to it
+    const bd = st.camera.position.distanceTo(bridge), bn = Math.max(0, 1 / (1 + (bd / 9) ** 2) - 0.02);
+    setBed(beds.lapping, 1.5 * bn * (0.7 + 0.5 * st.river));
+    lapLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, bn * 1.6)), ctx.currentTime, 0.3);
+    lapPan.pan.setTargetAtTime(clamp(panTo(st.camera, bridge.x, bridge.z) * 0.7 * (1 - bn * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
+    // the evening bell: three strikes from the pagoda when the lanterns come on
+    keepShots(shots.bell, h > 15 && h < 21.5);
+    if (lights >= 0 && lights < 0.5 && st.lights >= 0.5) toll = 10;
+    lights = st.lights;
+    if (toll > 0 && shots.bell.state === 'ready') {
+      toll = 0;
+      const pd = Math.hypot(world.pagoda.x - st.camera.position.x, world.pagoda.z - st.camera.position.z);
+      play(shots.bell.bufs[0], { gain: 0.9, pan: panTo(st.camera, world.pagoda.x, world.pagoda.z) * 0.6, lowpass: lerp(4000, 2200, clamp(pd / 400, 0, 1)) });
+    } else toll = Math.max(0, toll - TICK);
     keepShots(shots.songs, lv.birds > 0.2);
     lv.lightning = st.lightning;
     keepShots(shots.thunder, st.lightning > 0.02);
@@ -220,9 +244,9 @@ export function createSound(world) {
       on = !!v;
       if (on) {
         if (navigator.audioSession) navigator.audioSession.type = 'playback'; // iOS: play with the ringer switch off
+        lights = -1; // no bell for a dusk that passed while sound was off
         for (const g of GESTURES) window.addEventListener(g, unlock, true);
-        // no context before the page has had a gesture: the browser would keep it suspended (and warn)
-        if (ctx || !navigator.userActivation || navigator.userActivation.hasBeenActive) unlock();
+        unlock();
       } else { removeUnlock(); apply(); }
     },
     setVolume(which, v) {
@@ -231,7 +255,7 @@ export function createSound(world) {
       (which === 'music' ? musicBus : natureBus).gain.setTargetAtTime(vol[which] ** 2, ctx.currentTime, 0.1);
       if (which === 'music') apply();
     },
-    // per frame: st = { wind, river, rain, lightning (0..1 settings), hour, camera }
+    // per frame: st = { wind, river, rain, lightning (0..1 settings), hour, lights (the lanterns, 0..1), camera }
     update(dt, st) {
       if (!this.active) return;
       sing(dt);
@@ -244,8 +268,7 @@ export function createSound(world) {
       if (!this.active || shots.thunder.state !== 'ready') return;
       const near = bolt && dist < 650;
       const i = near ? Math.floor(Math.random() * THUNDER_NEAR) : THUNDER_NEAR + Math.floor(Math.random() * THUNDER_FAR);
-      const p = camera.position, e = camera.matrixWorld.elements;
-      const pan = ((x - p.x) * e[0] + (z - p.z) * e[2]) / ((Math.hypot(e[0], e[2]) || 1) * (Math.hypot(x - p.x, z - p.z) || 1));
+      const pan = panTo(camera, x, z);
       const k = clamp((dist - 380) / 520, 0, 1);
       play(shots.thunder.bufs[i], {
         gain: (near ? lerp(1.4, 0.9, k) : 0.8) * lerp(0.6, 1, lv.lightning),
@@ -254,7 +277,9 @@ export function createSound(world) {
       });
     },
     // debug: the context's state and each loop's load state and level
-    info() { return { state: ctx ? ctx.state : 'none', on, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state }; },
+    // sound is on but the browser holds it back until the page gets a click or key press
+    get waiting() { return on && !document.hidden && (!ctx || ctx.state !== 'running' || (vol.music > 0 && el.paused && !nextTimer)); },
+    info() { return { state: ctx ? ctx.state : 'none', on, waiting: this.waiting, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state, bell: shots.bell && shots.bell.state, lights }; },
     dispose() { on = false; removeUnlock(); clearTimeout(nextTimer); document.removeEventListener('visibilitychange', apply); if (el) el.pause(); if (ctx) ctx.close(); ctx = null; },
   };
 }
