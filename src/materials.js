@@ -127,6 +127,19 @@ export function propMaterial(key, extra = {}) {
   return new LitMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, side: THREE.DoubleSide, ...extra, colorNode: vec3(vnoise(wp.xz.mul(4.0).add(wp.y.mul(6.0))).mul(0.24).add(0.88)) });
 }
 
+// the bridge: prop material lit by its own lanterns after dusk (a sum over their centres, skipped by day)
+export function bridgeMaterial(hang) {
+  const lamps = [];
+  for (let i = 0; i < hang.length; i += 3) lamps.push(vec3(hang[i], hang[i + 1] - 0.36, hang[i + 2]));
+  return new LitMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.DoubleSide, colorNode: vec3(vnoise(wp.xz.mul(4.0).add(wp.y.mul(6.0))).mul(0.24).add(0.88)) }, (out) => Fn(() => {
+    const glow = float(0).toVar();
+    If(U.uLights.greaterThan(0.0), () => {
+      for (const c of lamps) { const d = positionWorld.sub(c); glow.addAssign(float(1.0).div(dot(d, d).mul(3.0).add(0.25))); }
+    });
+    return out.add(diffuseColor.rgb.mul(U.uLightColor).mul(U.uLights).mul(glow).mul(0.45));
+  })());
+}
+
 export function fujiMaterial() {
   return new LitMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, colorNode: vec3(vnoise(wp.xz.mul(0.05)).mul(0.2).add(0.9)) }, (out) => Fn(() => {
     // snow picks up sky light (cool) and alpenglow

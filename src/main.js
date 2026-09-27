@@ -230,10 +230,13 @@ export async function create(canvas, opts = {}) {
   const fuji = makeFuji(G.fuji, M.fujiMaterial());
   fuji.name = 'fuji';
   scene.add(fuji);
-  const lanterns = makeLanterns(G.lanterns, G.lanterns.lantern);
+  // the bridge's lanterns join the riverside ones (one instanced draw)
+  const lampSets = [G.lanterns, G.props.bridge.lamps];
+  const cat = (k) => { const out = new Float32Array(lampSets.reduce((n, d) => n + d[k].length, 0)); let o = 0; for (const d of lampSets) { out.set(d[k], o); o += d[k].length; } return out; };
+  const lanterns = makeLanterns({ ...G.lanterns, hang: cat('hang'), look: cat('look'), n: G.lanterns.n + G.props.bridge.lamps.n }, G.lanterns.lantern);
   lanterns.group.name = 'lanterns';
   scene.add(lanterns.group);
-  const bridge = makeBridge(G.props.bridge, M.propMaterial('wood', { roughness: 0.55 }));
+  const bridge = makeBridge(G.props.bridge, M.bridgeMaterial(G.props.bridge.lamps.hang));
   bridge.mesh.name = 'bridge';
   scene.add(bridge.mesh);
   const pagoda = makePagoda(world, G.props.pagoda, world.pagoda.x, world.pagoda.z, 1.0, M.propMaterial('pagoda', { roughness: 0.7 }));
