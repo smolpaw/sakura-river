@@ -17,6 +17,7 @@ import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
 import { makeKoi, koiClearing } from './koi.js';
 import { makeKittens } from './kittens.js';
+import { makeBirds } from './birds.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
 import { QualityController } from './quality.js';
@@ -302,6 +303,8 @@ export async function create(canvas, opts = {}) {
   // ---------- kittens ----------
   const kittens = makeKittens({ world, data: G.kitten, tree: { x: TX, z: TZ }, roots: G.treeMain[0].roots, rocks: G.kitten.rocks, petals, camera: camera.position, a2c: msaa > 0, shells: Q.kitten[1] });
   scene.add(kittens.group);
+  const birds = makeBirds(world, { x: TX, z: TZ });
+  scene.add(birds.group);
   const rain = makeRain(Q.rain);
   rain.name = 'rain';
   rain.visible = false;
@@ -581,6 +584,7 @@ export async function create(canvas, opts = {}) {
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = warming || U.uLights.value > 0.001;
     kittens.update(dt, { t: U.uTime.value, rain: S.rain, wind: S.wind / 1.6, windDir: U.uWindDir.value, sunVis: U.uSunVis.value, lights: U.uLights.value, hour: clockH, flash });
+    birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
     // camera
@@ -770,6 +774,7 @@ export async function create(canvas, opts = {}) {
     backend: backendName,
     // kittens: what each is doing; make one do something ('groom', 'hunt', 'sleep', 'zoomies', 'ambush', 'box', 'chase', 'greet', ...); look at one from `dist` metres
     kittenInfo() { return kittens.info(); },
+    birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
     kittenAct(i, name) { return kittens.act(i, name); },
     kittenView(i = 0, dist = 1.6, angle = 0.6, height = 0.4) {
       const r = kittens.kittens[i].rig, a = r.yaw + angle;
