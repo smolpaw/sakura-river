@@ -1,0 +1,2677 @@
+{
+ "date": "2026-09-27T00:07:33.411Z",
+ "workload": "hero",
+ "backend": "webgl",
+ "angle": "default",
+ "chromium": "Chrome/150.0.7871.128",
+ "flags": [
+  "--disable-frame-rate-limit",
+  "--disable-gpu-vsync",
+  "--disable-background-timer-throttling",
+  "--disable-renderer-backgrounding",
+  "--disable-backgrounding-occluded-windows",
+  "--force-device-scale-factor=2",
+  "--window-size=1280,800",
+  "--enable-webgpu-developer-features",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--disable-extensions"
+ ],
+ "env": {
+  "dpr": 2,
+  "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  "crossOriginIsolated": true,
+  "webgl": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL ES 3.2)",
+  "webglTimer": true,
+  "webgpu": {
+   "vendor": "nvidia",
+   "architecture": "turing",
+   "description": "NVIDIA GeForce RTX 2060",
+   "device": "0x1f08",
+   "features": [
+    "depth32float-stencil8",
+    "rg11b10ufloat-renderable",
+    "texture-formats-tier1",
+    "bgra8unorm-storage",
+    "texture-compression-bc",
+    "dual-source-blending",
+    "core-features-and-limits",
+    "float32-filterable",
+    "indirect-first-instance",
+    "float32-blendable",
+    "depth-clip-control",
+    "texture-compression-bc-sliced-3d",
+    "timestamp-query",
+    "texture-formats-tier2",
+    "clip-distances",
+    "primitive-index",
+    "texture-component-swizzle",
+    "subgroups"
+   ]
+  }
+ },
+ "runsPerArm": 5,
+ "frames": 300,
+ "warmup": 120,
+ "clockTolerance": 0.05,
+ "clockLock": false,
+ "clockAtStart": {
+  "gr": 1890,
+  "mem": 7000,
+  "pstate": "P0",
+  "reasons": 1,
+  "temp": 78,
+  "power": 60.24,
+  "powerLimit": 170
+ },
+ "idle": {
+  "procs": [
+   "Hyprland",
+   "Xwayland",
+   "/usr/bin/walker",
+   "/usr/bin/swayosd-server",
+   "/usr/bin/ghostty",
+   "hyprlock"
+  ],
+  "absorbed": []
+ },
+ "arms": {
+  "A": {
+   "label": "base0",
+   "build": {
+    "label": "base0",
+    "ref": "003fe11",
+    "sha": "003fe11647a17f4dff853066e5849ba7129c9fa5",
+    "dirty": false,
+    "three": "0.170.0",
+    "builtAt": "2026-09-26T19:48:24.083Z",
+    "bytes": 771145
+   }
+  },
+  "B": {
+   "label": "p2",
+   "build": {
+    "label": "p2",
+    "ref": "HEAD",
+    "sha": "6091a1f3bcd5ae4d8dcf7cb2e34c11caad101ff0",
+    "dirty": false,
+    "three": "0.186.1",
+    "builtAt": "2026-09-26T23:34:35.027Z",
+    "bytes": 1495526
+   }
+  }
+ },
+ "order": [
+  "B3",
+  "A4",
+  "B1",
+  "A1",
+  "B0",
+  "B2",
+  "B4",
+  "A2",
+  "A0",
+  "A3"
+ ],
+ "geomeanRatio": {
+  "gpu": 0.7662390905568126,
+  "cpu": 2.262457596518259
+ },
+ "views": {
+  "hero": {
+   "gpuRatio": {
+    "ratio": 0.7697281103017781,
+    "lo": 0.7598259142371971,
+    "hi": 0.776581727871474
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.7793741645312371,
+    "lo": 0.7650051721370068,
+    "hi": 0.7938767250799342
+   },
+   "cpuRatio": {
+    "ratio": 2.199272725366955,
+    "lo": 2.0680667648114195,
+    "hi": 2.332086921050447
+   },
+   "A": {
+    "gpu": {
+     "median": 26.080960000000015,
+     "runMedians": [
+      26.03865600000001,
+      26.115776000000004,
+      26.079664000000015,
+      26.058496000000005,
+      26.903552000000005
+     ],
+     "bimodality": 0.7465882086476725
+    },
+    "cpu": {
+     "median": 1.380000002682209,
+     "min": 1.199999988079071,
+     "runMedians": [
+      1.415000006556511,
+      1.2849999964237213,
+      1.2950000017881393,
+      1.477500006556511,
+      1.4025000035762787
+     ],
+     "bimodality": 0.5050573718905373
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 20.190416,
+     "runMedians": [
+      20.042128000000005,
+      20.239839999999994,
+      20.282688,
+      20.228703999999997,
+      20.191999999999993
+     ],
+     "bimodality": 0.45256813029209314
+    },
+    "cpu": {
+     "median": 3.0150000005960464,
+     "min": 2.530000001192093,
+     "runMedians": [
+      2.8599999994039536,
+      3.155000001192093,
+      3.100000001490116,
+      2.865000009536743,
+      3.140000008046627
+     ],
+     "bimodality": 0.5268361120876335
+    }
+   },
+   "labelsA": {
+    "other": 0.005376000000000001,
+    "reflection": 1.804448,
+    "shadow": 0.9515199999999998,
+    "scene": 15.269504,
+    "godrays": 3.515232,
+    "bloom": 1.483296,
+    "output": 1.287136,
+    "grade": 1.705568
+   },
+   "labelsB": {
+    "other": 0.0016,
+    "Render Pipeline": 1.6755360000000001,
+    "RTT": 3.0183840000000006,
+    "scene": 12.642496000000001,
+    "shadow": 0.845744,
+    "reflection": 1.841328
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 121,
+     "triangles": 5315047,
+     "points": 500,
+     "passes": 22,
+     "programs": 35,
+     "rtMemMB": 1251.1817626953125,
+     "bandwidthMB": 1860.2637939453125,
+     "renderTargets": [
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 4096,
+       "h": 4096,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 118,
+     "triangles": 5316044,
+     "passes": 19,
+     "programs": 157,
+     "rtMemMB": 879.4044189453125,
+     "bandwidthMB": 816.1231689453125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  },
+  "cine000": {
+   "gpuRatio": {
+    "ratio": 0.7803407515023444,
+    "lo": 0.7537400413136687,
+    "hi": 0.7956129726258737
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.8156122146881165,
+    "lo": 0.787638264791405,
+    "hi": 0.8305199316031546
+   },
+   "cpuRatio": {
+    "ratio": 2.3266752583190464,
+    "lo": 2.211169689832757,
+    "hi": 2.441234202024601
+   },
+   "A": {
+    "gpu": {
+     "median": 25.682528000000005,
+     "runMedians": [
+      25.682528000000005
+     ],
+     "bimodality": 0.2705497592404043
+    },
+    "cpu": {
+     "median": 1.5499999970197678,
+     "min": 1.344999998807907,
+     "runMedians": [
+      1.5424999967217445,
+      1.6325000002980232,
+      1.4800000041723251,
+      1.4900000020861626,
+      1.614999994635582
+     ],
+     "bimodality": 0.39800901430429675
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 19.97048,
+     "runMedians": [
+      19.84161600000001,
+      20.211264000000003,
+      20.112848,
+      20.106384000000002,
+      19.933504000000006
+     ],
+     "bimodality": 0.47478331674425794
+    },
+    "cpu": {
+     "median": 3.635000005364418,
+     "min": 3.114999994635582,
+     "runMedians": [
+      3.3624999970197678,
+      3.6300000101327896,
+      3.709999993443489,
+      3.592500001192093,
+      3.7599999979138374
+     ],
+     "bimodality": 0.5241351935219062
+    }
+   },
+   "labelsA": {
+    "other": 0.0054080000000000005,
+    "reflection": 3.118496,
+    "shadow": 0.989024,
+    "scene": 13.143744,
+    "godrays": 3.721184,
+    "bloom": 1.460032,
+    "output": 1.232768,
+    "grade": 1.7736
+   },
+   "labelsB": {
+    "other": 0.001536,
+    "Render Pipeline": 1.675248,
+    "RTT": 3.1091039999999994,
+    "scene": 11.173487999999999,
+    "shadow": 0.8440160000000001,
+    "reflection": 3.012496
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 142,
+     "triangles": 5731823,
+     "points": 500,
+     "passes": 22,
+     "programs": 35,
+     "rtMemMB": 1251.1817626953125,
+     "bandwidthMB": 1860.2637939453125,
+     "renderTargets": [
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 4096,
+       "h": 4096,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 139,
+     "triangles": 5732820,
+     "passes": 19,
+     "programs": 174,
+     "rtMemMB": 879.4044189453125,
+     "bandwidthMB": 816.1231689453125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  },
+  "cine250": {
+   "gpuRatio": {
+    "ratio": 0.7564431828715523,
+    "lo": 0.7464966672960389,
+    "hi": 0.7634107335002942
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.7697712028360646,
+    "lo": 0.7595409910940223,
+    "hi": 0.7777809396917805
+   },
+   "cpuRatio": {
+    "ratio": 2.3754427348446283,
+    "lo": 2.2429588045478384,
+    "hi": 2.512545203867552
+   },
+   "A": {
+    "gpu": {
+     "median": 28.873840000000005,
+     "runMedians": [
+      28.921391999999997,
+      28.804415999999996,
+      28.888160000000006,
+      28.859520000000003
+     ],
+     "bimodality": 0.46503992114870013
+    },
+    "cpu": {
+     "median": 1.2750000059604645,
+     "min": 1.1200000047683716,
+     "runMedians": [
+      1.2849999964237213,
+      1.2524999976158142,
+      1.1825000047683716,
+      1.3025000095367432,
+      1.3299999982118607
+     ],
+     "bimodality": 0.41955120911417026
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 21.707408,
+     "runMedians": [
+      21.565472000000003,
+      22.030112000000003,
+      22.027344,
+      21.84899200000001,
+      21.714496000000004
+     ],
+     "bimodality": 0.6395441138813427
+    },
+    "cpu": {
+     "median": 3.0750000029802322,
+     "min": 2.5150000005960464,
+     "runMedians": [
+      2.769999995827675,
+      3.0049999952316284,
+      3.064999997615814,
+      3.2325000017881393,
+      3.0174999982118607
+     ],
+     "bimodality": 0.5082939102516408
+    }
+   },
+   "labelsA": {
+    "other": 0.005776,
+    "reflection": 1.759696,
+    "shadow": 1.00184,
+    "scene": 17.898944,
+    "godrays": 3.560176,
+    "bloom": 1.5614400000000002,
+    "output": 1.339888,
+    "grade": 1.792752
+   },
+   "labelsB": {
+    "other": 0.0016,
+    "Render Pipeline": 1.703808,
+    "RTT": 2.9885920000000006,
+    "scene": 14.363696000000001,
+    "shadow": 0.858528,
+    "reflection": 1.635968
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 112,
+     "triangles": 5106791,
+     "points": 500,
+     "passes": 22,
+     "programs": 35,
+     "rtMemMB": 1251.1817626953125,
+     "bandwidthMB": 1860.2637939453125,
+     "renderTargets": [
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 4096,
+       "h": 4096,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 109,
+     "triangles": 5107788,
+     "passes": 19,
+     "programs": 177,
+     "rtMemMB": 879.4044189453125,
+     "bandwidthMB": 816.1231689453125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  },
+  "cine500": {
+   "gpuRatio": {
+    "ratio": 0.7398417268638409,
+    "lo": 0.7234896267966938,
+    "hi": 0.7526694640737018
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.7542516869555653,
+    "lo": 0.7400200438477774,
+    "hi": 0.7650437745572956
+   },
+   "cpuRatio": {
+    "ratio": 2.133492250635447,
+    "lo": 1.965683868969404,
+    "hi": 2.303707540766854
+   },
+   "A": {
+    "gpu": {
+     "median": 25.356671999999996,
+     "runMedians": [
+      25.356671999999996
+     ],
+     "bimodality": null
+    },
+    "cpu": {
+     "median": 1.2649999931454659,
+     "min": 1.125,
+     "runMedians": [
+      1.285000003874302,
+      1.217500001192093,
+      1.222500003874302,
+      1.3374999985098839,
+      1.2300000041723251
+     ],
+     "bimodality": 0.6213972293781386
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 18.327136000000003,
+     "runMedians": [
+      18.306688,
+      19.055056000000004,
+      19.01097599999999,
+      18.666976000000005
+     ],
+     "bimodality": 0.7122693309713296
+    },
+    "cpu": {
+     "median": 2.780000001192093,
+     "min": 2.2849999964237213,
+     "runMedians": [
+      2.429999992251396,
+      2.869999997317791,
+      2.830000013113022,
+      2.385000005364418,
+      2.910000003874302
+     ],
+     "bimodality": 0.3734168980640774
+    }
+   },
+   "labelsA": {},
+   "labelsB": {
+    "other": 0.0016640000000000001,
+    "Render Pipeline": 1.69904,
+    "RTT": 3.9792640000000006,
+    "scene": 9.79184,
+    "shadow": 0.857504,
+    "reflection": 1.963232
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 110,
+     "triangles": 5025895,
+     "points": 500,
+     "passes": 22,
+     "programs": 35,
+     "rtMemMB": 1251.1817626953125,
+     "bandwidthMB": 1860.2637939453125,
+     "renderTargets": [
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 4096,
+       "h": 4096,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 107,
+     "triangles": 5026892,
+     "passes": 19,
+     "programs": 177,
+     "rtMemMB": 879.4044189453125,
+     "bandwidthMB": 816.1231689453125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  },
+  "cine750": {
+   "gpuRatio": {
+    "ratio": 0.7857506543775672,
+    "lo": 0.7650086672667648,
+    "hi": 0.8057977740909252
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.7777232052524284,
+    "lo": 0.7411962762687194,
+    "hi": 0.8168746553147481
+   },
+   "cpuRatio": {
+    "ratio": 2.2858711510577474,
+    "lo": 2.161241885294015,
+    "hi": 2.3906874617958707
+   },
+   "A": {
+    "gpu": {
+     "median": 25.04174400000001,
+     "runMedians": [
+      25.342400000000005,
+      24.64097600000001
+     ],
+     "bimodality": 0.4511881685836108
+    },
+    "cpu": {
+     "median": 1.3699999898672104,
+     "min": 1.219999998807907,
+     "runMedians": [
+      1.3499999940395355,
+      1.4149999991059303,
+      1.3700000047683716,
+      1.3100000023841858,
+      1.385000005364418
+     ],
+     "bimodality": 0.4511054168270965
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 18.846272000000003,
+     "runMedians": [
+      18.78643200000001,
+      19.947552000000005,
+      19.838239999999995,
+      19.722831999999997,
+      19.891119999999994
+     ],
+     "bimodality": 0.6828601670514275
+    },
+    "cpu": {
+     "median": 3.127499997615814,
+     "min": 2.5900000035762787,
+     "runMedians": [
+      3.059999994933605,
+      2.8524999916553497,
+      3.2100000008940697,
+      3.179999992251396,
+      3.309999994933605
+     ],
+     "bimodality": 0.473649711276572
+    }
+   },
+   "labelsA": {
+    "other": 0.006096000000000001,
+    "reflection": 2.134016,
+    "shadow": 1.019232,
+    "scene": 13.405104000000001,
+    "godrays": 3.956288,
+    "bloom": 1.5531199999999998,
+    "output": 1.3391199999999999,
+    "grade": 1.805968
+   },
+   "labelsB": {
+    "other": 0.0015359999999999998,
+    "Render Pipeline": 1.712128,
+    "RTT": 3.3931199999999997,
+    "scene": 10.870016,
+    "shadow": 0.862208,
+    "reflection": 1.937344
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 127,
+     "triangles": 5438047,
+     "points": 500,
+     "passes": 22,
+     "programs": 35,
+     "rtMemMB": 1251.1817626953125,
+     "bandwidthMB": 1860.2637939453125,
+     "renderTargets": [
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 4096,
+       "h": 4096,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 16588800
+      },
+      {
+       "w": 3840,
+       "h": 2160,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 497664000
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 1920,
+       "h": 1080,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 960,
+       "h": 540,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 480,
+       "h": 270,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 240,
+       "h": 135,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "w": 120,
+       "h": 68,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 124,
+     "triangles": 5439044,
+     "passes": 19,
+     "programs": 179,
+     "rtMemMB": 879.4044189453125,
+     "bandwidthMB": 816.1231689453125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  }
+ },
+ "runs": [
+  {
+   "arm": "B",
+   "i": 3,
+   "contended": null,
+   "createMs": 6111.395000010729,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 713,
+    "median": 1815,
+    "min": 300,
+    "p10": 1365,
+    "p90": 1890,
+    "mean": 1687.0687237026648,
+    "bimodality": 0.9321190258542114
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1815,
+     "n": 120,
+     "gpuMedian": 20.042128000000005,
+     "cpuMedian": 2.8599999994039536,
+     "cpuTotalMedian": 3.0099999979138374
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1815,
+     "n": 120,
+     "gpuMedian": 19.84161600000001,
+     "cpuMedian": 3.3624999970197678,
+     "cpuTotalMedian": 3.160000003874302
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 21.565472000000003,
+     "cpuMedian": 2.769999995827675,
+     "cpuTotalMedian": 2.594999998807907
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 197,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 18.306688,
+     "cpuMedian": 2.429999992251396,
+     "cpuTotalMedian": 2.679999992251396
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 143,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1785,
+     "n": 120,
+     "gpuMedian": 18.78643200000001,
+     "cpuMedian": 3.059999994933605,
+     "cpuTotalMedian": 2.980000004172325
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 4,
+   "contended": null,
+   "createMs": 1489.0600000023842,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 993,
+    "median": 1755,
+    "min": 840,
+    "p10": 1650,
+    "p90": 1800,
+    "mean": 1735.9969788519638,
+    "bimodality": 0.5891859523658787
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 183,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 26.03865600000001,
+     "cpuMedian": 1.415000006556511,
+     "cpuTotalMedian": 1.1899999976158142
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 295,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1725,
+     "n": 120,
+     "gpuMedian": 25.682528000000005,
+     "cpuMedian": 1.5424999967217445,
+     "cpuTotalMedian": 1.4249999970197678
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 71,
+      "throttle": 169,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": 28.921391999999997,
+     "cpuMedian": 1.2849999964237213,
+     "cpuTotalMedian": 1.1950000077486038
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 56,
+      "throttle": 244,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.285000003874302,
+     "cpuTotalMedian": null
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 54,
+      "throttle": 220,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 25.342400000000005,
+     "cpuMedian": 1.3499999940395355,
+     "cpuTotalMedian": 1.2549999952316284
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 1,
+   "contended": null,
+   "createMs": 3974.625,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 775,
+    "median": 1800,
+    "min": 300,
+    "p10": 1680,
+    "p90": 1875,
+    "mean": 1715.032258064516,
+    "bimodality": 0.9385183730023307
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 92,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 20.239839999999994,
+     "cpuMedian": 3.155000001192093,
+     "cpuTotalMedian": 2.739999994635582
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 237,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 20.211264000000003,
+     "cpuMedian": 3.6300000101327896,
+     "cpuTotalMedian": 3.2150000035762787
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 169,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": 22.030112000000003,
+     "cpuMedian": 3.0049999952316284,
+     "cpuTotalMedian": 2.844999998807907
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 300,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1725,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 2.869999997317791,
+     "cpuTotalMedian": null
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 19,
+      "throttle": 272,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1710,
+     "n": 120,
+     "gpuMedian": 19.947552000000005,
+     "cpuMedian": 2.8524999916553497,
+     "cpuTotalMedian": 2.7349999994039536
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 1,
+   "contended": null,
+   "createMs": 1267.4399999976158,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 996,
+    "median": 1740,
+    "min": 690,
+    "p10": 1650,
+    "p90": 1800,
+    "mean": 1730,
+    "bimodality": 0.6424872679438054
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 12,
+      "throttle": 246,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 26.115776000000004,
+     "cpuMedian": 1.2849999964237213,
+     "cpuTotalMedian": 1.2325000017881393
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 300,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1725,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.6325000002980232,
+     "cpuTotalMedian": null
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 49,
+      "throttle": 249,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1725,
+     "n": 120,
+     "gpuMedian": 28.804415999999996,
+     "cpuMedian": 1.2524999976158142,
+     "cpuTotalMedian": 290.66499999910593
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 24,
+      "throttle": 276,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.217500001192093,
+     "cpuTotalMedian": null
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 114,
+      "throttle": 186,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1695,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.4149999991059303,
+     "cpuTotalMedian": null
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 0,
+   "contended": null,
+   "createMs": 3911.609999999404,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 781,
+    "median": 1800,
+    "min": 405,
+    "p10": 1680,
+    "p90": 1875,
+    "mean": 1732.3751600512164,
+    "bimodality": 0.8767891273455767
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 83,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 20.282688,
+     "cpuMedian": 3.100000001490116,
+     "cpuTotalMedian": 2.730000004172325
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 226,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 20.112848,
+     "cpuMedian": 3.709999993443489,
+     "cpuTotalMedian": 3.119999997317791
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 204,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1755,
+     "n": 120,
+     "gpuMedian": 22.027344,
+     "cpuMedian": 3.064999997615814,
+     "cpuTotalMedian": 2.594999998807907
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 16,
+      "throttle": 252,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": 19.055056000000004,
+     "cpuMedian": 2.830000013113022,
+     "cpuTotalMedian": 2.5275000035762787
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 10,
+      "throttle": 265,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1710,
+     "n": 120,
+     "gpuMedian": 19.838239999999995,
+     "cpuMedian": 3.2100000008940697,
+     "cpuTotalMedian": 3.0349999964237213
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 2,
+   "contended": null,
+   "createMs": 4009.6500000059605,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 770,
+    "median": 1800,
+    "min": 405,
+    "p10": 1693.5,
+    "p90": 1875,
+    "mean": 1728.3506493506493,
+    "bimodality": 0.91729283368652
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 30,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1815,
+     "n": 120,
+     "gpuMedian": 20.228703999999997,
+     "cpuMedian": 2.865000009536743,
+     "cpuTotalMedian": 2.7849999964237213
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 250,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 20.106384000000002,
+     "cpuMedian": 3.592500001192093,
+     "cpuTotalMedian": 3.405000001192093
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 15,
+      "throttle": 101,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1770,
+     "n": 120,
+     "gpuMedian": 21.84899200000001,
+     "cpuMedian": 3.2325000017881393,
+     "cpuTotalMedian": 2.630000002682209
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 45,
+      "throttle": 252,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1710,
+     "n": 120,
+     "gpuMedian": 19.01097599999999,
+     "cpuMedian": 2.385000005364418,
+     "cpuTotalMedian": 2.3800000101327896
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 24,
+      "throttle": 254,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": 19.722831999999997,
+     "cpuMedian": 3.179999992251396,
+     "cpuTotalMedian": 3.0525000020861626
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 4,
+   "contended": null,
+   "createMs": 3963.109999999404,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 770,
+    "median": 1800,
+    "min": 300,
+    "p10": 1680,
+    "p90": 1875,
+    "mean": 1717.4415584415585,
+    "bimodality": 0.9325476082337204
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 25,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1815,
+     "n": 120,
+     "gpuMedian": 20.191999999999993,
+     "cpuMedian": 3.140000008046627,
+     "cpuTotalMedian": 2.8250000029802322
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 259,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 19.933504000000006,
+     "cpuMedian": 3.7599999979138374,
+     "cpuTotalMedian": 3.6099999994039536
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 15,
+      "throttle": 124,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1770,
+     "n": 120,
+     "gpuMedian": 21.714496000000004,
+     "cpuMedian": 3.0174999982118607,
+     "cpuTotalMedian": 2.6700000017881393
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 295,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1725,
+     "n": 120,
+     "gpuMedian": 18.666976000000005,
+     "cpuMedian": 2.910000003874302,
+     "cpuTotalMedian": 2.75
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 35,
+      "throttle": 253,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1710,
+     "n": 120,
+     "gpuMedian": 19.891119999999994,
+     "cpuMedian": 3.309999994933605,
+     "cpuTotalMedian": 3.1125000044703484
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 2,
+   "contended": null,
+   "createMs": 1300.7750000059605,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 994,
+    "median": 1740,
+    "min": 1005,
+    "p10": 1635,
+    "p90": 1800,
+    "mean": 1727.625754527163,
+    "bimodality": 0.4245281551581456
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 70,
+      "throttle": 160,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1792.5,
+     "n": 120,
+     "gpuMedian": 26.079664000000015,
+     "cpuMedian": 1.2950000017881393,
+     "cpuTotalMedian": 1.2325000017881393
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 12,
+      "throttle": 288,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1695,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.4800000041723251,
+     "cpuTotalMedian": null
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 130,
+      "throttle": 170,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1680,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.1825000047683716,
+     "cpuTotalMedian": null
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 75,
+      "throttle": 225,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1680,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.222500003874302,
+     "cpuTotalMedian": null
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 106,
+      "throttle": 190,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1695,
+     "n": 120,
+     "gpuMedian": 24.64097600000001,
+     "cpuMedian": 1.3700000047683716,
+     "cpuTotalMedian": 30.382500000298023
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 0,
+   "contended": null,
+   "createMs": 1315.9950000047684,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 998,
+    "median": 1725,
+    "min": 885,
+    "p10": 1635,
+    "p90": 1800,
+    "mean": 1721.9789579158316,
+    "bimodality": 0.4544312951330693
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 24,
+      "throttle": 272,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": 26.058496000000005,
+     "cpuMedian": 1.477500006556511,
+     "cpuTotalMedian": 1.1849999949336052
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 60,
+      "throttle": 240,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1680,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.4900000020861626,
+     "cpuTotalMedian": null
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 99,
+      "throttle": 168,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1725,
+     "n": 120,
+     "gpuMedian": 28.888160000000006,
+     "cpuMedian": 1.3025000095367432,
+     "cpuTotalMedian": 1.2100000083446503
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 95,
+      "throttle": 205,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1740,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.3374999985098839,
+     "cpuTotalMedian": null
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 73,
+      "throttle": 227,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1695,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.3100000023841858,
+     "cpuTotalMedian": null
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 3,
+   "contended": null,
+   "createMs": 1305.2600000053644,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 996,
+    "median": 1725,
+    "min": 1005,
+    "p10": 1635,
+    "p90": 1800,
+    "mean": 1722.6656626506024,
+    "bimodality": 0.3782877878072912
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 62,
+      "throttle": 207,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1800,
+     "n": 120,
+     "gpuMedian": 26.903552000000005,
+     "cpuMedian": 1.4025000035762787,
+     "cpuTotalMedian": 1.2649999856948853
+    },
+    "cine000": {
+     "rejected": {
+      "clock": 43,
+      "throttle": 257,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1680,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.614999994635582,
+     "cpuTotalMedian": null
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 29,
+      "throttle": 238,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1755,
+     "n": 120,
+     "gpuMedian": 28.859520000000003,
+     "cpuMedian": 1.3299999982118607,
+     "cpuTotalMedian": 1.2000000029802322
+    },
+    "cine500": {
+     "rejected": {
+      "clock": 122,
+      "throttle": 175,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1710,
+     "n": 120,
+     "gpuMedian": 25.356671999999996,
+     "cpuMedian": 1.2300000041723251,
+     "cpuTotalMedian": 1.260000005364418
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 46,
+      "throttle": 254,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1680,
+     "n": 120,
+     "gpuMedian": null,
+     "cpuMedian": 1.385000005364418,
+     "cpuTotalMedian": null
+    }
+   }
+  }
+ ]
+}

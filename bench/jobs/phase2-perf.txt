@@ -1,0 +1,5 @@
+# Phase 2 perf gate: baseline (r170 WebGL) vs the port on each backend
+node bench/perf.mjs --a base0 --b p2 --workload hero --backend webgpu --runs 5 --out p2-perf-hero-webgpu
+node bench/perf.mjs --a base0 --b p2 --workload hero --backend webgl --runs 5 --out p2-perf-hero-webgl
+node bench/perf.mjs --a base0 --b p2 --workload 1080p --backend webgpu --runs 5 --out p2-perf-1080p-webgpu
+node bench/perf.mjs --a base0 --b p2 --workload 1080p --backend webgl --runs 5 --out p2-perf-1080p-webgl
