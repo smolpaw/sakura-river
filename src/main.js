@@ -1,6 +1,5 @@
 // Sakura River — cinematic procedural scene engine
 import * as THREE from 'three/webgpu';
-import { pass } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { createWorld, depthTexture } from './world.js';
@@ -16,6 +15,7 @@ import { clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
+import { QualityController } from './quality.js';
 import { hashScene } from './bench-hash.js';
 import { tessellate, makeStressObjects, makeRain } from './stress.js';
 import { runJobs } from './gen/pool.js';
@@ -27,6 +27,9 @@ const TIERS = {
   low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 900, bloomRes: 0.5 },
 };
 
+// Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
+// the runtime controller corrects from measured frame cost, so this only has to be roughly right. Integrated and
+// mobile GPUs start below 'high' (see docs/research/gpu-selection-and-compat.md for what browsers expose).
 function detectTier(renderer) {
   const ua = navigator.userAgent || '';
   const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
@@ -35,12 +38,13 @@ function detectTier(renderer) {
   try {
     const b = renderer.backend;
     if (b.isWebGPUBackend) { const i = b.device.adapterInfo || {}; gpu = `${i.vendor || ''} ${i.architecture || ''} ${i.description || ''}`; }
-    else { const gl = b.gl; const ext = gl.getExtension('WEBGL_debug_renderer_info'); if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || ''; }
+    else { const gl = b.gl; const ext = gl.getExtension('WEBGL_debug_renderer_info'); gpu = (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || ''; }
   } catch (e) { /* ignore */ }
-  const weak = /SwiftShader|llvmpipe|Software|Mali-[4T]|Adreno \(TM\) [3-5]\d\d|PowerVR/i.test(gpu);
-  if (mobile) return !weak && cores >= 8 ? 'medium' : 'low';
-  if (weak) return 'low';
-  if (cores <= 4) return 'medium';
+  if (/SwiftShader|llvmpipe|Software|Basic Render|Mali-[4T]|Adreno \(TM\) [3-5]\d\d|PowerVR/i.test(gpu)) return 'low';
+  if (mobile) return 'medium';
+  const compat = renderer.backend.isWebGPUBackend && renderer.backend.compatibilityMode; // older GPUs / APIs
+  const integrated = /intel(?!.*(arc|xe-hpg))|iris|uhd graphics|hd graphics|radeon\(tm\) graphics|radeon graphics|vega \d+ graphics|apple/i.test(gpu);
+  if (compat || integrated || cores <= 4) return 'medium';
   return 'high';
 }
 
@@ -51,24 +55,32 @@ export async function create(canvas, opts = {}) {
   // let the page breathe between assembly stages so no main-thread task runs long
   const yieldTask = () => new Promise((r) => setTimeout(r, 0));
   mark('create');
-  const renderer = new THREE.WebGPURenderer({
+  // three's WebGL2 backend creates its context without powerPreference (it matters on dual-GPU Macs), so the
+  // context is made here: directly when WebGL is forced, and through the fallback hook when WebGPU is missing
+  const glContext = () => canvas.getContext('webgl2', { antialias: false, alpha: true, depth: true, stencil: false, powerPreference: 'high-performance' });
+  const params = {
     canvas, antialias: false, powerPreference: 'high-performance', forceWebGL: opts.backend === 'webgl',
-    trackTimestamp: !!opts.bench && opts.backend !== 'webgl',
-  });
+    trackTimestamp: !(opts.bench && opts.backend === 'webgl'), // GPU time drives the quality controller
+  };
+  if (params.forceWebGL) params.context = glContext();
+  const renderer = new THREE.WebGPURenderer(params);
+  const fallback = renderer._getFallback; // private in r186; its WebGLBackend is built from `params`
+  if (fallback) renderer._getFallback = (e) => { params.context = glContext(); return fallback(e); };
   await renderer.init();
   const backendName = renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
   // on the WebGL2 fallback the bench probe runs its own timer queries (three's cannot time nested passes)
-  if (backendName === 'webgl') renderer.backend.trackTimestamp = false;
+  if (backendName === 'webgl' && opts.bench) renderer.backend.trackTimestamp = false;
   const tierName = opts.quality || detectTier(renderer);
   const Q = { ...TIERS[tierName] };
   const ST = opts.stress || null; // bench-only future-content scenario
   const dpr = Math.min(window.devicePixelRatio || 1, Q.pr);
-  let resScale = 1;
   renderer.setPixelRatio(dpr);
   renderer.toneMappingExposure = 1.0; // read by renderOutput() in the post pipeline
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // filter replaced below by the r170 PCFSoft equivalent
   const probe = opts.bench ? createGPUProbe(renderer) : null;
+  // MSAA only on devices with full WebGPU features (three disables it in compatibility mode) and the tier's count
+  const msaa = renderer.backend.isWebGPUBackend && renderer.backend.compatibilityMode ? 0 : (opts.msaa ?? Q.msaa);
 
   const scene = new THREE.Scene();
   scene.name = 'scene';
@@ -110,10 +122,12 @@ export async function create(canvas, opts = {}) {
   const terrainMat = M.terrainMaterial();
   const terrain = new THREE.Mesh(terrainGeo, terrainMat);
   terrain.receiveShadow = true;
+  terrain.name = 'terrain';
   scene.add(terrain);
 
   // ---------- sky + lights ----------
   const sky = makeSky();
+  sky.mesh.name = 'sky';
   scene.add(sky.mesh);
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
@@ -136,7 +150,11 @@ export async function create(canvas, opts = {}) {
   const maxAniso = renderer.getMaxAnisotropy();
   atlas.anisotropy = Math.min(16, maxAniso); bark.map.anisotropy = Math.min(16, maxAniso); bark.bump.anisotropy = Math.min(8, maxAniso);
   const barkMat = M.barkMaterial(bark.map, bark.bump);
-  const blossomMat = M.blossomMaterial(atlas, Q.msaa > 0);
+  const a2c = msaa > 0;
+  const blossomMat = M.blossomMaterial(atlas, a2c);
+  const blossomPrepass = opts.blossomPrepass !== false;
+  const blossomDepthMat = blossomPrepass ? M.blossomDepthMaterial(atlas, a2c) : null;
+  if (blossomPrepass) blossomMat.depthWrite = false;
   const blossomShadowMat = M.blossomShadowMaterial(atlas);
   const cardGeo = ST ? tessellate(buildBlossomCardGeometry(), ST.triMul) : buildBlossomCardGeometry();
 
@@ -144,18 +162,35 @@ export async function create(canvas, opts = {}) {
     const group = new THREE.Group();
     group.position.copy(pos);
     const barkMesh = new THREE.Mesh(d.bark, barkMat);
+    barkMesh.name = 'bark';
     barkMesh.castShadow = castShadow; barkMesh.receiveShadow = true;
     group.add(barkMesh);
     const geo = cardGeo.clone();
     const mesh = new THREE.InstancedMesh(geo, blossomMat, d.n);
+    mesh.name = 'blossoms';
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
-    geo.setAttribute('aFlex', new THREE.InstancedBufferAttribute(d.aFlex, 1));
-    geo.setAttribute('aAtlas', new THREE.InstancedBufferAttribute(d.aAtlas, 2));
-    geo.setAttribute('aCanopyN', new THREE.InstancedBufferAttribute(d.aCanopyN, 3));
+    // one interleaved buffer for the per-card attributes (fewer vertex buffers; WebGPU guarantees only 8)
+    const per = new Float32Array(d.n * 6);
+    for (let i = 0; i < d.n; i++) {
+      per[i * 6] = d.aFlex[i]; per[i * 6 + 1] = d.aAtlas[i * 2]; per[i * 6 + 2] = d.aAtlas[i * 2 + 1];
+      per[i * 6 + 3] = d.aCanopyN[i * 3]; per[i * 6 + 4] = d.aCanopyN[i * 3 + 1]; per[i * 6 + 5] = d.aCanopyN[i * 3 + 2];
+    }
+    const ib = new THREE.InstancedInterleavedBuffer(per, 6);
+    geo.setAttribute('aFlex', new THREE.InterleavedBufferAttribute(ib, 1, 0));
+    geo.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(ib, 2, 1));
+    geo.setAttribute('aCanopyN', new THREE.InterleavedBufferAttribute(ib, 3, 3));
     mesh.receiveShadow = castShadow;
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
+    if (blossomPrepass) {
+      const pre = new THREE.InstancedMesh(geo, blossomDepthMat, d.n);
+      pre.name = 'blossomDepth';
+      pre.instanceMatrix = mesh.instanceMatrix;
+      pre.boundingSphere = mesh.boundingSphere;
+      pre.renderOrder = -1; // before every opaque draw
+      group.add(pre);
+    }
     if (castShadow) {
       // cast through a shadow-only proxy on layer 2 (see blossomShadowMaterial)
       const proxy = new THREE.InstancedMesh(geo, blossomShadowMat, d.n);
@@ -169,12 +204,14 @@ export async function create(canvas, opts = {}) {
   }
 
   const main = buildTreeObject(G.treeMain[0], treePos, true);
+  main.group.name = 'tree';
   scene.add(main.group);
   const smallTrees = [];
   const smallData = [...G.treesA, ...G.treesB];
   Lay.small.forEach((sp, k) => {
     const o = buildTreeObject(smallData[k], new THREE.Vector3(sp.x, 0, sp.z), Math.abs(sp.z) < 45);
     o.group.scale.setScalar(sp.s);
+    o.group.name = 'smallTree';
     o.group.position.y += (1 - sp.s) * 0.2;
     scene.add(o.group);
     smallTrees.push(o);
@@ -183,29 +220,40 @@ export async function create(canvas, opts = {}) {
   await yieldTask();
   // ---------- Japanese set pieces ----------
   const fuji = makeFuji(G.fuji, M.fujiMaterial());
+  fuji.name = 'fuji';
   scene.add(fuji);
   const lantern = makeLantern(world, G.props.lantern, LX, LZ, 0.3, { stone: M.propMaterial('stone'), core: M.lanternCoreMaterial() });
+  lantern.group.name = 'lantern';
   scene.add(lantern.group);
   const bridge = makeBridge(G.props.bridge, M.propMaterial('wood', { roughness: 0.55 }));
+  bridge.mesh.name = 'bridge';
   scene.add(bridge.mesh);
   const pagoda = makePagoda(world, G.props.pagoda, world.pagoda.x, world.pagoda.z, 1.0, M.propMaterial('pagoda', { roughness: 0.7 }));
+  pagoda.name = 'pagoda';
   scene.add(pagoda);
 
   await yieldTask();
   // ---------- ground cover ----------
   const rocks = makeRocks(G.rocks, M.rockMaterial());
+  rocks.group.name = 'rocks';
   scene.add(rocks.group);
   const grass = makeGrass(G.grass, M.grassMaterial());
+  grass.name = 'grass';
   scene.add(grass);
   const flowers = makeFlowers(G.flowers, M.flowerMaterial());
+  flowers.name = 'flowers';
   scene.add(flowers);
   const forest = makeForest(G.forest, M.forestMaterial());
+  forest.name = 'forest';
   scene.add(forest);
 
   await yieldTask();
   // ---------- river ----------
   const depthMap = depthTexture(G.depth);
-  const water = makeWater(G.river, depthMap, sky, { reflectionScale: Q.refl });
+  // reflection buffer per CSS pixel above DPR 1.4 (0.35 at DPR 2 passes against sub-pixel A/A, 0.25 does not;
+  // bench/dpr_parity.py); the light shafts are per CSS pixel at every DPR (see buildPipeline below)
+  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr) });
+  water.mesh.name = 'water';
   scene.add(water.mesh);
   const reflector = water.reflector ? water.reflector.reflector : null;
   if (reflector) {
@@ -222,21 +270,25 @@ export async function create(canvas, opts = {}) {
   for (let i = 0; i < sp3.length; i += 3) spawnPts.push(new THREE.Vector3(sp3[i], sp3[i + 1], sp3[i + 2]).add(treePos));
   const petalMat = petalMaterial();
   const petals = new PetalSystem(world, spawnPts, Q.petals, camera, petalMat, U.uWindDir.value);
+  petals.mesh.name = 'petals';
   scene.add(petals.mesh);
   const fallen = makeFallenPetals(G.fallen, petalMat);
+  fallen.name = 'fallenPetals';
   scene.add(fallen);
   const motes = makeMotes(new THREE.Vector3(...Lay.motes), Q.motes);
+  motes.mesh.name = 'motes';
   scene.add(motes.mesh);
   if (ST) {
     scene.add(makeStressObjects(world, ST.objects, focus, M.stressObjectMaterial));
     scene.add(makeRain(ST.particles, rainMaterial()));
   }
 
+  for (const n of opts.hide || []) scene.getObjectsByProperty('name', n).forEach((o) => { o.visible = false; }); // bench: isolate objects
   mark('assembled');
   await yieldTask();
   // ---------- post ----------
-  const scenePass = pass(scene, camera, { samples: Q.msaa });
-  const post = buildPipeline(renderer, scenePass, { raySamples: Q.rays });
+  // light shafts per CSS pixel: 0.25 of the drawing buffer at DPR 2 is ~7x below sub-pixel A/A noise (dpr_parity)
+  const post = buildPipeline(renderer, scene, camera, { raySamples: Q.rays, msaa, shaftScale: opts.shaftScale ?? 0.5 / dpr });
   const rays = post.shafts.uniforms;
 
   // ---------- camera / controls ----------
@@ -330,10 +382,11 @@ export async function create(canvas, opts = {}) {
 
   // ---------- sizing / adaptive quality ----------
   let W = 1, H = 1;
+  let pixelScale = 1; // adaptive render scale without temporal upscaling: the canvas resolution itself
   function resize() {
     const w = Math.max(1, canvas.clientWidth | 0), h = Math.max(1, canvas.clientHeight | 0);
     W = w; H = h;
-    const pr = dpr * resScale;
+    const pr = dpr * pixelScale;
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
@@ -349,31 +402,55 @@ export async function create(canvas, opts = {}) {
   ro.observe(canvas);
   resize();
 
-  // adaptive quality ladder: cheapest visual losses first, resolution last
+  // ---------- adaptive quality: GPU time -> render resolution, then second-order settings ----------
   let frames = 0, acc = 0, statT = 0, fpsShown = 60;
-  let level = 0; // 0 = full
-  let shadowEvery = tierName === 'high' ? 1 : 2, reflEvery = tierName === 'high' ? 1 : 2;
-  const ladder = [
-    { up() { reflEvery = 2; }, down() { reflEvery = tierName === 'high' ? 1 : 2; } },
-    { up() { shadowEvery = 2; }, down() { shadowEvery = tierName === 'high' ? 1 : 2; } },
-    { up() { grass.userData.setFraction(0.7); }, down() { grass.userData.setFraction(1); } },
-    { up() { resScale = 0.85; resize(); }, down() { resScale = 1; resize(); } },
-    { up() { reflEvery = 1e9; grass.userData.setFraction(0.5); }, down() { reflEvery = 2; grass.userData.setFraction(0.7); } },
-    { up() { resScale = 0.72; resize(); }, down() { resScale = 0.85; resize(); } },
-  ];
-  let slowWin = 0, fastWin = 0;
+  // wind-animated shadows and the reflection update at 30 Hz (the visual gate's wind and camera sequences pass)
+  const shadowEvery0 = opts.shadowEvery ?? 2, reflEvery0 = opts.reflEvery ?? 2;
+  let shadowEvery = shadowEvery0, reflEvery = reflEvery0;
+  // the canvas resolution scales (the browser upscales it) and every effect buffer follows the drawing buffer
+  const reflBase = reflector ? reflector.resolutionScale : 0;
+  // GPU timer queries where available (three leaves trackTimestamp on for WebGL without the timer extension);
+  // otherwise frame time, which vsync caps at the refresh interval: over budget then means clearly slower than a
+  // 60 Hz frame (like the old ladder's 21 ms), and it never reads a capped 16.7 ms frame as overload
+  const gpuTimed = renderer.backend.isWebGLBackend ? !!renderer.backend.disjoint : !!renderer.backend.trackTimestamp;
+  const qc = new QualityController({
+    targetMs: opts.targetMs ?? (gpuTimed ? 14 : 19), // ~85% of a 60 Hz frame of GPU time
+    minScale: opts.minScale ?? 0.6, maxScale: 1,
+    levels: [
+      { apply() { if (reflector) reflector.resolutionScale = reflBase * 0.7; }, revert() { if (reflector) reflector.resolutionScale = reflBase; } },
+      { apply() { grass.userData.setFraction(0.7); }, revert() { grass.userData.setFraction(1); } },
+      { apply() { reflEvery = 1e9; grass.userData.setFraction(0.5); }, revert() { reflEvery = reflEvery0; grass.userData.setFraction(0.7); } },
+    ],
+    onChange: ({ scale }) => { pixelScale = scale; resize(); },
+  });
+  let resolving = false;
+  function feedGpuTime(frameMs) {
+    if (probe) {
+      for (const f of probe.poll()) {
+        if (!opts.fixedQuality) qc.update(f.total, f.frame);
+      }
+    } else if (gpuTimed) {
+      // one resolve in flight at a time: it reports the last complete frame, and a pending call would repeat it
+      if (resolving) return;
+      resolving = true;
+      renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER).then((ms) => {
+        resolving = false;
+        const pool = renderer.backend.timestampQueryPool[THREE.TimestampQuery.RENDER]; // frame ids of that resolve
+        const fr = pool && pool.frames && pool.frames.length ? pool.frames[pool.frames.length - 1] : Infinity;
+        if (!opts.fixedQuality && ms > 0) qc.update(ms, fr);
+      });
+    } else if (!opts.fixedQuality) qc.update(frameMs); // no timer queries: frame time (capped by vsync) is the best we have
+  }
+  let adaptFrom = 0;
   function adapt(dt) {
-    if (frameNo < 20) return;
+    // stay out of the first 1.5 s: pipeline compilation hitches would read as an overloaded GPU
+    if (!adaptFrom) adaptFrom = performance.now() + 1500;
+    if (performance.now() < adaptFrom) return;
+    feedGpuTime(dt * 1000);
     frames++; acc += dt; statT += dt;
     if (statT >= 1) {
-      const avg = (acc / frames) * 1000;
-      fpsShown = Math.round(1000 / avg);
-      if (!opts.fixedQuality) {
-        if (avg > 21) { slowWin++; fastWin = 0; } else if (avg < 13) { fastWin++; slowWin = 0; } else { slowWin = 0; fastWin = 0; }
-        if (slowWin >= 2 && level < ladder.length) { ladder[level].up(); level++; slowWin = 0; }
-        if (fastWin >= 5 && level > 0) { level--; ladder[level].down(); fastWin = 0; }
-      }
-      opts.onStats && opts.onStats({ fps: fpsShown, quality: tierName, level, scale: resScale });
+      fpsShown = Math.round(1000 / ((acc / frames) * 1000));
+      opts.onStats && opts.onStats({ fps: fpsShown, quality: tierName, level: qc.level, scale: qc.scale });
       frames = 0; acc = 0; statT = 0;
     }
   }
@@ -459,6 +536,7 @@ export async function create(canvas, opts = {}) {
     // bench-only: sub-pixel view offset, the A/A calibration for sample-placement differences between backends
     if (opts.jitter) { const b = renderer.getDrawingBufferSize(tmpSize); camera.setViewOffset(b.x, b.y, opts.jitter[0], opts.jitter[1], b.x, b.y); }
     post.pipeline.render();
+    qc.frame = probe ? probe.frame : renderer.info.frame; // frame ids as the GPU timings report them
     if (opts.jitter) camera.clearViewOffset();
     if (probe) probe.endFrame();
   }
@@ -510,7 +588,20 @@ export async function create(canvas, opts = {}) {
     advance(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt, false); },
     bench: probe,
     hashScene: () => hashScene(scene, { heightCache: world.heightCacheData() }),
-    qualityState() { return { tier: tierName, level, scale: resScale, fps: fpsShown }; },
+    // bench: triangles per drawable (instances included), largest first
+    meshStats() {
+      const out = [];
+      scene.traverse((o) => {
+        if (!o.isMesh && !o.isPoints && !o.isSprite) return;
+        const g = o.geometry; if (!g) return;
+        const tri = g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+        const n = o.isInstancedMesh ? o.count : g.isInstancedBufferGeometry ? g.instanceCount : 1;
+        let a = o; while (a && !a.name) a = a.parent;
+        out.push({ name: a && a !== scene ? a.name : o.material.type, layers: o.layers.mask, shadow: o.castShadow, tri, n, total: tri * n });
+      });
+      return out.sort((a, b) => b.total - a.total);
+    },
+    qualityState() { return { tier: tierName, level: qc.level, scale: qc.scale, fps: fpsShown, gpuMs: qc.lastMs }; },
     setAdaptive(on) { opts.fixedQuality = !on; },
     step(dt) { step(dt); },
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },

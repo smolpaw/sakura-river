@@ -2,7 +2,7 @@
 // onBeforeCompile patch it replaces (see git history of src/shaders.js).
 import * as THREE from 'three/webgpu';
 import {
-  Fn, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty,
+  Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalLocal, diffuseColor, vertexColor, modelWorldMatrix, mat3,
   transformNormalToView, faceDirection,
 } from 'three/tsl';
@@ -14,15 +14,19 @@ const viewDir = () => normalize(cameraPosition.sub(wp));
 export function terrainMaterial() {
   const dn = vnoise(wp.xz.mul(0.9)).mul(0.5).add(vnoise(wp.xz.mul(3.7)).mul(0.3)).add(vnoise(wp.xz.mul(0.12)).mul(0.45));
   return new LitMaterial({ vertexColors: true, roughness: 0.96, metalness: 0, colorNode: vec3(dn.mul(0.42).add(0.7)) }, (out) => Fn(() => {
-    // river-bed caustics and darkening under water (zero above y = 0.03, like the old branch)
+    // river-bed caustics and darkening under water: both are exactly zero / one above y = 0.03, so skip them there
     const y = wp.y;
-    const cp = wp.xz.mul(0.8), ct = U.uTime.mul(0.55);
-    const c1 = vnoise(cp.add(vec2(ct, ct.mul(0.7))));
-    const c2 = vnoise(cp.mul(1.37).sub(vec2(ct.mul(0.8), ct.mul(-0.5))).add(5.0));
-    const cc = pow(float(1.0).sub(c1.sub(c2).abs()), 10.0);
-    const cw = sstep(0.03, -0.3, y).mul(sstep(-2.6, -0.6, y));
-    const o = out.add(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(cc).mul(cw).mul(2.2));
-    return o.mul(mix(1.0, 0.75, sstep(0.0, -1.5, y)));
+    const o = out.toVar();
+    If(y.lessThan(0.03), () => {
+      const cp = wp.xz.mul(0.8), ct = U.uTime.mul(0.55);
+      const c1 = vnoise(cp.add(vec2(ct, ct.mul(0.7))));
+      const c2 = vnoise(cp.mul(1.37).sub(vec2(ct.mul(0.8), ct.mul(-0.5))).add(5.0));
+      const cc = pow(float(1.0).sub(c1.sub(c2).abs()), 10.0);
+      const cw = sstep(0.03, -0.3, y).mul(sstep(-2.6, -0.6, y));
+      o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(cc).mul(cw).mul(2.2));
+      o.mulAssign(mix(1.0, 0.75, sstep(0.0, -1.5, y)));
+    });
+    return o;
   })());
 }
 
@@ -53,6 +57,19 @@ export function blossomMaterial(atlas, alphaToCoverage) {
     const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(backB.mul(1.2).add(0.1)));
     return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1))));
   })());
+}
+
+// depth prepass for the blossom cards: the canopy has heavy overdraw, so its depth goes down first with only the
+// atlas alpha, and the lit pass (depthWrite off) then shades just the visible fragment. Pushed back by a few depth
+// units (constant, not slope-scaled: the cards cluster nearly coplanar) so the lit pass's own depth never fails
+// against it if the two vertex shaders round differently; with no offset the result is pixel-identical here.
+export function blossomDepthMaterial(atlas, alphaToCoverage) {
+  return new THREE.MeshBasicNodeMaterial({
+    colorNode: texture(atlas, uv().mul(0.5).add(attribute('aAtlas', 'vec2'))),
+    alphaTest: 0.4, side: THREE.DoubleSide, alphaToCoverage, fog: false, colorWrite: false,
+    polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: 4,
+    positionNode: windPosition(attribute('aFlex', 'float')),
+  });
 }
 
 // shadow-only stand-in for the blossom cards: r170's blossom depth material sampled the atlas with the card's

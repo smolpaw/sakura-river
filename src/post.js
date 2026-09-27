@@ -3,6 +3,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, vec4, uniform, uv, rtt, mix, max, min, dot, sqrt, clamp, length, exp, fract, select, Loop, renderOutput, toneMappingExposure,
+  pass,
 } from 'three/tsl';
 import { hashSin, sstep } from './tsl.js';
 
@@ -30,6 +31,7 @@ export function unrealBloom(input, { threshold = 2.2, radius = 0.55, strength = 
     return mix(vec4(0.0), t, a);
   })();
   const bright = rtt(highPass, 1, 1);
+  bright.name = 'Bloom';
   const kernels = [3, 5, 7, 9, 11];
   const inv = kernels.map(() => uniform(new THREE.Vector2(1, 1)));
   const blur = (src, k, invSize, dir) => Fn(() => {
@@ -50,6 +52,7 @@ export function unrealBloom(input, { threshold = 2.2, radius = 0.55, strength = 
   kernels.forEach((k, i) => {
     const h = rtt(blur(src, k, inv[i], [1, 0]), 1, 1);
     const v = rtt(blur(h, k, inv[i], [0, 1]), 1, 1);
+    h.name = v.name = 'Bloom';
     targets.push(h, v); mips.push(v); src = v;
   });
   const factors = [1.0, 0.8, 0.6, 0.4, 0.2];
@@ -72,7 +75,7 @@ export function unrealBloom(input, { threshold = 2.2, radius = 0.55, strength = 
 }
 
 // light shafts: returns { rays: texture node (half res), uniforms }
-export function lightShafts(color, samples) {
+export function lightShafts(color, samples, scale = 0.5) {
   const u = { sun: uniform(new THREE.Vector2(0.5, 0.5)), aspect: uniform(1), intensity: uniform(1), tint: uniform(new THREE.Color(1, 0.8, 0.6)) };
   const mask = Fn(() => {
     const c = color.sample(uv());
@@ -91,11 +94,12 @@ export function lightShafts(color, samples) {
     });
     return vec4(acc.div(tw), 1.0);
   })();
-  const opt = { resolutionScale: 0.5 };
+  const opt = { resolutionScale: scale };
   const m = rtt(mask, null, null, opt);
   const b1 = rtt(blur(m, 0.85, 0.975), null, null, opt);
   const b2 = rtt(blur(b1, 0.35, 0.99), null, null, opt);
   const passes = [m, b1, b2];
+  for (const p of passes) p.name = 'Shafts';
   return { rays: b2, uniforms: u, setEnabled(on) { for (const p of passes) p.autoUpdate = on; } };
 }
 
@@ -146,10 +150,12 @@ export function grade(input) {
   return { node, uniforms: u };
 }
 
-// scene colour + shafts -> bloom -> tone map / sRGB -> grade
-export function buildPipeline(renderer, scenePass, { raySamples, bloomStrength = 0.4 }) {
+// scene pass -> shafts -> bloom -> tone map / sRGB -> grade
+// shaftScale: light-shaft buffer size relative to the drawing buffer
+export function buildPipeline(renderer, scene, camera, { raySamples, bloomStrength = 0.4, msaa = 4, shaftScale = 0.5 }) {
+  const scenePass = pass(scene, camera, { samples: msaa });
   const color = scenePass.getTextureNode('output');
-  const shafts = lightShafts(color, raySamples);
+  const shafts = lightShafts(color, raySamples, shaftScale);
   const hdr = Fn(() => {
     const c = color.sample(uv());
     const r = shafts.rays.sample(uv()).rgb;
@@ -157,8 +163,9 @@ export function buildPipeline(renderer, scenePass, { raySamples, bloomStrength =
   })();
   const bl = unrealBloom(hdr, { strength: bloomStrength, radius: 0.55, threshold: 2.2 });
   const ldr = rtt(renderOutput(vec4(aces170(hdr.rgb.add(bl.node), toneMappingExposure), 1.0), THREE.NoToneMapping, THREE.SRGBColorSpace));
+  ldr.name = 'Output';
   const g = grade(ldr);
   const pipeline = new THREE.RenderPipeline(renderer, g.node);
   pipeline.outputColorTransform = false;
-  return { pipeline, shafts, bloom: bl, grade: g };
+  return { pipeline, scenePass, shafts, bloom: bl, grade: g };
 }
