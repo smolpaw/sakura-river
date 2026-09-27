@@ -13,7 +13,7 @@ export const bankX = (world, z, side) => world.riverX(z) + side * (world.riverHW
 const SPAN = 6.4; // pole spacing (m)
 const ROPE = 2.55; // rope height on the pole above ground
 const SAG = 0.32;
-const GAP = 1.05; // lantern spacing along the rope
+const PER_SPAN = 3; // lanterns between two poles
 
 const BAMBOO = [0.36, 0.3, 0.12], NODE = [0.2, 0.16, 0.06], ROPE_C = [0.28, 0.2, 0.11];
 
@@ -74,7 +74,7 @@ export function lanternData(world, blockers) {
       const pts = [];
       for (let k = 0; k <= 10; k++) pts.push(at(k / 10));
       parts.push(paint(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.013, 5, false), () => ROPE_C));
-      const n = Math.max(2, Math.round(a.distanceTo(b) / GAP) - 1);
+      const n = PER_SPAN;
       for (let k = 0; k < n; k++) {
         const p = at((k + 1) / (n + 1));
         hang.push(p.x, p.y, p.z);
