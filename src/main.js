@@ -23,7 +23,7 @@ import { runJobs } from './gen/pool.js';
 import { layout } from './gen/layout.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], grass: 40000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1, koi: 12 },
+  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1, koi: 12 },
   medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1500, bloomRes: 0.75, koi: 10 },
   low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 900, bloomRes: 0.5, koi: 6 },
 };
