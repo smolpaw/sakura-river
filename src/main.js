@@ -278,7 +278,7 @@ export async function create(canvas, opts = {}) {
   const sp3 = main.data.spawn, spawnPts = [];
   for (let i = 0; i < sp3.length; i += 3) spawnPts.push(new THREE.Vector3(sp3[i], sp3[i + 1], sp3[i + 2]).add(treePos));
   const petalMat = petalMaterial();
-  const petals = new PetalSystem(world, spawnPts, Q.petals, camera, petalMat, U.uWindDir.value);
+  const petals = new PetalSystem(world, spawnPts, Q.petals, petalMat, U.uWindDir.value);
   petals.mesh.name = 'petals';
   scene.add(petals.mesh);
   const fallen = makeFallenPetals(G.fallen, petalMat);

@@ -22,9 +22,9 @@ function petalGeometry() {
 }
 
 export class PetalSystem {
-  constructor(world, spawnPoints, max, camera, material, windDir) {
+  constructor(world, spawnPoints, max, material, windDir) {
     this.windDir = windDir;
-    this.world = world; this.spawn = spawnPoints; this.max = max; this.camera = camera;
+    this.world = world; this.spawn = spawnPoints; this.max = max;
     this.rng = mulberry32(2024);
     const g = petalGeometry();
     const ig = new THREE.InstancedBufferGeometry();
@@ -53,21 +53,9 @@ export class PetalSystem {
   setAmount(f) { this.target = Math.floor(clamp(f, 0, 1) * this.max); }
   respawn(i, initial = false) {
     const r = this.rng;
-    const nearCam = r() < 0.28;
-    let x, y, z;
-    if (nearCam) {
-      const c = this.camera.position;
-      const w = this.windDir;
-      // upwind of the camera so they drift through frame
-      const fwd = new THREE.Vector3(); this.camera.getWorldDirection(fwd);
-      const d0 = 3 + r() * 9;
-      x = c.x + fwd.x * d0 - w.x * (3 + r() * 5) + (r() - 0.5) * 10;
-      z = c.z + fwd.z * d0 - w.y * (3 + r() * 5) + (r() - 0.5) * 10;
-      y = c.y + 1.5 + r() * 4;
-    } else {
-      const s = this.spawn[Math.floor(r() * this.spawn.length)];
-      x = s.x + (r() - 0.5) * 0.6; y = s.y + (r() - 0.5) * 0.6; z = s.z + (r() - 0.5) * 0.6;
-    }
+    // every petal leaves from the canopy
+    const s = this.spawn[Math.floor(r() * this.spawn.length)];
+    let x = s.x + (r() - 0.5) * 0.6, y = s.y + (r() - 0.5) * 0.6, z = s.z + (r() - 0.5) * 0.6;
     if (initial) {
       // pre-warm: scatter along a plausible fall path
       const t = r();
@@ -78,7 +66,7 @@ export class PetalSystem {
     this.age[i] = 0; this.life[i] = 14 + r() * 16; this.mode[i] = 0;
     this.rot[i * 4] = r() * 6.28; this.rot[i * 4 + 1] = r() * 6.28; this.rot[i * 4 + 2] = r() * 6.28;
     this.spin[i * 3] = (r() - 0.5) * 3; this.spin[i * 3 + 1] = (r() - 0.5) * 6; this.spin[i * 3 + 2] = (r() - 0.5) * 5;
-    this.scale[i] = (0.75 + r() * 0.5) * (nearCam ? 0.85 : 1);
+    this.scale[i] = 0.75 + r() * 0.5;
     this.rot[i * 4 + 3] = 0;
   }
   update(dt, time, wind, riverSpeed) {
