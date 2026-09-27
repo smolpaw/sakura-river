@@ -674,7 +674,7 @@ export async function create(canvas, opts = {}) {
           lut.push(lut[i - 1] + delta / N + 0.5 * Math.abs(el - el0) * Math.exp(-(((el + 3) / 8) ** 2)));
           el0 = el;
         }
-        timeTween = { from: clockH, delta, lut, t: 0, dur: clamp(2 + lut[N] * 0.3, 3, 9) };
+        timeTween = { from: clockH, delta, lut, t: 0, dur: clamp(1.5 + lut[N] * 0.11, 2.5, 4.5) };
       }
       if (!timeTween) clockH = ((hour % 24) + 24) % 24;
     },
