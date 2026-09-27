@@ -468,7 +468,7 @@ export async function create(canvas, opts = {}) {
   const timer = new THREE.Timer();
   const tmpV = new THREE.Vector3();
   let running = true;
-  let frameNo = 0;
+  let frameNo = 0, warming = false;
   const sunScreen = new THREE.Vector3();
   const tmpSize = new THREE.Vector2();
 
@@ -532,7 +532,7 @@ export async function create(canvas, opts = {}) {
     // uv of the sun in the post passes: three's fullscreen quad runs uv.y top-down on both backends
     rays.sun.value.set(sunScreen.x * 0.5 + 0.5, 0.5 - sunScreen.y * 0.5);
     rays.intensity.value = facing * onScreen * U.uSunVis.value * (0.55 + S.fog * 0.9) * (opts.rays ?? 1);
-    post.shafts.setEnabled(rays.intensity.value > 0.001);
+    post.shafts.setEnabled(warming || rays.intensity.value > 0.001); // warm-up builds them even when off-screen
 
     // reflections
     if (!doRender) return;
@@ -562,6 +562,17 @@ export async function create(canvas, opts = {}) {
   mark('ready');
   if (opts.precompile !== false) await renderer.compileAsync(scene, camera);
   mark('precompiled');
+  // Warm-up behind the loading screen, as games do: the real frame renders into targets compileAsync does not
+  // know (the multisampled scene pass, shadow map, reflection, post passes), so their pipelines would otherwise be
+  // built on the first visible frames and stutter. A few hidden frames build and upload everything (the 30 Hz
+  // shadow and reflection passes run on the first ones; three also stalls once around the 16th frame, so 24
+  // frames absorb that too, ~0.4 s here); the page reveals the scene after create() resolves.
+  if (!opts.manual && opts.warmup !== false) {
+    warming = true;
+    for (let i = 0; i < (opts.warmupFrames ?? 24); i++) { step(1 / 60); await new Promise((r) => requestAnimationFrame(r)); }
+    warming = false;
+    mark('warm');
+  }
   if (!opts.manual) requestAnimationFrame(loop);
   opts.onReady && opts.onReady({ quality: tierName });
 
