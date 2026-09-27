@@ -43,7 +43,7 @@ function detectTier(renderer) {
   if (/SwiftShader|llvmpipe|Software|Basic Render|Mali-[4T]|Adreno \(TM\) [3-5]\d\d|PowerVR/i.test(gpu)) return 'low';
   if (mobile) return cores >= 8 ? 'medium' : 'low';
   const compat = renderer.backend.isWebGPUBackend && renderer.backend.compatibilityMode; // older GPUs / APIs
-  const integrated = /intel(?!.*(arc|xe-hpg))|iris|uhd graphics|hd graphics|radeon\(tm\) graphics|radeon graphics|vega \d+ graphics|apple/i.test(gpu);
+  const integrated = /intel(?!.*(arc|xe\d?-hpg))|iris|uhd graphics|hd graphics|radeon\(tm\) graphics|radeon graphics|vega \d+ graphics|apple|arm|qualcomm|adreno|mali/i.test(gpu);
   if (compat || integrated || cores <= 4) return 'medium';
   return 'high';
 }
@@ -79,8 +79,17 @@ export async function create(canvas, opts = {}) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // filter replaced below by the r170 PCFSoft equivalent
   const probe = opts.bench ? createGPUProbe(renderer) : null;
-  // MSAA only on devices with full WebGPU features (three disables it in compatibility mode) and the tier's count
-  const msaa = renderer.backend.isWebGPUBackend && renderer.backend.compatibilityMode ? 0 : (opts.msaa ?? Q.msaa);
+  // MSAA: none on WebGPU compatibility-mode devices (three disables it there); WebGPU has only 1 or 4 samples, so
+  // a tier's 2x becomes 4x there (with fewer, the blossoms' alpha-to-coverage would have no coverage to work with)
+  const compat = renderer.backend.isWebGPUBackend && renderer.backend.compatibilityMode;
+  const msaaWanted = opts.msaa ?? Q.msaa;
+  const msaa = compat ? 0 : renderer.backend.isWebGPUBackend && msaaWanted > 0 ? 4 : msaaWanted;
+  // Android WebGPU in compatibility mode cannot sample the shadow map as three binds it there (no comparison
+  // sampling on Android): render without shadows rather than a broken frame
+  if (compat && /Android/i.test(navigator.userAgent || '')) renderer.shadowMap.enabled = false;
+  // largest drawing buffer the device allows (4096 on compatibility-mode devices, 8192 core, varies on WebGL)
+  const maxTex = renderer.backend.isWebGPUBackend ? renderer.backend.device.limits.maxTextureDimension2D
+    : Math.min(renderer.backend.gl.getParameter(renderer.backend.gl.MAX_TEXTURE_SIZE), renderer.backend.gl.getParameter(renderer.backend.gl.MAX_RENDERBUFFER_SIZE));
 
   const scene = new THREE.Scene();
   scene.name = 'scene';
@@ -386,7 +395,7 @@ export async function create(canvas, opts = {}) {
   function resize() {
     const w = Math.max(1, canvas.clientWidth | 0), h = Math.max(1, canvas.clientHeight | 0);
     W = w; H = h;
-    const pr = dpr * pixelScale;
+    const pr = Math.min(dpr * pixelScale, maxTex / Math.max(w, h));
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
     camera.aspect = w / h;

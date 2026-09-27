@@ -58,7 +58,8 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0 } = {})
     // calm distant water to avoid aliasing
     N.assign(normalize(mix(N, vec3(0.0, 1.0, 0.0), sstep(40.0, 260.0, dist))));
     const depth = waterDepth(vW.xz).toVar();
-    const fres = float(0.02).add(pow(float(1.0).sub(max(dot(N, V), 0.0)), 5.0).mul(0.98)).toVar();
+    // base clamped: a dot of unit vectors can exceed 1 by rounding, and pow of a negative is NaN on many GPUs
+    const fres = float(0.02).add(pow(max(float(1.0).sub(max(dot(N, V), 0.0)), 0.0), 5.0).mul(0.98)).toVar();
     const R = reflect(V.negate(), N).toVar();
     const reflCol = skyCol(R).toVar();
     if (refl) {
