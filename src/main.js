@@ -4,12 +4,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
-import { buildBlossomCardGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
+import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
 import { makeSky, skyState } from './sky.js';
 import { makeWater } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
-import { petalMaterial, makeMotes, rainMaterial } from './fx.js';
+import { petalMaterial, makeMotes, makeStringLights, rainMaterial } from './fx.js';
 import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { makeLantern, makeBridge, makePagoda, makeFuji } from './props.js';
@@ -104,16 +104,16 @@ export async function create(canvas, opts = {}) {
   const treePos = new THREE.Vector3(...Lay.tree);
   const focus = new THREE.Vector3(...Lay.focus);
   const triMul = ST ? ST.triMul : 1;
-  const treeSpecs = [{ seed: 11, pos: Lay.tree, blossomScale: 1.0 }, ...Lay.small.map((sp) => ({ seed: 100 + sp.k * 13, small: true, pos: [sp.x, 0, sp.z], blossomScale: 1.05 }))];
+  const treeSpecs = [{ seed: 11, pos: Lay.tree }, ...Lay.small.map((sp) => ({ seed: 100 + sp.k * 13, small: true, pos: [sp.x, 0, sp.z] }))];
   const { results: G, stats: genStats } = await runJobs({
     terrain: { name: 'terrain', args: { seg: Q.terrain } },
     heightCache: { name: 'heightCache' },
     depth: { name: 'depth', args: { tier: tierName } },
     river: { name: 'river' },
-    treeMain: { name: 'trees', args: { list: treeSpecs.slice(0, 1), triMul } },
-    treesA: { name: 'trees', args: { list: treeSpecs.slice(1, 4), triMul } },
-    treesB: { name: 'trees', args: { list: treeSpecs.slice(4), triMul } },
-    atlas: { name: 'atlas', args: { size: tierName === 'high' ? 2048 : 1024 } },
+    treeMain: { name: 'trees', args: { list: treeSpecs.slice(0, 1), tier: tierName, triMul } },
+    treesA: { name: 'trees', args: { list: treeSpecs.slice(1, 4), tier: tierName, triMul } },
+    treesB: { name: 'trees', args: { list: treeSpecs.slice(4), tier: tierName, triMul } },
+    atlas: { name: 'atlas', args: { size: tierName === 'high' ? 1024 : 512 } },
     bark: { name: 'bark' },
     fuji: { name: 'fuji' },
     props: { name: 'props', args: { triMul } },
@@ -165,7 +165,7 @@ export async function create(canvas, opts = {}) {
   const blossomDepthMat = blossomPrepass ? M.blossomDepthMaterial(atlas, a2c) : null;
   if (blossomPrepass) blossomMat.depthWrite = false;
   const blossomShadowMat = M.blossomShadowMaterial(atlas);
-  const cardGeo = ST ? tessellate(buildBlossomCardGeometry(), ST.triMul) : buildBlossomCardGeometry();
+  const flowerGeo = ST ? tessellate(buildFlowerGeometry(), ST.triMul) : buildFlowerGeometry();
 
   function buildTreeObject(d, pos, castShadow = true) {
     const group = new THREE.Group();
@@ -174,21 +174,17 @@ export async function create(canvas, opts = {}) {
     barkMesh.name = 'bark';
     barkMesh.castShadow = castShadow; barkMesh.receiveShadow = true;
     group.add(barkMesh);
-    const geo = cardGeo.clone();
+    const geo = flowerGeo.clone();
     const mesh = new THREE.InstancedMesh(geo, blossomMat, d.n);
     mesh.name = 'blossoms';
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
-    // one interleaved buffer for the per-card attributes (fewer vertex buffers; WebGPU guarantees only 8)
-    const per = new Float32Array(d.n * 6);
-    for (let i = 0; i < d.n; i++) {
-      per[i * 6] = d.aFlex[i]; per[i * 6 + 1] = d.aAtlas[i * 2]; per[i * 6 + 2] = d.aAtlas[i * 2 + 1];
-      per[i * 6 + 3] = d.aCanopyN[i * 3]; per[i * 6 + 4] = d.aCanopyN[i * 3 + 1]; per[i * 6 + 5] = d.aCanopyN[i * 3 + 2];
-    }
-    const ib = new THREE.InstancedInterleavedBuffer(per, 6);
+    // one interleaved buffer for the per-flower attributes (fewer vertex buffers; WebGPU guarantees only 8)
+    const ib = new THREE.InstancedInterleavedBuffer(d.attrs, 7);
     geo.setAttribute('aFlex', new THREE.InterleavedBufferAttribute(ib, 1, 0));
     geo.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(ib, 2, 1));
     geo.setAttribute('aCanopyN', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+    geo.setAttribute('aGlow', new THREE.InterleavedBufferAttribute(ib, 1, 6));
     mesh.receiveShadow = castShadow;
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
@@ -215,6 +211,10 @@ export async function create(canvas, opts = {}) {
   const main = buildTreeObject(G.treeMain[0], treePos, true);
   main.group.name = 'tree';
   scene.add(main.group);
+  U.uTreePos.value.copy(treePos);
+  const lights = makeStringLights(main.data.lights.pos, main.data.lights.flex, treePos);
+  lights.mesh.name = 'lights';
+  scene.add(lights.mesh);
   const smallTrees = [];
   const smallData = [...G.treesA, ...G.treesB];
   Lay.small.forEach((sp, k) => {
@@ -315,7 +315,7 @@ export async function create(canvas, opts = {}) {
   controls.target.copy(DEFAULT.target).add(new THREE.Vector3(2, 2, 0));
   controls.update();
 
-  const trunkTop = MAIN_TREE.trunk.length + 1.5;
+  const trunkTop = MAIN_TREE.trunk.length * MAIN_TREE.scale + 1.5;
   function clampCamera() {
     const p = camera.position;
     const g = Math.max(world.heightFast(p.x, p.z), 0);
@@ -406,6 +406,7 @@ export async function create(canvas, opts = {}) {
     g.sharp.value = pr >= 1.75 ? 0.3 : pr >= 1.2 ? 0.45 : 0.6;
     rays.aspect.value = w / h;
     motes.uPx.value = pr * (h / 900) * 1.3;
+    lights.uFocal.value = (h * pr) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   }
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);
@@ -489,6 +490,9 @@ export async function create(canvas, opts = {}) {
     post.grade.uniforms.time.value = U.uTime.value;
 
     petals.update(dt, U.uTime.value, S.wind, S.river);
+    // string lights come on at dusk
+    U.uLights.value = smoothstep(7, -2.5, skyNow.elev);
+    lights.mesh.visible = warming || U.uLights.value > 0.001;
     lantern.update(U.uSunVis.value * smoothstep(-2, 14, skyNow.elev));
 
     // camera

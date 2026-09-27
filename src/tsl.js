@@ -21,7 +21,16 @@ export const U = {
   uSunVis: uniform(1),
   uSkyAmb: uniform(new THREE.Color(0.4, 0.45, 0.6)),
   uFlow: uniform(0),
+  uLights: uniform(0), // string lights on the main tree: 0 off .. 1 fully on (dusk)
+  uLightColor: uniform(new THREE.Color(1.0, 0.6, 0.3)), // warm-white bulbs
+  uTreePos: uniform(new THREE.Vector3()),
 };
+
+// the string lights' soft pool of light on the ground under the main tree
+export const treeLightPool = Fn(([wp]) => {
+  const d = length(wp.xz.sub(U.uTreePos.xz));
+  return U.uLightColor.mul(U.uLights).mul(exp(d.mul(d).mul(-1.0 / 30.0))).mul(0.5);
+});
 
 // ---------- noise (same math as the GLSL it replaces) ----------
 export const hash12 = Fn(([p]) => {

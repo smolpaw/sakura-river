@@ -4,7 +4,7 @@ import {
   Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod,
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select, cross,
 } from 'three/tsl';
-import { U, sstep, applyFog } from './tsl.js';
+import { U, sstep, applyFog, windOffset } from './tsl.js';
 import { mulberry32 } from './noise.js';
 
 // rotY(a) * rotX(b) * rotZ(c) * v, as the GLSL column-major mat3 products of the old petal shader
@@ -85,6 +85,38 @@ export function makeMotes(center, count) {
   sprite.frustumCulled = false;
   sprite.layers.set(1);
   return { mesh: sprite, uPx };
+}
+
+// string lights: one round glow sprite per bulb (a bright core and a soft halo), swaying with its branch.
+// Drawn as sprites rather than tiny meshes: bloom turns sub-pixel points into blocky squares.
+export function makeStringLights(pos, flex, origin) {
+  const n = flex.length;
+  const p = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { p[i * 3] = pos[i * 3] + origin.x; p[i * 3 + 1] = pos[i * 3 + 1] + origin.y; p[i * 3 + 2] = pos[i * 3 + 2] + origin.z; }
+  const uFocal = uniform(500); // drawing-buffer pixels per unit at unit distance
+  const base = instancedBufferAttribute(new THREE.InstancedBufferAttribute(p, 3), 'vec3');
+  const fl = instancedBufferAttribute(new THREE.InstancedBufferAttribute(flex, 1), 'float');
+  const swayed = base.add(windOffset(base, fl, U.uTime));
+  // nudged towards the camera so the halo is not cut by the bark it sits on
+  const at = swayed.add(normalize(cameraPosition.sub(swayed)).mul(0.08));
+  const mvz = cameraViewMatrix.mul(vec4(at, 1.0)).z.negate();
+  const mat = new THREE.PointsNodeMaterial({
+    transparent: true, depthWrite: false, sizeAttenuation: false, fog: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
+  });
+  mat.positionNode = at;
+  mat.sizeNode = clamp(uFocal.mul(0.3).div(mvz), 5.0, 140.0).div(screenDPR);
+  mat.colorNode = Fn(() => {
+    const c = uv().sub(0.5);
+    const r2 = dot(c, c);
+    const glow = r2.mul(-500.0).exp().mul(10.0).add(r2.mul(-30.0).exp().mul(0.9)); // core + halo
+    return vec4(U.uLightColor.mul(glow), U.uLights);
+  })();
+  const sprite = new THREE.Sprite(mat);
+  sprite.count = n;
+  sprite.frustumCulled = false;
+  return { mesh: sprite, uFocal };
 }
 
 // bench-only rain placeholder: instanced streaks animated in the vertex stage, in a box around the camera

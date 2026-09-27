@@ -5,35 +5,33 @@ import { tessellate } from './stress.js';
 
 const V = THREE.Vector3;
 
+// Somei Yoshino form: a short trunk that splits at the top into 5-6 wide-spreading limbs; each branch then carries a
+// leader (continues almost straight) and side shoots. Limbs rise, twigs droop. Lengths are scaled by `scale`.
 export const MAIN_TREE = {
-  maxDepth: 4,
-  trunk: { length: 3.3, radius: 0.6, lean: 0.12 },
-  levels: [
-    { segLen: 0.22, up: 0.0, outward: 0.0, wobble: 0.22, taper: 0.66, children: [4, 4], tMin: 0.8, tMax: 1.0, angle: [0.5, 0.82], lenRatio: [2.0, 2.5], radRatio: 0.6, lenFall: 0 },
-    { segLen: 0.3, up: 0.02, outward: 0.075, wobble: 0.34, taper: 0.4, children: [6, 8], tMin: 0.16, tMax: 0.98, angle: [0.5, 0.95], lenRatio: [0.44, 0.6], radRatio: 0.56, lenFall: 0.45 },
-    { segLen: 0.26, up: -0.01, outward: 0.05, wobble: 0.55, taper: 0.38, children: [5, 7], tMin: 0.14, tMax: 0.98, angle: [0.45, 0.95], lenRatio: [0.45, 0.62], radRatio: 0.56, lenFall: 0.35 },
-    { segLen: 0.22, up: -0.05, outward: 0.03, wobble: 0.75, taper: 0.35, children: [4, 6], tMin: 0.18, tMax: 1.0, angle: [0.4, 0.9], lenRatio: [0.42, 0.58], radRatio: 0.62, lenFall: 0.2 },
-    { segLen: 0.18, up: -0.07, outward: 0.0, wobble: 0.9, taper: 0.3, children: [0, 0] },
-  ],
-  blossomDensity: [0, 0, 0.55, 2.3, 4.2],
-  minY: 2.4,
+  scale: 1.25,
+  trunk: { length: 2.5, radius: 0.46, lean: 0.1 },
+  limbs: [5, 6],
+  maxDepth: 5,
+  umbels: [0, 0, 0, 3, 5, 10], // blossom umbels per branch, by depth
+  flowerSize: 1,
+  lights: true,
+  minY: 2.2,
   roots: 6,
 };
 
 export const SMALL_TREE = {
+  scale: 1.25,
+  trunk: { length: 2.1, radius: 0.36, lean: 0.12 },
+  limbs: [4, 5],
   maxDepth: 4,
-  trunk: { length: 2.6, radius: 0.36, lean: 0.1 },
-  levels: [
-    { segLen: 0.3, up: 0.0, outward: 0.0, wobble: 0.25, taper: 0.65, children: [3, 4], tMin: 0.78, tMax: 1.0, angle: [0.45, 0.8], lenRatio: [1.8, 2.3], radRatio: 0.62, lenFall: 0 },
-    { segLen: 0.4, up: 0.03, outward: 0.07, wobble: 0.35, taper: 0.4, children: [5, 6], tMin: 0.2, tMax: 0.98, angle: [0.5, 0.95], lenRatio: [0.45, 0.6], radRatio: 0.56, lenFall: 0.45 },
-    { segLen: 0.35, up: -0.01, outward: 0.05, wobble: 0.55, taper: 0.38, children: [4, 5], tMin: 0.2, tMax: 0.98, angle: [0.45, 0.95], lenRatio: [0.45, 0.62], radRatio: 0.56, lenFall: 0.35 },
-    { segLen: 0.3, up: -0.05, outward: 0.03, wobble: 0.75, taper: 0.35, children: [3, 4], tMin: 0.25, tMax: 1.0, angle: [0.4, 0.9], lenRatio: [0.45, 0.6], radRatio: 0.62, lenFall: 0.2 },
-    { segLen: 0.3, up: -0.07, outward: 0.0, wobble: 0.9, taper: 0.3, children: [0, 0] },
-  ],
-  blossomDensity: [0, 0, 0.6, 1.9, 3.2],
-  minY: 2.0,
+  umbels: [0, 0, 2, 5, 9],
+  flowerSize: 1.7, // seen from afar: fewer, larger flowers
+  lights: false,
+  minY: 1.8,
   roots: 0,
 };
+
+const TAU = Math.PI * 2;
 
 function anyPerp(d) {
   const a = Math.abs(d.y) < 0.9 ? new V(0, 1, 0) : new V(1, 0, 0);
@@ -42,40 +40,35 @@ function anyPerp(d) {
 
 export function growTree(seed, cfg, groundAt = () => 0) {
   const rng = mulberry32(seed);
+  const rr = (a, b) => a + (b - a) * rng();
   const nz = makeNoise(seed + 99);
+  const k = cfg.scale, D = cfg.maxDepth;
   const branches = [];
-  const blossoms = [];
+  const anchors = []; // umbel sites: { p, d, f, depth }
 
   function grow(start, dir, length, radius, depth, pathLen) {
-    const L = cfg.levels[depth];
-    const segs = Math.max(3, Math.ceil(length / L.segLen));
-    const step = length / segs;
+    const n = depth < 2 ? 6 : 4;
+    const step = length / n;
+    const r1 = radius * (depth === D ? 0.28 : 0.62);
+    const wob = depth === 0 ? 0.12 : 0.2;
     const pts = [start.clone()], rad = [radius], flex = [pathLen], dirs = [dir.clone()];
     let p = start.clone();
     const d = dir.clone();
-    for (let i = 1; i <= segs; i++) {
-      const out = new V(p.x, 0, p.z);
-      if (out.lengthSq() < 1e-4) out.set(d.x, 0, d.z);
-      if (out.lengthSq() < 1e-6) out.set(1, 0, 0);
-      out.normalize();
-      d.addScaledVector(out, L.outward * step);
-      d.y += L.up * step;
-      d.x += (rng() - 0.5) * L.wobble * step;
-      d.z += (rng() - 0.5) * L.wobble * step;
-      d.y += (rng() - 0.5) * L.wobble * step * 0.5;
-      if (p.y < cfg.minY && depth > 0 && d.y < 0.25) d.y += 0.35 * step;
-      if (depth >= 1 && d.y > 0.85) d.y -= 0.1 * step; // keep the crown spreading
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      d.x += rr(-wob, wob); d.z += rr(-wob, wob); d.y += rr(-0.08, 0.08);
+      d.y += depth === 0 ? 0.05 : depth <= 2 ? 0.022 : -0.05 * (depth - 2) * t; // limbs rise, twigs droop
+      if (depth > 0 && p.y < cfg.minY && d.y < 0.2) d.y += 0.25; // no twig trails on the grass
       d.normalize();
       p = p.clone().addScaledVector(d, step);
-      const t = i / segs;
       pts.push(p); dirs.push(d.clone());
-      rad.push(radius * (1 - (1 - L.taper) * Math.pow(t, 0.9)));
+      rad.push(lerp(radius, r1, t));
       flex.push(pathLen + step * i);
     }
     branches.push({ pts, rad, flex, depth });
 
     const at = (t) => {
-      const f = t * segs, i = Math.min(segs - 1, Math.floor(f)), u = f - i;
+      const f = t * n, i = Math.min(n - 1, Math.floor(f)), u = f - i;
       return {
         p: pts[i].clone().lerp(pts[i + 1], u),
         d: dirs[i].clone().lerp(dirs[i + 1], u).normalize(),
@@ -84,45 +77,44 @@ export function growTree(seed, cfg, groundAt = () => 0) {
       };
     };
 
-    if (depth < cfg.maxDepth) {
-      const n = L.children[0] + Math.floor(rng() * (L.children[1] - L.children[0] + 1));
-      let roll = rng() * Math.PI * 2;
-      for (let k = 0; k < n; k++) {
-        const t = L.tMin + (L.tMax - L.tMin) * ((k + 0.2 + rng() * 0.6) / n);
-        const s = at(t);
-        roll += 2.39996 + (rng() - 0.5) * 0.7;
-        const perp = anyPerp(s.d).applyAxisAngle(s.d, roll);
-        const ang = lerp(L.angle[0], L.angle[1], rng());
-        const cd = s.d.clone().applyAxisAngle(perp, ang);
-        // cherry: favour horizontal outward spread
-        if (depth >= 1) { cd.y *= 0.75; cd.normalize(); }
-        const clen = length * lerp(L.lenRatio[0], L.lenRatio[1], rng()) * (1 - L.lenFall * t);
-        const crad = Math.max(0.01, s.r * L.radRatio * (0.85 + rng() * 0.25));
-        const start = s.p.clone().addScaledVector(cd, -s.r * 0.25);
-        grow(start, cd, clen, crad, depth + 1, s.f);
-      }
+    const nU = cfg.umbels[depth] || 0;
+    for (let u = 0; u < nU; u++) {
+      const s = at(depth === D ? 1 - rng() * rng() * 0.75 : rr(0.3, 1)); // terminal twigs flower towards the tip
+      anchors.push({ p: s.p, d: s.d, f: s.f, depth });
     }
+    if (depth === D) return;
 
-    const dens = cfg.blossomDensity[depth] || 0;
-    if (dens > 0) {
-      const count = Math.max(1, Math.round(length * dens * (0.7 + rng() * 0.6)));
-      const t0 = depth >= 4 ? 0.1 : depth === 3 ? 0.35 : 0.55;
-      for (let k = 0; k < count; k++) {
-        const t = t0 + (1 - t0) * rng();
-        const s = at(t);
-        const off = new V(rng() - 0.5, rng() - 0.3, rng() - 0.5).multiplyScalar(0.35 + depth * 0.02);
-        blossoms.push({ p: s.p.add(off), f: s.f, depth });
+    const kids = depth === 0 ? cfg.limbs[0] + Math.floor(rng() * (cfg.limbs[1] - cfg.limbs[0] + 1)) : depth === D - 1 ? 2 : 3;
+    const az0 = rng() * TAU;
+    for (let c = 0; c < kids; c++) {
+      let s, cd, clen, crad;
+      if (depth === 0) {
+        // limbs: evenly around the trunk, 53-70 degrees from vertical
+        s = at(rr(0.8, 1));
+        const az = az0 + (c / kids) * TAU + rr(-0.3, 0.3), pol = rr(0.92, 1.22);
+        cd = new V(Math.sin(pol) * Math.cos(az), Math.cos(pol), Math.sin(pol) * Math.sin(az));
+        clen = (length - 0.5) * rr(1.1, 1.35);
+        crad = s.r * rr(0.58, 0.72);
+      } else {
+        const lead = c === 0;
+        s = at(lead ? 1 : rr(0.4, 0.88));
+        const axis = anyPerp(s.d).applyAxisAngle(s.d, rng() * TAU);
+        cd = s.d.clone().applyAxisAngle(axis, lead ? rr(0.12, 0.32) : rr(0.5, 0.95));
+        const out = new V(s.p.x, 0, s.p.z);
+        if (out.lengthSq() > 1e-4) cd.addScaledVector(out.normalize(), 0.22); // open crown
+        cd.normalize();
+        clen = length * (lead ? rr(0.72, 0.84) : rr(0.55, 0.74));
+        crad = s.r * (lead ? 0.8 : rr(0.52, 0.68));
       }
-      // always one at the tip
-      if (depth >= 3) { const s = at(1); blossoms.push({ p: s.p, f: s.f, depth }); }
+      grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f);
     }
   }
 
-  // trunk
+  // trunk (starts half a unit below the ground so the flare sits in it)
   const T = cfg.trunk;
   const g0 = groundAt(0, 0);
   const tdir = new V((rng() - 0.5) * T.lean, 1, (rng() - 0.5) * T.lean).normalize();
-  grow(new V(0, g0 - 0.5, 0), tdir, T.length + 0.5, T.radius, 0, 0);
+  grow(new V(0, g0 - 0.5, 0), tdir, T.length * k + 0.5, T.radius * k, 0, 0);
 
   // surface roots
   const roots = [];
@@ -146,13 +138,55 @@ export function growTree(seed, cfg, groundAt = () => 0) {
 
   // canopy centre + extents for blossom normals / AO
   const c = new V();
-  for (const b of blossoms) c.add(b.p);
-  c.multiplyScalar(1 / Math.max(1, blossoms.length));
+  for (const b of anchors) c.add(b.p);
+  c.multiplyScalar(1 / Math.max(1, anchors.length));
   let ext = new V(1e-3, 1e-3, 1e-3);
-  for (const b of blossoms) { ext.x = Math.max(ext.x, Math.abs(b.p.x - c.x)); ext.y = Math.max(ext.y, Math.abs(b.p.y - c.y)); ext.z = Math.max(ext.z, Math.abs(b.p.z - c.z)); }
+  for (const b of anchors) { ext.x = Math.max(ext.x, Math.abs(b.p.x - c.x)); ext.y = Math.max(ext.y, Math.abs(b.p.y - c.y)); ext.z = Math.max(ext.z, Math.abs(b.p.z - c.z)); }
   c.y -= ext.y * 0.25;
-  return { branches, blossoms, canopy: { center: c, ext }, nz };
+  return { branches, anchors, canopy: { center: c, ext }, nz };
 }
+
+// a branch's centreline as rendered: Catmull-Rom smoothed (rings per depth), plus a closing tip
+const RINGS = [24, 14, 10, 7, 5, 4];
+function branchPath(br) {
+  let { pts, rad, flex } = br;
+  if (br.depth >= 0) {
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const n = RINGS[Math.min(br.depth, RINGS.length - 1)];
+    const np = curve.getPoints(n);
+    const r2 = [], f2 = [];
+    for (let i = 0; i <= n; i++) {
+      const t = (i / n) * (pts.length - 1), k = Math.min(pts.length - 2, Math.floor(t)), u = t - k;
+      r2.push(lerp(rad[k], rad[k + 1], u)); f2.push(lerp(flex[k], flex[k + 1], u));
+    }
+    pts = np; rad = r2; flex = f2;
+  }
+  const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+  const tipDir = last.clone().sub(prev).normalize();
+  return {
+    pts: pts.concat([last.clone().addScaledVector(tipDir, rad[rad.length - 1] * 0.8)]),
+    rad: rad.concat([0.0005]),
+    flex: flex.concat([flex[flex.length - 1]]),
+  };
+}
+
+// parallel-transport frames along a polyline
+function frames(pts) {
+  const n = pts.length, Ts = [], Ns = [];
+  for (let i = 0; i < n; i++) Ts.push(pts[Math.min(n - 1, i + 1)].clone().sub(pts[Math.max(0, i - 1)]).normalize());
+  Ns.push(anyPerp(Ts[0]));
+  for (let i = 1; i < n; i++) {
+    const axis = new V().crossVectors(Ts[i - 1], Ts[i]);
+    const nn = Ns[i - 1].clone();
+    const l = axis.length();
+    if (l > 1e-5) { axis.multiplyScalar(1 / l); nn.applyAxisAngle(axis, Math.acos(clamp(Ts[i - 1].dot(Ts[i]), -1, 1))); }
+    Ns.push(nn);
+  }
+  return { Ts, Ns };
+}
+
+// wind flexibility from path length along the tree (0 at the trunk)
+const flexOf = (f) => Math.pow(clamp((f - 2.2) / 14, 0, 1.4), 1.55);
 
 // ---------- geometry ----------
 export function buildBarkGeometry(tree, groundAt = () => 0) {
@@ -162,43 +196,11 @@ export function buildBarkGeometry(tree, groundAt = () => 0) {
   let vbase = 0;
   const tmpN = new V(), tmpB = new V();
   for (const br of tree.branches) {
-    let pts = br.pts, rad = br.rad, flex = br.flex;
-    // smooth heavy limbs
-    if (br.depth <= 1 && pts.length > 3) {
-      const curve = new THREE.CatmullRomCurve3(pts);
-      const n = pts.length * 2;
-      const np = curve.getPoints(n);
-      const r2 = [], f2 = [];
-      for (let i = 0; i <= n; i++) {
-        const t = (i / n) * (pts.length - 1), k = Math.min(pts.length - 2, Math.floor(t)), u = t - k;
-        r2.push(lerp(rad[k], rad[k + 1], u)); f2.push(lerp(flex[k], flex[k + 1], u));
-      }
-      pts = np; rad = r2; flex = f2;
-    }
-    // closing tip
-    const last = pts[pts.length - 1], prev = pts[pts.length - 2];
-    const tipDir = last.clone().sub(prev).normalize();
-    pts = pts.concat([last.clone().addScaledVector(tipDir, rad[rad.length - 1] * 0.8)]);
-    rad = rad.concat([0.0005]);
-    flex = flex.concat([flex[flex.length - 1]]);
-
+    const { pts, rad, flex } = branchPath(br);
     const r0 = rad[0];
     const radial = br.depth <= 0 ? 18 : r0 > 0.2 ? 14 : r0 > 0.09 ? 10 : r0 > 0.04 ? 7 : r0 > 0.02 ? 5 : 4;
     const n = pts.length;
-    // parallel transport frames
-    const Ts = [], Ns = [];
-    for (let i = 0; i < n; i++) {
-      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
-      Ts.push(b.clone().sub(a).normalize());
-    }
-    Ns.push(anyPerp(Ts[0]));
-    for (let i = 1; i < n; i++) {
-      const axis = new V().crossVectors(Ts[i - 1], Ts[i]);
-      const nn = Ns[i - 1].clone();
-      const l = axis.length();
-      if (l > 1e-5) { axis.multiplyScalar(1 / l); nn.applyAxisAngle(axis, Math.acos(clamp(Ts[i - 1].dot(Ts[i]), -1, 1))); }
-      Ns.push(nn);
-    }
+    const { Ts, Ns } = frames(pts);
     let s = 0;
     const circ = Math.max(1, Math.round(r0 * 7));
     for (let i = 0; i < n; i++) {
@@ -223,8 +225,7 @@ export function buildBarkGeometry(tree, groundAt = () => 0) {
         Nn.push(tmpN.x, tmpN.y, tmpN.z);
         UV.push((j / radial) * circ, s * 0.9);
         // flex: 0 at trunk, grows with path length
-        const fx = Math.pow(clamp((flex[i] - 2.2) / 14, 0, 1.4), 1.55);
-        F.push(br.depth < 0 ? 0 : fx);
+        F.push(br.depth < 0 ? 0 : flexOf(flex[i]));
         // bark AO + moss near ground
         const q = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y, (p.z - center.z) / ext.z).length();
         let ao = lerp(0.55, 1.0, smoothstep(0.2, 1.05, q));
@@ -251,39 +252,21 @@ export function buildBarkGeometry(tree, groundAt = () => 0) {
   return g;
 }
 
-// three crossed, cupped cards
-export function buildBlossomCardGeometry() {
-  const P = [], Nn = [], UV = [], I = [];
-  let base = 0;
-  const seg = 3;
-  for (let q = 0; q < 3; q++) {
-    const rotY = (q / 3) * Math.PI, tilt = q === 0 ? 0 : q === 1 ? 0.45 : -0.4;
-    const m = new THREE.Matrix4().makeRotationY(rotY).multiply(new THREE.Matrix4().makeRotationX(tilt));
-    const nm = new THREE.Matrix3().getNormalMatrix(m);
-    for (let j = 0; j <= seg; j++) for (let i = 0; i <= seg; i++) {
-      const u = i / seg, v = j / seg;
-      const x = u - 0.5, y = v - 0.5;
-      const z = -0.28 * (x * x + y * y);
-      const p = new V(x, y, z).applyMatrix4(m);
-      const n = new V(x * 0.55, y * 0.55, 1).normalize().applyMatrix3(nm).normalize();
-      P.push(p.x, p.y, p.z); Nn.push(n.x, n.y, n.z); UV.push(u, v);
-    }
-    for (let j = 0; j < seg; j++) for (let i = 0; i < seg; i++) {
-      const a = base + j * (seg + 1) + i, b = a + 1, c = a + seg + 1, d = c + 1;
-      I.push(a, b, c, b, d, c);
-    }
-    base += (seg + 1) * (seg + 1);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
-  g.setIndex(I);
+// one cupped flower card (2x2 quads), facing +z
+export function buildFlowerGeometry() {
+  const g = new THREE.PlaneGeometry(1, 1, 2, 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, (x * x + y * y) * 0.4); }
+  g.computeVertexNormals();
+  g.deleteAttribute('uv');
+  const uvs = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) { uvs[i * 2] = p.getX(i) + 0.5; uvs[i * 2 + 1] = p.getY(i) + 0.5; }
+  g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   return g;
 }
 
-// blossom cluster atlas (2x2 variants) painted procedurally
-export function paintBlossomAtlas(seed = 5, size = 1024) {
+// single-flower atlas (2x2 variants) painted procedurally
+export function paintFlowerAtlas(seed = 5, size = 1024) {
   const rng = mulberry32(seed);
   const cv = new OffscreenCanvas(size, size);
   const ctx = cv.getContext('2d', { willReadFrequently: true });
@@ -328,40 +311,12 @@ export function paintBlossomAtlas(seed = 5, size = 1024) {
     }
     ctx.restore();
   };
-  const bud = (x, y, r, rot) => {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
-    ctx.fillStyle = '#e46f93';
-    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.45, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#6d3a2a'; ctx.fillRect(-r * 0.06, r * 0.6, r * 0.12, r * 0.7);
-    ctx.restore();
-  };
-  const leaf = (x, y, r, rot) => {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
-    const gr = ctx.createLinearGradient(0, 0, 0, r);
-    gr.addColorStop(0, '#6b5a1e'); gr.addColorStop(1, '#8a9a36');
-    ctx.fillStyle = gr;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(r * 0.45, r * 0.5, 0, r * 1.2); ctx.quadraticCurveTo(-r * 0.45, r * 0.5, 0, 0); ctx.fill();
-    ctx.restore();
-  };
+  const opens = [1.0, 0.96, 0.9, 0.8];
   for (let cy = 0; cy < 2; cy++) for (let cx = 0; cx < 2; cx++) {
-    const ox = cx * cell + cell / 2, oy = cy * cell + cell / 2;
+    const v = cy * 2 + cx;
     ctx.save();
-    ctx.beginPath(); ctx.rect(cx * cell + 2, cy * cell + 2, cell - 4, cell - 4); ctx.clip();
-    // twig
-    ctx.strokeStyle = 'rgba(92,52,44,0.55)'; ctx.lineWidth = cell * 0.008; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(ox - cell * 0.3, oy + cell * 0.22); ctx.quadraticCurveTo(ox, oy + cell * 0.05, ox + cell * 0.26, oy - cell * 0.2); ctx.stroke();
-    const items = [];
-    const nF = 32 + Math.floor(rng() * 10);
-    for (let k = 0; k < nF; k++) {
-      const a = rng() * Math.PI * 2, rr = Math.pow(rng(), 0.6) * cell * 0.37;
-      items.push({ x: ox + Math.cos(a) * rr, y: oy + Math.sin(a) * rr * 0.92, r: cell * (0.075 + rng() * 0.05) * (1 - rr / (cell * 0.9)), type: rng() < 0.08 ? 'bud' : rng() < 0.03 ? 'leaf' : 'f' });
-    }
-    items.sort((a, b) => a.r - b.r);
-    for (const it of items) {
-      if (it.type === 'bud') bud(it.x, it.y, it.r * 0.8, rng() * 6.28);
-      else if (it.type === 'leaf') leaf(it.x, it.y, it.r * 1.3, rng() * 6.28);
-      else flower(it.x, it.y, it.r, rng() * 6.28, Math.floor(rng() * 4), 0.85 + rng() * 0.2);
-    }
+    ctx.beginPath(); ctx.rect(cx * cell + 1, cy * cell + 1, cell - 2, cell - 2); ctx.clip();
+    flower(cx * cell + cell / 2, cy * cell + cell / 2, cell * 0.42, rng() * 6.28, [2, 0, 1, 3][v], opens[v]);
     ctx.restore();
   }
   // un-premultiplied data with pink-filled transparent texels: no dark fringes in mips
@@ -446,36 +401,125 @@ export function barkTextures({ size, map, bump }) {
   return { map: m, bump: make(bump) };
 }
 
-// one tree: bark geometry + blossom-card instance data (moved from main.js; same RNG order)
-export function treeData(world, seed, cfg, pos, blossomScale = 1, triMul = 1) {
+// String lights wrapped around the trunk and limbs (depth <= 2): bulbs every `gap` along a spiral wire.
+function stringLights(tree, k, groundAt) {
+  const pos = [], flex = [];
+  const gap = 0.26 * k;
+  for (const br of tree.branches) {
+    if (br.depth < 0 || br.depth > 2) continue;
+    const { pts, rad, flex: fl } = branchPath(br);
+    const { Ts, Ns } = frames(pts);
+    const pitch = (br.depth === 0 ? 0.9 : 1.3) * k; // length per turn
+    let a = br.depth * 2.1, wire = gap * 0.5;
+    const n = br.depth === 2 ? Math.ceil((pts.length - 1) * 0.7) : pts.length - 2; // outer twigs stay bare
+    for (let i = 0; i < n; i++) {
+      const seg = pts[i + 1].distanceTo(pts[i]);
+      const r = rad[i] + 0.02;
+      const da = (seg / pitch) * TAU;
+      const len = Math.hypot(seg, r * da);
+      const steps = Math.max(1, Math.ceil(len / (gap * 0.25)));
+      for (let j = 0; j < steps; j++) {
+        wire += len / steps; a += da / steps;
+        if (wire < gap) continue;
+        wire -= gap;
+        const u = (j + 0.5) / steps;
+        const p = pts[i].clone().lerp(pts[i + 1], u);
+        const Nv = Ns[i].clone().lerp(Ns[i + 1], u).normalize(), T = Ts[i].clone().lerp(Ts[i + 1], u).normalize();
+        const B = new V().crossVectors(T, Nv);
+        const rr = lerp(rad[i], rad[i + 1], u) * (br.depth === 0 ? 1.08 : 1) + 0.02;
+        p.addScaledVector(Nv, Math.cos(a) * rr).addScaledVector(B, Math.sin(a) * rr);
+        if (p.y < groundAt(p.x, p.z) + 0.4) continue;
+        pos.push(p.x, p.y, p.z); flex.push(flexOf(lerp(fl[i], fl[i + 1], u)));
+      }
+    }
+  }
+  return { pos: new Float32Array(pos), flex: new Float32Array(flex), n: flex.length };
+}
+
+// how much the string lights reach each point: a soft, saturating sum over nearby bulbs (spatial hash)
+function glowField(lights, sigma) {
+  const cell = sigma * 2.5, grid = new Map();
+  const key = (x, y, z) => (x + 512) * 1048576 + (y + 512) * 1024 + (z + 512);
+  for (let i = 0; i < lights.n; i++) {
+    const kk = key(Math.floor(lights.pos[i * 3] / cell), Math.floor(lights.pos[i * 3 + 1] / cell), Math.floor(lights.pos[i * 3 + 2] / cell));
+    if (!grid.has(kk)) grid.set(kk, []);
+    grid.get(kk).push(i);
+  }
+  const inv = 1 / (sigma * sigma), cut = cell * cell;
+  return (x, y, z) => {
+    const cx = Math.floor(x / cell), cy = Math.floor(y / cell), cz = Math.floor(z / cell);
+    let sum = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const list = grid.get(key(cx + a, cy + b, cz + c));
+      if (!list) continue;
+      for (const i of list) {
+        const dx = lights.pos[i * 3] - x, dy = lights.pos[i * 3 + 1] - y, dz = lights.pos[i * 3 + 2] - z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < cut) sum += Math.exp(-d2 * inv);
+      }
+    }
+    return 1 - Math.exp(-sum * 0.2);
+  };
+}
+
+// flowers per umbel by quality tier
+const UMBEL = { high: [4, 7], medium: [3, 6], low: [2, 4] };
+
+// one tree: bark geometry, flower instance data and (main tree) string lights
+export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   const groundAt = (x, z) => world.height(x + pos.x, z + pos.z);
   const t = growTree(seed, cfg, groundAt);
   const bark = triMul > 1 ? tessellate(buildBarkGeometry(t, groundAt), triMul) : buildBarkGeometry(t, groundAt);
+  const k = cfg.scale;
+  const lights = cfg.lights ? stringLights(t, k, groundAt) : { pos: new Float32Array(0), flex: new Float32Array(0), n: 0 };
+  const glow = lights.n ? glowField(lights, 0.55 * k) : () => 0;
+  const bp = bark.attributes.position, barkGlow = new Float32Array(bp.count);
+  if (lights.n) for (let i = 0; i < bp.count; i++) barkGlow[i] = glow(bp.getX(i), bp.getY(i), bp.getZ(i));
+  bark.setAttribute('aGlow', new THREE.BufferAttribute(barkGlow, 1));
+
   const rng = mulberry32(seed + 1);
-  const n = t.blossoms.length;
-  const matrix = new Float32Array(n * 16), color = new Float32Array(n * 3);
-  const aFlex = new Float32Array(n), aAtlas = new Float32Array(n * 2), aCan = new Float32Array(n * 3);
-  const spawn = new Float64Array(n * 3);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), e = new THREE.Euler(), col = new THREE.Color();
+  const rr = (a, b) => a + (b - a) * rng();
+  let per = UMBEL[tier] || UMBEL.high;
+  if (cfg.flowerSize > 1) per = [1, Math.max(2, per[1] - 3)];
+  const max = t.anchors.length * per[1];
+  const matrix = new Float32Array(max * 16), color = new Float32Array(max * 3);
+  const attrs = new Float32Array(max * 7); // aFlex, aAtlas.xy, aCanopyN.xyz, aGlow
+  const spawn = [];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), sv = new V(), col = new THREE.Color();
+  const Z = new V(0, 0, 1), UP = new V(0, 1, 0);
   const { center, ext } = t.canopy;
-  t.blossoms.forEach((b, i) => {
-    e.set(rng() * 6.28, rng() * 6.28, rng() * 6.28);
-    q.setFromEuler(e);
-    const sz = (0.85 + rng() * 0.55) * blossomScale * (b.depth <= 2 ? 1.15 : 1);
-    s.set(sz, sz, sz);
-    m.compose(b.p, q, s);
-    m.toArray(matrix, i * 16);
-    aFlex[i] = Math.pow(clamp((b.f - 2.2) / 14, 0, 1.4), 1.55);
-    aAtlas[i * 2] = rng() < 0.5 ? 0 : 0.5; aAtlas[i * 2 + 1] = rng() < 0.5 ? 0 : 0.5;
-    const cn = new V((b.p.x - center.x) / ext.x, (b.p.y - center.y) / ext.y * 0.8, (b.p.z - center.z) / ext.z);
-    const r = cn.length();
-    cn.normalize();
-    aCan[i * 3] = cn.x; aCan[i * 3 + 1] = cn.y; aCan[i * 3 + 2] = cn.z;
-    const ao = lerp(0.3, 1.0, smoothstep(0.3, 1.05, r)) * (0.75 + 0.25 * clamp(cn.y + 0.5, 0, 1));
-    const hue = rng();
-    col.setRGB(ao * (0.98 + hue * 0.04), ao * (0.8 + hue * 0.14) * lerp(0.85, 1, ao), ao * (0.88 + hue * 0.08));
-    col.toArray(color, i * 3);
-    spawn[i * 3] = b.p.x; spawn[i * 3 + 1] = b.p.y; spawn[i * 3 + 2] = b.p.z;
-  });
-  return { bark, n, matrix, color, aFlex, aAtlas, aCanopyN: aCan, spawn };
+  let n = 0;
+  for (const an of t.anchors) {
+    const perp = anyPerp(an.d).applyAxisAngle(an.d, rng() * TAU);
+    const mid = an.p.clone().addScaledVector(perp, rr(0.03, 0.12) * k).addScaledVector(UP, 0.03 * k);
+    const nF = per[0] + Math.floor(rng() * (per[1] - per[0] + 1));
+    const flex = flexOf(an.f);
+    for (let f = 0; f < nF; f++) {
+      const p = mid.clone().add(new V(rr(-1, 1), rr(-1, 1), rr(-1, 1)).multiplyScalar(0.12 * k * Math.sqrt(cfg.flowerSize)));
+      const nrm = p.clone().sub(an.p).normalize().add(new V(rr(-0.6, 0.6), rr(-0.3, 0.7), rr(-0.6, 0.6))).normalize();
+      q.setFromUnitVectors(Z, nrm).multiply(q2.setFromAxisAngle(Z, rng() * TAU));
+      const sz = rr(0.13, 0.19) * k * cfg.flowerSize;
+      m.compose(p, q, sv.set(sz, sz, sz));
+      m.toArray(matrix, n * 16);
+      const cn = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y * 0.8, (p.z - center.z) / ext.z);
+      const r = cn.length();
+      cn.normalize();
+      const o = n * 7;
+      attrs[o] = flex;
+      attrs[o + 1] = rng() < 0.5 ? 0 : 0.5; attrs[o + 2] = rng() < 0.5 ? 0 : 0.5;
+      attrs[o + 3] = cn.x; attrs[o + 4] = cn.y; attrs[o + 5] = cn.z;
+      attrs[o + 6] = glow(p.x, p.y, p.z);
+      // inner flowers darker (canopy AO), white to blush
+      const ao = lerp(0.45, 1.0, smoothstep(0.3, 1.05, r)) * (0.8 + 0.2 * clamp(cn.y + 0.5, 0, 1));
+      const blush = Math.pow(rng(), 1.5);
+      col.setRGB(ao, ao * lerp(1, 0.86, blush), ao * lerp(1, 0.9, blush));
+      col.toArray(color, n * 3);
+      if (rng() < 0.3) spawn.push(p.x, p.y, p.z);
+      n++;
+    }
+  }
+  return {
+    bark, n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * 7),
+    spawn: new Float64Array(spawn), lights,
+  };
 }

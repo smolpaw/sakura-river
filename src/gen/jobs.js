@@ -1,7 +1,7 @@
 // Procedural generation jobs. Each runs in a worker (or on the main thread as a fallback) and returns plain
 // data: typed arrays, packed geometries and small JSON. Every job owns its seeds, so jobs run in any order.
 import { createWorld } from '../world.js';
-import { paintBlossomAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
+import { paintFlowerAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
 import { grassData, flowersData, rocksData, rockPlan, forestData } from '../vegetation.js';
 import { fujiGeometry, lanternGeometry, bridgeData, pagodaGeometry } from '../props.js';
 import { fallenData } from '../petals.js';
@@ -19,8 +19,8 @@ export const JOBS = {
   heightCache: () => world().computeHeightCache(),
   depth: ({ tier }) => world().buildDepthMap(rockPlan(world(), tier, xz(L().tree)).rocksInWater),
   river: () => world().buildRiver(),
-  trees: ({ list, triMul }) => list.map((t) => treeData(world(), t.seed, t.small ? SMALL_TREE : MAIN_TREE, xz(t.pos), t.blossomScale, triMul)),
-  atlas: ({ size }) => paintBlossomAtlas(5, size),
+  trees: ({ list, tier, triMul }) => list.map((t) => treeData(world(), t.seed, t.small ? SMALL_TREE : MAIN_TREE, xz(t.pos), tier, triMul)),
+  atlas: ({ size }) => paintFlowerAtlas(5, size),
   bark: () => paintBark(3),
   fuji: () => { const w = world(); return fujiGeometry(w.peak.x, w.peak.z, w.peak.R, 820, 30); },
   props: ({ triMul }) => {
@@ -44,4 +44,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 330, depth: 220, grass: 150, atlas: 150, bark: 120, heightCache: 90, trees: 60, fuji: 40, props: 25, rocks: 25, forest: 11, flowers: 10, fallen: 7, river: 3 };
+export const COST = { terrain: 330, depth: 220, grass: 150, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 25, rocks: 25, forest: 11, flowers: 10, fallen: 7, river: 3 };

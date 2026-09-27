@@ -6,7 +6,7 @@ import {
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalLocal, diffuseColor, vertexColor, modelWorldMatrix, mat3,
   transformNormalToView, faceDirection,
 } from 'three/tsl';
-import { U, vnoise, sstep, LitMaterial, windPosition, windShadowPosition } from './tsl.js';
+import { U, vnoise, sstep, LitMaterial, windPosition, windShadowPosition, treeLightPool } from './tsl.js';
 
 const wp = positionWorld;
 const viewDir = () => normalize(cameraPosition.sub(wp));
@@ -26,6 +26,7 @@ export function terrainMaterial() {
       o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(cc).mul(cw).mul(2.2));
       o.mulAssign(mix(1.0, 0.75, sstep(0.0, -1.5, y)));
     });
+    o.addAssign(diffuseColor.rgb.mul(treeLightPool(wp)));
     return o;
   })());
 }
@@ -38,14 +39,17 @@ export function barkMaterial(map, bumpMap) {
     const vvB = viewDir();
     const rimB = pow(max(float(1.0).sub(max(dot(normalView, normalize(cameraViewMatrix.mul(vec4(vvB, 0.0)).xyz)), 0.0)), 0.0), 3.0);
     const o = out.add(U.uSunColor.mul(U.uSunVis).mul(rimB).mul(pow(max(dot(vvB.negate(), U.uSunDir), 0.0), 2.0)).mul(0.35).mul(diffuseColor.rgb).mul(4.0));
-    return o.add(diffuseColor.rgb.mul(U.uSkyAmb).mul(0.15));
+    const lit = diffuseColor.rgb.mul(U.uLightColor).mul(U.uLights).mul(attribute('aGlow', 'float')).mul(0.9); // string lights
+    return o.add(diffuseColor.rgb.mul(U.uSkyAmb).mul(0.15)).add(lit);
   })());
 }
 
+const flowerUV = () => uv().mul(0.5).add(attribute('aAtlas', 'vec2'));
+
 export function blossomMaterial(atlas, alphaToCoverage) {
-  const canopyNormal = normalize(mix(normalize(normalLocal), attribute('aCanopyN', 'vec3'), 0.72));
+  const canopyNormal = normalize(mix(normalize(normalLocal), attribute('aCanopyN', 'vec3'), 0.6));
   return new LitMaterial({
-    colorNode: texture(atlas, uv().mul(0.5).add(attribute('aAtlas', 'vec2'))),
+    colorNode: texture(atlas, flowerUV()),
     alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.72, metalness: 0, alphaToCoverage,
     positionNode: windPosition(attribute('aFlex', 'float'), null, canopyNormal), receivedShadowPositionNode: windShadowPosition(),
     // back faces flip like any double-sided normal (the old 'noFlip' patch never matched the unexpanded chunk)
@@ -55,28 +59,29 @@ export function blossomMaterial(atlas, alphaToCoverage) {
     const backB = pow(max(dot(vdirB, U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
     const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(backB.mul(1.2).add(0.1)));
-    return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1))));
+    // string lights shine through the petals (baked reach per flower)
+    const lit = diffuseColor.rgb.mul(U.uLightColor).mul(U.uLights).mul(attribute('aGlow', 'float')).mul(3.0);
+    return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1)))).add(lit);
   })());
 }
 
-// depth prepass for the blossom cards: the canopy has heavy overdraw, so its depth goes down first with only the
+// depth prepass for the flowers: the canopy has heavy overdraw, so its depth goes down first with only the
 // atlas alpha, and the lit pass (depthWrite off) then shades just the visible fragment. Pushed back by a few depth
 // units (constant, not slope-scaled: the cards cluster nearly coplanar) so the lit pass's own depth never fails
 // against it if the two vertex shaders round differently; with no offset the result is pixel-identical here.
 export function blossomDepthMaterial(atlas, alphaToCoverage) {
   return new THREE.MeshBasicNodeMaterial({
-    colorNode: texture(atlas, uv().mul(0.5).add(attribute('aAtlas', 'vec2'))),
+    colorNode: texture(atlas, flowerUV()),
     alphaTest: 0.4, side: THREE.DoubleSide, alphaToCoverage, fog: false, colorWrite: false,
     polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: 4,
     positionNode: windPosition(attribute('aFlex', 'float')),
   });
 }
 
-// shadow-only stand-in for the blossom cards: r170's blossom depth material sampled the atlas with the card's
-// raw 0..1 uv (the whole 2x2 atlas, not the card's cell), which shaped the baseline's canopy shadows
+// shadow-only stand-in for the flowers (layer 2, see main.js)
 export function blossomShadowMaterial(atlas) {
   return new THREE.MeshBasicNodeMaterial({
-    colorNode: texture(atlas, uv()), alphaTest: 0.4, side: THREE.DoubleSide, fog: false,
+    colorNode: texture(atlas, flowerUV()), alphaTest: 0.4, side: THREE.DoubleSide, fog: false,
     positionNode: windPosition(attribute('aFlex', 'float')),
   });
 }
@@ -95,7 +100,7 @@ export function grassMaterial() {
     const back = pow(max(dot(vdir, U.uSunDir), 0.0), 3.0);
     const tip = aFlex; // fragment-stage attribute becomes a varying
     const o = out.add(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(back.mul(1.6).add(0.15)).mul(clamp(tip.mul(2.2), 0.0, 1.0)));
-    return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35)));
+    return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35))).add(diffuseColor.rgb.mul(treeLightPool(wp)));
   })());
 }
 const sin01 = (x) => x.sin().mul(0.5).add(0.5);
@@ -148,3 +153,4 @@ export function stressObjectMaterial(color, roughness, metalness) {
 export function lanternCoreMaterial() {
   return new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(1, 0.62, 0.3), fog: false });
 }
+
