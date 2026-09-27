@@ -69,20 +69,3 @@ export function makeStressObjects(world, count, center, makeMaterial) {
   }
   return group;
 }
-
-// rain placeholder: instanced streaks animated in the vertex stage (material from fx.js)
-export function makeRain(count, material) {
-  const rng = mulberry32(99);
-  const geo = new THREE.InstancedBufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0], 3));
-  geo.setIndex([0, 1, 2, 0, 2, 3]);
-  const seed = new Float32Array(count * 4);
-  for (let i = 0; i < count * 4; i++) seed[i] = rng();
-  geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 4));
-  geo.instanceCount = count;
-  const mesh = new THREE.Mesh(geo, material);
-  mesh.frustumCulled = false;
-  mesh.renderOrder = 4;
-  mesh.layers.set(1);
-  return mesh;
-}

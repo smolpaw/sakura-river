@@ -44,6 +44,7 @@ H.view = (v, settle = 120, dt = 1 / 60) => {
 
 H.set = (k, v) => eng.setImmediate(k, v);
 H.cinematic = (on) => eng.setCinematic(on);
+H.call = (name, ...args) => eng[name](...args); // any engine method, e.g. setWeather, setTimeOfDay
 
 // wait until the GPU has drained all submitted work (WebGPU queue, or a WebGL fence)
 async function gpuIdle() {

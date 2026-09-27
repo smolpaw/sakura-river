@@ -1,8 +1,8 @@
-// Node materials for the custom-shaded effects: petals (flying + fallen), pollen motes, lanterns, bench rain
+// Node materials for the custom-shaded effects: petals (flying + fallen), pollen motes, lanterns
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod,
-  positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select, cross,
+  positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
 import { U, sstep, applyFog, LitMaterial, lanternLight } from './tsl.js';
@@ -162,25 +162,4 @@ export function makeLanterns(d, lanternGeo) {
   halos.layers.set(1);
   group.add(halos);
   return { group, halos, uFocal };
-}
-
-// bench-only rain placeholder: instanced streaks animated in the vertex stage, in a box around the camera
-export function rainMaterial() {
-  const seed = attribute('aSeed', 'vec4');
-  const BOX = vec3(60.0, 30.0, 60.0);
-  const pos = Fn(() => {
-    const p = seed.xyz.mul(BOX).toVar();
-    p.y.subAssign(U.uTime.mul(seed.w.mul(3.0).add(9.0)));
-    const w = U.uWindDir.mul(U.uWind).mul(U.uTime).mul(2.0);
-    p.assign(vec3(p.x.add(w.x), p.y, p.z.add(w.y)));
-    const c = cameraPosition.sub(BOX.mul(0.5));
-    p.assign(c.add(mod(p.sub(c), BOX)));
-    const fall = normalize(vec3(U.uWindDir.x.mul(U.uWind).mul(0.2), -1.0, U.uWindDir.y.mul(U.uWind).mul(0.2)));
-    const side = normalize(cross(fall, normalize(cameraPosition.sub(p))));
-    return p.add(side.mul(positionGeometry.x).mul(0.012)).add(fall.mul(positionGeometry.y).mul(0.55));
-  })();
-  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, fog: false });
-  m.positionNode = pos;
-  m.colorNode = vec4(applyFog(U.uSkyAmb.mul(1.2).add(U.uSunColor.mul(0.15)), positionWorld), seed.w.mul(0.12).add(0.18));
-  return m;
 }

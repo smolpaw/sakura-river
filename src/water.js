@@ -1,10 +1,10 @@
 // Flowing river: planar reflection (reflector()), flow-aligned ripples, depth-based colour, shore foam, sun glints
 import * as THREE from 'three/webgpu';
 import {
-  Fn, float, vec2, vec3, vec4, uniform, texture, attribute, mix, max, min, pow, dot, normalize, clamp, length, reflect, sin,
+  Fn, float, vec2, vec3, vec4, uniform, texture, attribute, mix, max, min, pow, dot, normalize, clamp, length, reflect, sin, cos, abs, floor, fract,
   positionWorld, cameraPosition, reflector, If, select,
 } from 'three/tsl';
-import { U, vnoise, sstep, applyFog } from './tsl.js';
+import { U, vnoise, hash12, sstep, applyFog } from './tsl.js';
 
 export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null } = {}) {
   const uniforms = { uHasRefl: uniform(0), uSpeed: uniform(1) };
@@ -35,6 +35,25 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     h.addAssign(vnoise(vec2(p.x.mul(3.5), p.y.sub(f.mul(1.05)).mul(0.35))).mul(0.12));
     return h;
   });
+  // raindrops: rings spreading from random points of two jittered grids (world metres); returns a slope.
+  // Each cell's drop lands at a random moment of its cycle, in a fraction of cycles that grows with the rain.
+  const ripples = Fn(([xz]) => {
+    const g = vec2(0.0).toVar();
+    for (const [cell, off, rate] of [[0.55, 0.0, 1.1], [0.37, 0.43, 1.37]]) {
+      const q = xz.div(cell).add(off);
+      const id = floor(q), f = fract(q).sub(0.5);
+      const h = hash12(id);
+      const c = vec2(h, hash12(id.add(19.7))).sub(0.5).mul(0.3);
+      const cyc = U.uTime.mul(rate).add(h.mul(13.0));
+      const ph = fract(cyc);
+      const on = hash12(id.add(floor(cyc).mul(7.13))).lessThan(U.uRain).select(1.0, 0.0);
+      const v = f.sub(c), d = length(v);
+      const x = d.sub(ph.mul(0.33));
+      const env = float(1.0).sub(ph).mul(float(1.0).sub(ph)).mul(sstep(0.1, 0.0, abs(x)));
+      g.addAssign(v.div(max(d, 1e-3)).mul(cos(x.mul(45.0))).mul(env).mul(on));
+    }
+    return g;
+  });
   const skyCol = Fn(([r]) => {
     const hz = pow(float(1.0).sub(clamp(r.y, 0.0, 1.0)), 4.0);
     return mix(uZenith, uHorizon, hz).add(U.uSunColor.mul(pow(max(dot(r, U.uSunDir), 0.0), 60.0)).mul(0.8).mul(U.uSunVis));
@@ -54,15 +73,18 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const rock = rk.x, wake = rk.y.mul(clamp(uniforms.uSpeed.mul(0.5).add(0.45), 0.0, 1.3)).toVar(); // calmer when the river slows
     const e = 0.08;
     const h0 = hfield(p), hx = hfield(p.add(vec2(e, 0.0))), hy = hfield(p.add(vec2(0.0, e)));
-    const amp = float(0.14).add(uniforms.uSpeed.mul(0.1)).mul(wake.mul(2.0).add(1.0)); // choppy where it breaks
+    const amp = float(0.14).add(uniforms.uSpeed.mul(0.1)).mul(wake.mul(2.0).add(1.0)).mul(U.uRain.mul(0.6).add(1.0)); // choppy where it breaks, and in rain
     const g = vec2(hx.sub(h0), hy.sub(h0)).div(e).mul(amp).toVar();
     // across/along -> world xz
     const fl = normalize(riv.zw).toVar(); // downstream dir (x,z)
     const ac = vec2(fl.y, fl.x.negate());   // across dir
     const gw = ac.mul(g.x).add(fl.mul(g.y)).toVar();
+    const dist = length(cameraPosition.sub(vW)).toVar();
+    If(U.uRain.greaterThan(0.0), () => {
+      gw.addAssign(ripples(vW.xz).mul(U.uRain.mul(0.15).add(0.2)).mul(sstep(30.0, 6.0, dist)));
+    });
     const N = normalize(vec3(gw.x.negate(), 1.0, gw.y.negate())).toVar();
     const V = normalize(cameraPosition.sub(vW)).toVar();
-    const dist = length(cameraPosition.sub(vW));
     // calm distant water to avoid aliasing
     N.assign(normalize(mix(N, vec3(0.0, 1.0, 0.0), sstep(40.0, 260.0, dist))));
     const bed = bedDepth(vW.xz).toVar();

@@ -24,6 +24,8 @@ export const U = {
   uFlow: uniform(0),
   uLights: uniform(0), // riverside lanterns: 0 off .. 1 fully on (dusk)
   uLightColor: uniform(new THREE.Color(1.0, 0.6, 0.3)), // warm light through the paper
+  uRain: uniform(0), // rain intensity 0..1 (streaks, ripples on the river)
+  uFlash: uniform(0), // lightning flash level
 };
 
 // Warm light from the lantern lines (lanterns.js) on whatever is near them: ground, grass, rocks, the tree. The

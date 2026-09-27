@@ -9,7 +9,8 @@ import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
 import { makeSky, skyState } from './sky.js';
 import { makeWater } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
-import { petalMaterial, makeMotes, makeLanterns, rainMaterial } from './fx.js';
+import { petalMaterial, makeMotes, makeLanterns } from './fx.js';
+import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
 import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { makeBridge, makePagoda, makeFuji } from './props.js';
@@ -18,14 +19,14 @@ import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
 import { QualityController } from './quality.js';
 import { hashScene } from './bench-hash.js';
-import { tessellate, makeStressObjects, makeRain } from './stress.js';
+import { tessellate, makeStressObjects } from './stress.js';
 import { runJobs } from './gen/pool.js';
 import { layout } from './gen/layout.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1, koi: 12 },
-  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1500, bloomRes: 0.75, koi: 10 },
-  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 900, bloomRes: 0.5, koi: 6 },
+  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2200, bloomRes: 1, koi: 12, rain: 24000 },
+  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1500, bloomRes: 0.75, koi: 10, rain: 14000 },
+  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 900, bloomRes: 0.5, koi: 6, rain: 7000 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -61,7 +62,8 @@ export async function create(canvas, opts = {}) {
   const glContext = () => canvas.getContext('webgl2', { antialias: false, alpha: true, depth: true, stencil: false, powerPreference: 'high-performance' });
   const params = {
     canvas, antialias: false, powerPreference: 'high-performance', forceWebGL: opts.backend === 'webgl',
-    trackTimestamp: !(opts.bench && opts.backend === 'webgl'), // GPU time drives the quality controller
+    // GPU time drives the quality controller (not needed at a fixed quality outside the bench)
+    trackTimestamp: opts.bench ? opts.backend !== 'webgl' : !opts.fixedQuality,
   };
   if (params.forceWebGL) params.context = glContext();
   const renderer = new THREE.WebGPURenderer(params);
@@ -287,9 +289,16 @@ export async function create(canvas, opts = {}) {
   const motes = makeMotes(new THREE.Vector3(...Lay.motes), Q.motes);
   motes.mesh.name = 'motes';
   scene.add(motes.mesh);
+  const rain = makeRain(Q.rain);
+  rain.name = 'rain';
+  rain.visible = false;
+  scene.add(rain);
+  const lightning = makeLightning();
+  lightning.mesh.name = 'lightning';
+  scene.add(lightning.mesh);
   if (ST) {
     scene.add(makeStressObjects(world, ST.objects, focus, M.stressObjectMaterial));
-    scene.add(makeRain(ST.particles, rainMaterial()));
+    scene.add(makeRain(ST.particles));
   }
 
   for (const n of opts.hide || []) scene.getObjectsByProperty('name', n).forEach((o) => { o.visible = false; }); // bench: isolate objects
@@ -357,13 +366,19 @@ export async function create(canvas, opts = {}) {
   canvas.addEventListener('wheel', () => { if (tween) tween = null; }, { passive: true });
 
   // ---------- params ----------
-  const P = { wind: 0.6, petals: 0.6, river: 1.0, time: 0.92, fog: 0.25, bloom: 0.4 };
+  const P = { wind: 0.6, petals: 0.6, river: 1.0, fog: 0.25, bloom: 0.4, clouds: 0.35, rain: 0, lightning: 0 };
   const S = { ...P }; // smoothed
   petals.setAmount(P.petals);
+  let weatherTween = null; // { from, to, t, dur } in set() units
+  // time of day: clock hours, ticking (a minute per second) when the clock runs; moves to a new time as a time-lapse
+  let clockH = opts.hour ?? tToHour(0.92), clockRunning = false, timeTween = null; // { from, delta, lut, t, dur }
+  const hemiBase = new THREE.Color(), ambBase = new THREE.Color(), flashCol = new THREE.Color(0.55, 0.6, 0.85), tmpC = new THREE.Color();
+  let flashed = false;
 
-  let lastTime = -1;
+  let lastTime = -1, lastCover = -1;
   function applyTimeOfDay(t) {
-    const st = skyState(t);
+    const st = overcast(skyState(t), S.clouds);
+    sky.uniforms.uCover.value = S.clouds;
     U.uSunDir.value.copy(st.dir);
     U.uSunColor.value.copy(st.sun);
     U.uSunVis.value = st.vis;
@@ -380,12 +395,23 @@ export async function create(canvas, opts = {}) {
     hemi.color.copy(amb).multiplyScalar(1.25);
     hemi.groundColor.setRGB(0.16, 0.15, 0.08).lerp(st.fog, 0.25);
     hemi.intensity = lerp(0.62, 1.0, 1 - st.vis * 0.6);
+    hemiBase.copy(hemi.color); ambBase.copy(amb);
     rays.tint.value.copy(st.sun).lerp(new THREE.Color(1, 0.9, 0.8), 0.3);
     renderer.toneMappingExposure = lerp(1.35, 0.98, st.vis) * (st.elev > 30 ? 0.92 : 1);
-    lastTime = t;
+    lastTime = t; lastCover = S.clouds;
     return st;
   }
-  let skyNow = applyTimeOfDay(S.time);
+  let skyNow = applyTimeOfDay(hourToT(clockH));
+
+  // settings in set() units (0..1) <-> engine values
+  function setParam(name, v) {
+    v = clamp(+v, 0, 1);
+    if (name === 'wind') P.wind = v * 1.6;
+    else if (name === 'petals') { P.petals = v; petals.setAmount(v); }
+    else if (name === 'river') P.river = v * 2.2;
+    else if (name in P) P[name] = v;
+  }
+  const paramOf = (name) => (name === 'wind' ? P.wind / 1.6 : name === 'river' ? P.river / 2.2 : P[name]);
 
   // ---------- sizing / adaptive quality ----------
   let W = 1, H = 1;
@@ -439,7 +465,7 @@ export async function create(canvas, opts = {}) {
       }
     } else if (gpuTimed) {
       // one resolve in flight at a time: it reports the last complete frame, and a pending call would repeat it
-      if (resolving) return;
+      if (resolving || opts.fixedQuality) return;
       resolving = true;
       renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER).then((ms) => {
         resolving = false;
@@ -474,8 +500,38 @@ export async function create(canvas, opts = {}) {
   function step(dtIn, doRender = true) {
     const dt = Math.min(dtIn, 0.05);
     const k = 1 - Math.exp(-dt * 2.5);
+    if (weatherTween) {
+      const w = weatherTween, e = easeInOut(Math.min(1, (w.t += dt / w.dur)));
+      for (const key of WEATHER_KEYS) setParam(key, lerp(w.from[key], w.to[key], e));
+      if (w.t >= 1) weatherTween = null;
+    }
     for (const key in P) S[key] += (P[key] - S[key]) * k;
-    if (Math.abs(S.time - lastTime) > 0.0004) skyNow = applyTimeOfDay(S.time);
+    if (timeTween) {
+      const tt = timeTween;
+      tt.t += dt / tt.dur;
+      // gently eased progress along the warped path -> clock hours
+      const e = smoothstep(0, 1, tt.t) * tt.lut[tt.lut.length - 1], lut = tt.lut;
+      let i = 0;
+      while (i < lut.length - 2 && lut[i + 1] < e) i++;
+      const f = (e - lut[i]) / Math.max(1e-9, lut[i + 1] - lut[i]);
+      clockH = (tt.from + tt.delta * Math.min(1, (i + f) / (lut.length - 1))) % 24;
+      if (tt.t >= 1) timeTween = null;
+    } else if (clockRunning) clockH = (clockH + dt / 60) % 24;
+    const tod = hourToT(clockH);
+    if (Math.abs(tod - lastTime) > 0.0004 || Math.abs(S.clouds - lastCover) > 0.002) skyNow = applyTimeOfDay(tod);
+    // weather
+    U.uRain.value = S.rain;
+    rain.geometry.instanceCount = warming ? 1 : Math.round(Q.rain * S.rain); // warm-up builds its pipeline
+    rain.visible = rain.geometry.instanceCount > 0;
+    const flash = lightning.update(dt, S.lightning, camera);
+    if (warming) lightning.mesh.visible = true;
+    U.uFlash.value = flash;
+    sky.uniforms.uBoltDir.value.copy(lightning.dir);
+    if (flash > 0.001 || flashed) {
+      hemi.color.copy(hemiBase).add(tmpC.copy(flashCol).multiplyScalar(flash * 0.9));
+      U.uSkyAmb.value.copy(ambBase).add(tmpC.copy(flashCol).multiplyScalar(flash * 0.6));
+      flashed = flash > 0.001;
+    }
     U.uTime.value += dt;
     U.uWind.value = S.wind;
     U.uFlow.value += dt * S.river * 1.3;
@@ -490,7 +546,7 @@ export async function create(canvas, opts = {}) {
     petals.update(dt, U.uTime.value, S.wind, S.river);
     koi.update(dt, U.uTime.value);
     // the lanterns come on at dusk
-    U.uLights.value = smoothstep(7, -2.5, skyNow.elev);
+    U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = warming || U.uLights.value > 0.001;
 
     // camera
@@ -580,15 +636,39 @@ export async function create(canvas, opts = {}) {
 
   return {
     set(name, v) {
-      v = name === 'time' ? clamp(+v, -0.08, 1.08) : clamp(+v, 0, 1); // time: 04:50 .. 20:10
-      if (name === 'wind') P.wind = v * 1.6;
-      else if (name === 'petals') { P.petals = v; petals.setAmount(v); }
-      else if (name === 'river') P.river = v * 2.2;
-      else if (name === 'time') P.time = v;
-      else if (name === 'fog') P.fog = v;
-      else if (name === 'bloom') P.bloom = v;
+      if (name === 'time') { timeTween = null; clockH = tToHour(clamp(+v, -0.08, 1.08)); } // 04:50 .. 20:10
+      else { weatherTween = null; setParam(name, v); }
     },
     setImmediate(name, v) { this.set(name, v); for (const k in P) S[k] = P[k]; },
+    // weather preset by id, blended in over `seconds`
+    setWeather(id, seconds = 6) {
+      const w = WEATHERS.find((x) => x.id === id);
+      if (!w) return;
+      const from = {};
+      for (const key of WEATHER_KEYS) from[key] = paramOf(key);
+      weatherTween = { from, to: w, t: 0, dur: Math.max(1e-3, seconds) };
+      if (seconds <= 0) { for (const key of WEATHER_KEYS) setParam(key, w[key]); weatherTween = null; for (const k in P) S[k] = P[k]; }
+    },
+    // move the clock forward to `hour` (0..24) as an eased time-lapse (a longer way takes longer), or at once
+    setTimeOfDay(hour, animate = true) {
+      const delta = (((hour - clockH) % 24) + 24) % 24;
+      timeTween = null;
+      if (animate && delta > 0.01) {
+        // the time-lapse slows where the light changes fastest: cumulative hours plus the sun's movement near the
+        // horizon (at dusk and dawn the elevation changes steeply in a few clock minutes)
+        const N = 160, lut = [0];
+        let el0 = skyState(hourToT(clockH)).elev;
+        for (let i = 1; i <= N; i++) {
+          const el = skyState(hourToT((clockH + (delta * i) / N) % 24)).elev;
+          lut.push(lut[i - 1] + delta / N + 0.5 * Math.abs(el - el0) * Math.exp(-(((el + 3) / 8) ** 2)));
+          el0 = el;
+        }
+        timeTween = { from: clockH, delta, lut, t: 0, dur: clamp(2 + lut[N] * 0.3, 3, 9) };
+      }
+      if (!timeTween) clockH = ((hour % 24) + 24) % 24;
+    },
+    setClockRunning(on) { clockRunning = !!on; },
+    timeOfDay() { return clockH; },
     resetCamera() {
       cinematic = false; controls.enabled = true;
       startTween(DEFAULT.pos, DEFAULT.target, 1.8);

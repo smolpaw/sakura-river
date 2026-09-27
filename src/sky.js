@@ -18,8 +18,10 @@ export function makeSky() {
     uCloud: uniform(new THREE.Vector2()),
     uCloudLit: uniform(new THREE.Color()),
     uCloudShade: uniform(new THREE.Color()),
+    uCover: uniform(0.35), // cloud cover 0..1 (0.35: the original sky)
+    uBoltDir: uniform(new THREE.Vector3(0, 0.3, -1).normalize()), // where lightning flashes
   };
-  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade } = uniforms;
+  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade, uCover, uBoltDir } = uniforms;
   const skyColor = Fn(() => {
     const d = normalize(positionWorld.sub(cameraPosition)).toVar();
     const h = d.y, mu = dot(d, U.uSunDir).toVar();
@@ -30,23 +32,31 @@ export function makeSky() {
     col.assign(mix(col, U.uFogSunColor, hz.mul(hz).mul(pow(max(mu, 0.0), 4.0)).mul(0.45)));
     // below horizon blend into haze
     col.assign(mix(col, mix(U.uFogColor, U.uFogSunColor, pow(max(mu, 0.0), 6.0)), sstep(0.02, -0.08, h)));
-    // mie glow + disk
+    // mie glow + disk (hidden by heavy cloud)
     const g = max(mu, 0.0).toVar();
-    col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2))).mul(U.uSunVis));
-    col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis));
-    // clouds on a virtual plane
+    const hidden = float(1.0).sub(sstep(0.5, 0.9, uCover));
+    col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2).mul(hidden))).mul(U.uSunVis));
+    col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis).mul(hidden));
+    // clouds on a virtual plane; cover moves the density thresholds (no shift at 0.35)
+    const sh = uCover.sub(0.35).mul(0.5);
+    const dens = float(0).toVar();
     If(h.greaterThan(-0.02), () => {
       const cuv = d.xz.div(h.add(0.12)).mul(1.3).add(uCloud).toVar();
       const w = vec2(cfbm(cuv.mul(0.35).add(7.0)), cfbm(cuv.mul(0.35).sub(4.0))).toVar();
       const n = cfbm(cuv.mul(0.55).add(w.mul(1.4))).toVar();
       const streak = cfbm(vec2(cuv.x.mul(0.25), cuv.y.mul(1.1)).add(w));
-      const dens = sstep(0.56, 0.8, n.mul(0.75).add(streak.mul(0.35))).toVar();
-      dens.mulAssign(sstep(-0.02, 0.18, h).mul(float(1.0).sub(sstep(0.55, 0.95, h).mul(0.6))));
-      const thick = sstep(0.55, 0.95, n);
+      dens.assign(sstep(float(0.56).sub(sh), float(0.8).sub(sh), n.mul(0.75).add(streak.mul(0.35))));
+      dens.mulAssign(sstep(-0.02, 0.18, h).mul(float(1.0).sub(sstep(0.55, 0.95, h).mul(float(0.6).mul(float(1.0).sub(sstep(0.5, 1.0, uCover)))))));
+      const thick = sstep(float(0.55).sub(sh), float(0.95).sub(sh), n);
       const cl = mix(uCloudLit, uCloudShade, sstep(0.3, 1.0, thick).mul(0.85).add(float(1.0).sub(sunSide).mul(0.25))).toVar();
       // silver lining toward the sun
       cl.addAssign(U.uSunColor.mul(pow(g, 14.0)).mul(float(1.0).sub(thick)).mul(1.2).mul(U.uSunVis));
       col.assign(mix(col, cl, dens.mul(0.9)));
+    });
+    // lightning: the clouds light up, most around the strike
+    If(U.uFlash.greaterThan(0.0), () => {
+      const glow = float(0.15).add(pow(max(dot(d, uBoltDir), 0.0), 6.0).mul(1.6));
+      col.addAssign(vec3(0.5, 0.55, 0.75).mul(U.uFlash).mul(glow).mul(dens.mul(1.2).add(0.35)));
     });
     // alpha 0 marks sky pixels for the light-shaft mask (replaces the old depth == far test)
     return vec4(col, 0.0);
