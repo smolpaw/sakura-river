@@ -507,3 +507,7 @@ After every step, add: date, step, result with a link to its results file, decis
   - Lightning: a jagged branched bolt (<= 2400 vertices, rebuilt per strike) and a flash through the sky shader and the hemisphere light/ambient; no extra light in the lit materials.
   - Quality can be fixed by hand (Auto / High / Medium / Low); a fixed quality turns off the adaptive controller and GPU timer queries.
   - Petals now all leave from the tree's canopy (28% used to spawn upwind of the camera wherever it was, so they fell out of the sky far from the tree).
+- 2026-09-28, bridge, lanterns, controls (owner), checked by eye only:
+  - Bridge redrawn as a taiko-bashi: railing posts with bronze giboshi, three rails and struts, ribs and cross beams under the deck, braced piers on stone footings, stone abutments; ~2x the old bridge's triangles (still one draw). 14 lanterns on railing brackets and four corner posts join the riverside lantern draw; the bridge material sums their light (14 terms, only after dusk, only on bridge pixels).
+  - Lanterns: two red bands across the middle of the paper (colour only, no cost).
+  - Controls restyled (glass panel, segmented choices); subtitle and orbit hint removed.

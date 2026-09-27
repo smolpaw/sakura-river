@@ -1,6 +1,6 @@
 # Sakura River
 
-A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain, with a vermilion bridge, a pagoda, paper lanterns strung along both banks and koi in the river. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Everything is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used.
+A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain, with a lantern-lit vermilion drum bridge, a pagoda, paper lanterns strung along both banks and koi in the river. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Everything is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used.
 
 Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on every push to `main`).
 
@@ -22,7 +22,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/world.js`: height field, river path, terrain mesh, river ribbon, water-depth map and the finer map of rocks in the water (with the white water where the current breaks on them).
 - `src/tree.js`: procedural cherry tree (Somei Yoshino form), single-flower blossoms, bark and flower textures.
 - `src/vegetation.js`: instanced grass (split into tiles for frustum culling), wildflowers, rocks and distant forest.
-- `src/props.js`: Fuji-style volcano, arched bridge and pagoda.
+- `src/props.js`: Fuji-style volcano, arched bridge (with its lanterns' hanging points) and pagoda.
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
 - `src/water.js`: river shader and planar reflections.
 - `src/koi.js`: koi swimming under the river surface.
