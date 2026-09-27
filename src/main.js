@@ -390,9 +390,6 @@ export async function create(canvas, opts = {}) {
   function applyTimeOfDay(t) {
     const st = overcast(skyState(t), S.clouds);
     sky.uniforms.uCover.value = S.clouds;
-    const moon = moonState(tToHour(t), st.elev);
-    sky.uniforms.uMoonDir.value.copy(moon.dir);
-    sky.uniforms.uMoonVis.value = moon.vis;
     U.uSunDir.value.copy(st.dir);
     U.uSunColor.value.copy(st.sun);
     U.uSunVis.value = st.vis;
@@ -533,6 +530,8 @@ export async function create(canvas, opts = {}) {
     } else if (clockRunning) clockH = (clockH + dt / 60) % 24;
     const tod = hourToT(clockH);
     if (Math.abs(tod - lastTime) > 0.0004 || Math.abs(S.clouds - lastCover) > 0.002) skyNow = applyTimeOfDay(tod);
+    // the moon moves every frame: a sharp disc would step with the sky's palette updates
+    sky.uniforms.uMoonVis.value = moonState(clockH, skyNow.elev, sky.uniforms.uMoonDir.value);
     // weather
     U.uRain.value = S.rain;
     rain.geometry.instanceCount = warming ? 1 : Math.round(Q.rain * S.rain); // warm-up builds its pipeline

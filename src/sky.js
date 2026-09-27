@@ -149,10 +149,11 @@ export function skyState(t) {
 
 // The moon by clock hour: high in the south-west at dusk, sinking west to set around 02:00; drawn only while the
 // sky is darkening (sunElev in degrees).
-export function moonState(hour, sunElev) {
+// Writes its direction into `dir` and returns its visibility.
+export function moonState(hour, sunElev, dir) {
   const u = (((hour - 17) % 24) + 24) % 24 / 9; // 17:00 -> 0, 02:00 -> 1
   const el = THREE.MathUtils.degToRad(lerp(34, -6, Math.pow(clampJS(u, 0, 1), 1.2)));
   const az = THREE.MathUtils.degToRad(lerp(-8, -62, clampJS(u, 0, 1)));
-  const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
-  return { dir, vis: u <= 1 ? smoothstep(22, 2, sunElev) : 0 };
+  dir.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+  return u <= 1 ? smoothstep(22, 2, sunElev) : 0;
 }
