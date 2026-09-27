@@ -1,7 +1,7 @@
 // Sky dome with sun, a crescent moon, glow and drifting procedural clouds + time-of-day palette
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, positionWorld, cameraPosition, If } from 'three/tsl';
-import { U, vnoise, sstep } from './tsl.js';
+import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, positionWorld, cameraPosition, If } from 'three/tsl';
+import { U, vnoise, hashSin, sstep } from './tsl.js';
 import { clamp as clampJS, lerp, smoothstep } from './noise.js';
 
 const cfbm = Fn(([p0]) => {
@@ -11,7 +11,25 @@ const cfbm = Fn(([p0]) => {
   return s;
 });
 
-const MOON_R = Math.tan(THREE.MathUtils.degToRad(1.0)); // drawn about 4x its real size
+const MOON_R = Math.tan(THREE.MathUtils.degToRad(1.15)); // drawn about 4x its real size
+
+// one crater per cell at most: a darker floor inside a bright rim
+const crater = Fn(([q]) => {
+  const c = floor(q), f = fract(q);
+  const k = hashSin(c), o = vec2(hashSin(c.add(17.3)), hashSin(c.add(41.7))).mul(0.4).add(0.3);
+  const d = length(f.sub(o)).div(hashSin(c.add(5.1)).mul(0.14).add(0.12)).toVar();
+  const shape = float(1.0).sub(sstep(0.95, 0.55, d).mul(0.3)).add(sstep(0.75, 1.0, d).mul(sstep(1.35, 1.0, d)).mul(0.22));
+  return mix(float(1.0), shape, sstep(0.45, 0.5, k));
+});
+// albedo over longitude/latitude: dark smooth seas over bright cratered highlands
+const moonAlbedo = Fn(([uv]) => {
+  const m = vnoise(uv.mul(1.5).add(3.7)).mul(0.6).add(vnoise(uv.mul(3.3).sub(1.9)).mul(0.3)).add(vnoise(uv.mul(7.0).add(8.2)).mul(0.1));
+  const sea = sstep(0.48, 0.62, m);
+  const a = mix(float(0.95), float(0.5), sea).toVar();
+  a.mulAssign(vnoise(uv.mul(24.0)).mul(0.2).add(0.9));
+  a.mulAssign(crater(uv.mul(5.0)).mul(crater(uv.mul(11.0).add(3.0))).mul(mix(crater(uv.mul(23.0).sub(7.0)), float(1.0), sea.mul(0.6))));
+  return a;
+});
 
 export function makeSky() {
   const uniforms = {
@@ -41,27 +59,30 @@ export function makeSky() {
     const hidden = float(1.0).sub(sstep(0.5, 0.9, uCover));
     col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2).mul(hidden))).mul(U.uSunVis));
     col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis).mul(hidden));
-    // moon: a waxing crescent lit from the sun's side, faint grey maria, a soft halo
+    // moon: a lit sphere (Lommel-Seeliger, as the regolith scatters) with seas and craters, a slightly ragged
+    // terminator, faint earthshine on the dark side, and a glow outside the disc on the lit side
     If(uMoonVis.greaterThan(0.0), () => {
       const right = normalize(cross(uMoonDir, vec3(0.0, 1.0, 0.0))).toVar();
       const up = cross(right, uMoonDir).toVar();
       const p = vec2(dot(d, right), dot(d, up)).div(MOON_R).toVar(); // disc coordinates, radius 1
       const r = length(p).toVar();
-      const mv = uMoonVis.mul(hidden).mul(sstep(-0.01, 0.03, h)).toVar();
-      If(r.lessThan(1.0).and(dot(d, uMoonDir).greaterThan(0.0)), () => {
-        const n = vec3(p, sqrt(float(1.0).sub(r.mul(r))));
-        // light from the sun's direction across the disc, mostly from behind: about a third lit
-        const s = vec2(dot(U.uSunDir, right), dot(U.uSunDir, up)).toVar();
-        const sd = s.div(max(length(s), 1e-4));
-        const L = vec3(sd.mul(0.93), -0.37);
-        const lit = sstep(-0.04, 0.12, dot(n, L));
-        const maria = float(1.0).sub(sstep(0.45, 0.75, vnoise(p.mul(2.3).add(4.1))).mul(0.28)).sub(sstep(0.55, 0.8, vnoise(p.mul(5.0).sub(1.3))).mul(0.12));
-        const disc = sstep(1.0, 0.94, r);
-        const moon = vec3(1.0, 0.95, 0.86).mul(lit.mul(maria).mul(1.7).add(0.02)); // + earthshine
-        col.assign(mix(col, col.add(moon), disc.mul(mv)));
+      const mv = uMoonVis.mul(hidden).mul(sstep(-0.01, 0.03, h)).mul(sstep(0.0, 0.2, dot(d, uMoonDir))).toVar();
+      // lit from the side the sun set on, tilted down: a crescent about 30% lit
+      const sx = dot(U.uSunDir, right);
+      const s2 = vec2(mix(float(-0.82), float(0.82), sstep(-0.001, 0.001, sx)), -0.57);
+      const L = vec3(s2.mul(0.91), -0.42);
+      If(r.lessThan(1.0), () => {
+        const n = vec3(p, sqrt(float(1.0).sub(r.mul(r)))).toVar();
+        const uv = vec2(atan(n.x, n.z), asin(n.y)).toVar();
+        const mu0 = dot(n, L).add(vnoise(uv.mul(9.0)).sub(0.5).mul(0.06));
+        const ls = max(mu0, 0.0).div(max(mu0, 0.0).add(n.z).add(0.02)).mul(2.0).mul(sstep(-0.02, 0.07, mu0));
+        const a = moonAlbedo(uv);
+        const lit = vec3(1.0, 0.96, 0.9).mul(a).mul(ls.mul(1.05).add(0.0035)); // + earthshine
+        col.addAssign(lit.mul(sstep(1.0, float(1.0).sub(fwidth(r).mul(1.5)), r)).mul(mv));
       });
-      const g = max(dot(d, uMoonDir), 0.0);
-      col.addAssign(vec3(0.55, 0.62, 0.8).mul(pow(g, 3000.0).mul(0.12).add(pow(g, 300.0).mul(0.025))).mul(mv));
+      // the glow is air in front of the moon: it lies over the disc too, strongest off the lit limb
+      const x = length(p.sub(s2.mul(0.55))).sub(0.45).max(0.0);
+      col.addAssign(vec3(0.6, 0.68, 0.86).mul(exp(x.mul(-3.0)).mul(0.035).add(exp(x.mul(-0.45)).mul(0.01))).mul(mv));
     });
     // clouds on a virtual plane; cover moves the density thresholds (no shift at 0.35)
     const sh = uCover.sub(0.35).mul(0.5);
