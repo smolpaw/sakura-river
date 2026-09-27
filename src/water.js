@@ -17,10 +17,11 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const duv = xz.sub(uHB.xy).mul(uHB.zw).toVar();
     return select(within(duv), depthTex.sample(duv).r.mul(4.0), float(2.5));
   });
-  // water left above rocks sitting in the river (4 = no rock)
-  const rockDepth = Fn(([xz]) => {
+  // rocks sitting in the river: x = water left above them (4 = no rock), y = where the current breaks on them
+  const rockAt = Fn(([xz]) => {
     const ruv = xz.sub(uRB.xy).mul(uRB.zw).toVar();
-    return select(within(ruv), rockTex.sample(ruv).r.mul(4.0), float(4.0));
+    const t = rockTex.sample(ruv);
+    return select(within(ruv), vec2(t.r.mul(4.0), t.g), vec2(4.0, 0.0));
   });
   const hfield = Fn(([p]) => {
     // p.x across (m), p.y along (m, increases downstream: the patterns scroll with the current)
@@ -49,9 +50,11 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const vW = positionWorld;
     const riv = attribute('aRiver', 'vec4');
     const p = vec2(riv.x, riv.y).toVar();
+    const rk = rockAt(vW.xz).toVar();
+    const rock = rk.x, wake = rk.y.mul(clamp(uniforms.uSpeed.mul(0.5).add(0.45), 0.0, 1.3)).toVar(); // calmer when the river slows
     const e = 0.08;
     const h0 = hfield(p), hx = hfield(p.add(vec2(e, 0.0))), hy = hfield(p.add(vec2(0.0, e)));
-    const amp = float(0.14).add(uniforms.uSpeed.mul(0.1));
+    const amp = float(0.14).add(uniforms.uSpeed.mul(0.1)).mul(wake.mul(2.0).add(1.0)); // choppy where it breaks
     const g = vec2(hx.sub(h0), hy.sub(h0)).div(e).mul(amp).toVar();
     // across/along -> world xz
     const fl = normalize(riv.zw).toVar(); // downstream dir (x,z)
@@ -62,7 +65,7 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const dist = length(cameraPosition.sub(vW));
     // calm distant water to avoid aliasing
     N.assign(normalize(mix(N, vec3(0.0, 1.0, 0.0), sstep(40.0, 260.0, dist))));
-    const bed = bedDepth(vW.xz).toVar(), rock = rockDepth(vW.xz).toVar();
+    const bed = bedDepth(vW.xz).toVar();
     const depth = min(bed, rock).toVar();
     // base clamped: a dot of unit vectors can exceed 1 by rounding, and pow of a negative is NaN on many GPUs
     const fres = float(0.02).add(pow(max(float(1.0).sub(max(dot(N, V), 0.0)), 0.0), 5.0).mul(0.98)).toVar();
@@ -87,10 +90,11 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     col.addAssign(U.uSunColor.mul(U.uSunVis).mul(pow(sd, 900.0).mul(7.0).add(pow(sd, 90.0).mul(0.35))));
     // shore & rock foam
     const foamN = vnoise(vec2(p.x.mul(2.2), p.y.sub(U.uFlow.mul(1.1)).mul(1.6))).mul(0.6).add(vnoise(vec2(p.x.mul(7.0), p.y.sub(U.uFlow.mul(1.2)).mul(5.0))).mul(0.4));
-    // a ring around rocks (none on the rock itself), a band along the shore
-    // (the shallow-water boost that makes the shore band solid is left out next to rocks: rings would look drawn)
-    const boost = float(1.0).sub(sstep(0.0, 0.2, depth)).mul(0.25).mul(sstep(0.25, 0.6, rock));
-    const foam = sstep(0.32, 0.02, depth).mul(sstep(0.35, 0.7, foamN.add(boost))).mul(sstep(0.0, 0.05, rock)).toVar();
+    // a band along the shore; at rocks, white water streaked along the current (none on the rock itself)
+    const shore = sstep(0.32, 0.02, bed).mul(sstep(0.35, 0.7, foamN.add(float(1.0).sub(sstep(0.0, 0.2, bed)).mul(0.25))));
+    const streak = vnoise(vec2(p.x.mul(6.0), p.y.sub(U.uFlow.mul(1.3)).mul(0.9))).mul(0.6).add(foamN.mul(0.4));
+    const broken = sstep(0.2, 0.65, wake.mul(streak.mul(0.9).add(0.45)));
+    const foam = max(shore, broken).mul(sstep(0.0, 0.05, rock)).toVar();
     col.assign(mix(col, vec3(0.85, 0.85, 0.82).mul(U.uSunVis.mul(0.6).add(0.4)).add(U.uSunColor.mul(0.12)), foam.mul(0.55)));
     const alpha = mix(0.35, 0.96, sstep(0.0, 1.1, depth)).toVar();
     alpha.assign(max(alpha, fres));

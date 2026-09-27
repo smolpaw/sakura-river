@@ -218,7 +218,7 @@ export function rockPlan(world, tier, treePos) {
   const add = (x, z, sc, sink = 0.3, flatten = 1) => {
     const y = world.height(x, z);
     placements.push({ x, y: y - sc * sink, z, sc, flatten, v: Math.floor(rng() * variants), rot: rng() * Math.PI * 2 });
-    if (y < 0.15) rocksInWater.push({ x, z, r: sc * 1.1 });
+    if (y < 0.15) rocksInWater.push({ x, z, r: sc * 1.1, top: y + sc * (0.65 - sink) }); // top: roughly, see rockGeometry
   };
   const zR = [-90, 60];
   // boulders along both banks

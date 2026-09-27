@@ -194,22 +194,42 @@ export function createWorld(seed = 7) {
     return { data, W, H, bounds: [HB.x0, HB.z0, 1 / (HB.x1 - HB.x0), 1 / (HB.z1 - HB.z0)], rocks: buildRockMap(rocks) };
   }
 
-  // Rocks sitting in the water, as the water depth they leave (R = depth/4, 255 = no rock) on a fine grid of
-  // their own: stamped into the coarse depth map above (~0.9 m texels) they showed as square foam blocks
+  // Rocks sitting in the water on a fine grid of their own (stamped into the coarse depth map above, ~0.9 m
+  // texels, they showed as square foam blocks). R: the water depth they leave (depth/4, 255 = no rock).
+  // G: where the current breaks on them, shaped by the flow: a pillow of white water on the upstream face, two
+  // wake arms opening downstream from the flanks, and churned water in the lee. Rocks whose top stays under the
+  // surface leave deeper water and break the current less, or not at all.
   function buildRockMap(rocks) {
     const S = 0.125;
+    const reach = (r) => r.r * 4 + 2.5 + r.r * 3; // the wake runs further than the rock's own slope
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-    for (const r of rocks) { x0 = Math.min(x0, r.x - r.r * 4); x1 = Math.max(x1, r.x + r.r * 4); z0 = Math.min(z0, r.z - r.r * 4); z1 = Math.max(z1, r.z + r.r * 4); }
+    for (const r of rocks) { const e = reach(r); x0 = Math.min(x0, r.x - e); x1 = Math.max(x1, r.x + e); z0 = Math.min(z0, r.z - e); z1 = Math.max(z1, r.z + e); }
     if (!rocks.length) { x0 = z0 = 0; x1 = z1 = 1; }
     const W = Math.ceil((x1 - x0) / S), H = Math.ceil((z1 - z0) / S);
-    const data = new Uint8Array(W * H).fill(255);
+    const data = new Uint8Array(W * H * 2);
+    for (let k = 0; k < W * H; k++) data[k * 2] = 255;
     for (const r of rocks) {
-      const i0 = Math.floor((r.x - r.r * 4 - x0) / S), i1 = Math.ceil((r.x + r.r * 4 - x0) / S);
-      const j0 = Math.floor((r.z - r.r * 4 - z0) / S), j1 = Math.ceil((r.z + r.r * 4 - z0) / S);
+      const R = r.r, e = reach(r), L = 1.0 + 1.8 * R;
+      const under = Math.max(0, -r.top), breaks = smoothstep(-0.35, 0.05, r.top);
+      const [fx, fz] = flowDir(r.z), ax = fz, az = -fx;
+      const i0 = Math.floor((r.x - e - x0) / S), i1 = Math.ceil((r.x + e - x0) / S);
+      const j0 = Math.floor((r.z - e - z0) / S), j1 = Math.ceil((r.z + e - z0) / S);
       for (let j = Math.max(0, j0); j <= Math.min(H - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(W - 1, i1); i++) {
-        const dd = Math.hypot(x0 + (i + 0.5) * S - r.x, z0 + (j + 0.5) * S - r.z) / r.r;
+        const dx = x0 + (i + 0.5) * S - r.x, dz = z0 + (j + 0.5) * S - r.z;
+        const dist = Math.hypot(dx, dz), dd = dist / R;
+        const k = j * W + i;
         // the slope runs out to full depth, so the rock's footprint has no edge against the river bed
-        if (dd < 4) data[j * W + i] = Math.min(data[j * W + i], Math.round((Math.max(0, (dd - 0.85) * 0.8) / 4) * 255));
+        if (dd < 4) data[k * 2] = Math.min(data[k * 2], Math.round(Math.min(1, (Math.max(0, (dd - 0.85) * 0.8) + under) / 4) * 255));
+        if (breaks <= 0) continue;
+        const al = dx * fx + dz * fz, ac = Math.abs(dx * ax + dz * az); // along the flow (downstream +), across
+        const cos = al / Math.max(dist, 1e-4);
+        const g = (x, w) => Math.exp(-(x * x) / (w * w));
+        const bow = g(dd - 1.08, 0.36) * smoothstep(0.35, -0.6, cos);
+        const a = Math.max(al, 0);
+        const arms = g(ac - (R * 1.0 + a * 0.45), 0.14 + a * 0.12) * Math.exp(-a / L) * smoothstep(-0.3 * R, 0.3 * R, al) * smoothstep(0.95, 1.2, dd) * 0.7;
+        const lee = g(ac, R * 0.75 + a * 0.2) * smoothstep(0.6 * R, 1.5 * R, al) * Math.exp(-a / (0.8 * L)) * 0.8;
+        const f = Math.min(1, Math.max(bow, arms, lee)) * breaks;
+        data[k * 2 + 1] = Math.max(data[k * 2 + 1], Math.round(f * 255));
       }
     }
     return { data, W, H, bounds: [x0, z0, 1 / (W * S), 1 / (H * S)] };
@@ -235,17 +255,18 @@ export function createWorld(seed = 7) {
   return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, pagoda };
 }
 
-// water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map
+// water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map (G = rock foam)
 export function depthTexture(d) {
   const make = (data, W, H, format) => {
     const tex = new THREE.DataTexture(data, W, H, format);
     tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.unpackAlignment = 1; // rows of the one- and two-byte formats are not 4-byte aligned
     tex.needsUpdate = true;
     return tex;
   };
   return {
     tex: make(d.data, d.W, d.H, THREE.RGBAFormat), bounds: new THREE.Vector4(...d.bounds),
-    rockTex: make(d.rocks.data, d.rocks.W, d.rocks.H, THREE.RedFormat), rockBounds: new THREE.Vector4(...d.rocks.bounds),
+    rockTex: make(d.rocks.data, d.rocks.W, d.rocks.H, THREE.RGFormat), rockBounds: new THREE.Vector4(...d.rocks.bounds),
   };
 }
