@@ -20,11 +20,12 @@ export function benchFlags(scale) {
   ];
 }
 
-export async function launch({ scale = 1, angle = 'default', extraArgs = [], profile = 'default' } = {}) {
-  const args = [...benchFlags(scale), ...ANGLE[angle], ...extraArgs];
+// headless: no window on the desktop (quick looks); timings need the headed default
+export async function launch({ scale = 1, angle = 'default', extraArgs = [], profile = 'default', headless = !!process.env.BENCH_HEADLESS } = {}) {
+  const args = [...benchFlags(scale), ...ANGLE[angle], ...(headless ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan'] : []), ...extraArgs];
   const browser = await puppeteer.launch({
     executablePath: CHROMIUM,
-    headless: false,
+    headless: headless ? 'new' : false,
     userDataDir: path.join(BENCH, '.profile', profile),
     args,
     ignoreDefaultArgs: ['--enable-automation'],
