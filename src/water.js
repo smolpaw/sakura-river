@@ -23,15 +23,15 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     return select(within(ruv), rockTex.sample(ruv).r.mul(4.0), float(4.0));
   });
   const hfield = Fn(([p]) => {
-    // p.x across (m), p.y along (m, increases upstream)
+    // p.x across (m), p.y along (m, increases downstream: the patterns scroll with the current)
     const f = U.uFlow, t = U.uTime;
     const h = float(0).toVar();
-    h.addAssign(vnoise(vec2(p.x.mul(0.45), p.y.add(f.mul(0.9)).mul(0.3))).mul(0.55));
-    h.addAssign(vnoise(vec2(p.x.mul(1.1).add(4.0), p.y.add(f).mul(0.8)).add(vec2(0.0, sin(t.mul(0.3)).mul(0.2)))).mul(0.28));
-    h.addAssign(vnoise(vec2(p.x.mul(2.7), p.y.add(f.mul(1.15)).mul(2.2)).add(t.mul(vec2(0.13, 0.0)))).mul(0.13));
-    h.addAssign(vnoise(vec2(p.x.mul(6.0).add(t.mul(0.4)), p.y.add(f.mul(1.2)).mul(5.0))).mul(0.05).mul(U.uWind.add(0.4)));
+    h.addAssign(vnoise(vec2(p.x.mul(0.45), p.y.sub(f.mul(0.9)).mul(0.3))).mul(0.55));
+    h.addAssign(vnoise(vec2(p.x.mul(1.1).add(4.0), p.y.sub(f).mul(0.8)).add(vec2(0.0, sin(t.mul(0.3)).mul(0.2)))).mul(0.28));
+    h.addAssign(vnoise(vec2(p.x.mul(2.7), p.y.sub(f.mul(1.15)).mul(2.2)).add(t.mul(vec2(0.13, 0.0)))).mul(0.13));
+    h.addAssign(vnoise(vec2(p.x.mul(6.0).add(t.mul(0.4)), p.y.sub(f.mul(1.2)).mul(5.0))).mul(0.05).mul(U.uWind.add(0.4)));
     // standing ripple streaks
-    h.addAssign(vnoise(vec2(p.x.mul(3.5), p.y.add(f.mul(1.05)).mul(0.35))).mul(0.12));
+    h.addAssign(vnoise(vec2(p.x.mul(3.5), p.y.sub(f.mul(1.05)).mul(0.35))).mul(0.12));
     return h;
   });
   const skyCol = Fn(([r]) => {
@@ -56,7 +56,7 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     // across/along -> world xz
     const fl = normalize(riv.zw).toVar(); // downstream dir (x,z)
     const ac = vec2(fl.y, fl.x.negate());   // across dir
-    const gw = ac.mul(g.x).add(fl.negate().mul(g.y)).toVar(); // along increases upstream
+    const gw = ac.mul(g.x).add(fl.mul(g.y)).toVar();
     const N = normalize(vec3(gw.x.negate(), 1.0, gw.y.negate())).toVar();
     const V = normalize(cameraPosition.sub(vW)).toVar();
     const dist = length(cameraPosition.sub(vW));
@@ -86,7 +86,7 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const sd = max(dot(R, U.uSunDir), 0.0);
     col.addAssign(U.uSunColor.mul(U.uSunVis).mul(pow(sd, 900.0).mul(7.0).add(pow(sd, 90.0).mul(0.35))));
     // shore & rock foam
-    const foamN = vnoise(vec2(p.x.mul(2.2), p.y.add(U.uFlow.mul(1.1)).mul(1.6))).mul(0.6).add(vnoise(vec2(p.x.mul(7.0), p.y.add(U.uFlow.mul(1.2)).mul(5.0))).mul(0.4));
+    const foamN = vnoise(vec2(p.x.mul(2.2), p.y.sub(U.uFlow.mul(1.1)).mul(1.6))).mul(0.6).add(vnoise(vec2(p.x.mul(7.0), p.y.sub(U.uFlow.mul(1.2)).mul(5.0))).mul(0.4));
     // a ring around rocks (none on the rock itself), a band along the shore
     // (the shallow-water boost that makes the shore band solid is left out next to rocks: rings would look drawn)
     const boost = float(1.0).sub(sstep(0.0, 0.2, depth)).mul(0.25).mul(sstep(0.25, 0.6, rock));
