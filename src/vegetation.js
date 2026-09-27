@@ -1,7 +1,8 @@
-// Grass clumps, wildflowers, rocks & pebbles, distant forest — all instanced
+// Grass clumps, wildflowers, rocks & pebbles, the woods on the hills — all instanced
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
 import { tessellate } from './stress.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const V = THREE.Vector3;
 
@@ -295,97 +296,207 @@ export function makeRocks(d, mat) {
 }
 
 
-// ---------- distant forest on the hills ----------
-function coniferGeometry(nz) {
-  // stacked, jagged tiers — reads as a spruce silhouette at distance
-  const parts = [];
-  const tiers = 5;
-  for (let k = 0; k < tiers; k++) {
-    const t = k / tiers;
-    const g = new THREE.ConeGeometry(0.75 * (1 - t * 0.75), 0.9, 9, 1, true);
-    const pos = g.attributes.position; const v = new V();
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i);
-      const a = Math.atan2(v.z, v.x);
-      const jag = 1 + 0.18 * Math.sin(a * 7 + k * 2) + 0.1 * nz.noise2(a * 2, k);
-      v.x *= jag; v.z *= jag;
-      v.y += 0.45 + k * 0.55;
-      pos.setXYZ(i, v.x, v.y, v.z);
-    }
-    parts.push(g);
+// ---------- woods on the hills ----------
+// A Japanese hillside in spring: dark stands of sugi (cedar) and hinoki (cypress), broadleaf woods in fresh green and
+// evergreen oak with wild cherries (yamazakura) flowering pale pink among them, all in groves with meadow between.
+// Nothing grows on faces steep enough to show rock; black pines lean out from the cliff rims instead.
+// Each kind is one geometry, one unit tall, shaded in its vertices: crowns take normals bent out from their middle
+// (soft light over the whole crown) and darken into the creases between their tufts and towards their underside.
+const BARK = [0.07, 0.055, 0.045];
+
+// a closed surface of `rings` rings of `seg` points round an axis, bottom to top; at(j, i, v) sets a point
+function ringSurface(rings, seg, at) {
+  const P = new Float32Array(rings * seg * 3), I = [], v = new V();
+  for (let j = 0; j < rings; j++) for (let i = 0; i < seg; i++) { at(j, i, v); v.toArray(P, (j * seg + i) * 3); }
+  for (let j = 0; j < rings - 1; j++) for (let i = 0; i < seg; i++) {
+    const a = j * seg + i, b = j * seg + ((i + 1) % seg);
+    I.push(a, a + seg, b, b, a + seg, b + seg);
   }
-  return mergeGeos(parts);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  g.setIndex(I);
+  g.computeVertexNormals();
+  return g;
 }
-function roundTreeGeometry(nz, rng) {
-  const parts = [];
-  for (let k = 0; k < 5; k++) {
-    const g = new THREE.IcosahedronGeometry(1, 1);
-    const pos = g.attributes.position; const v = new V();
-    const s = 0.4 + rng() * 0.25;
-    const o = new V((rng() - 0.5) * 0.9, 0.9 + rng() * 1.1, (rng() - 0.5) * 0.9);
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i);
-      v.multiplyScalar(s * (1 + 0.22 * nz.noise3(v.x * 2 + k, v.y * 2, v.z * 2))).add(o);
-      pos.setXYZ(i, v.x, v.y, v.z);
-    }
-    parts.push(g);
+
+// crown shading (see above): mid(p, o) sets the point the crown bulges out from at p; `low` is the underside's shade
+function shadeCrown(g, mid, col, soft, low) {
+  const P = g.attributes.position, Nn = g.attributes.normal, C = new Float32Array(P.count * 3);
+  const p = new V(), n = new V(), o = new V();
+  for (let i = 0; i < P.count; i++) {
+    p.fromBufferAttribute(P, i); n.fromBufferAttribute(Nn, i);
+    mid(p, o); o.subVectors(p, o).normalize();
+    const ao = (0.62 + 0.38 * clamp(n.dot(o), 0, 1)) * lerp(low, 1, smoothstep(-0.7, 0.6, o.y));
+    n.lerp(o, soft).normalize();
+    Nn.setXYZ(i, n.x, n.y, n.z);
+    C[i * 3] = col[0] * ao; C[i * 3 + 1] = col[1] * ao; C[i * 3 + 2] = col[2] * ao;
   }
-  return mergeGeos(parts);
+  g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+  return g;
 }
-function mergeGeos(parts) {
-  let total = 0; parts.forEach((g) => (total += g.attributes.position.count));
-  const P = new Float32Array(total * 3); const I = [];
-  let off = 0;
-  parts.forEach((g) => {
-    P.set(g.attributes.position.array, off * 3);
-    if (g.index) { const idx = g.index.array; for (let i = 0; i < idx.length; i++) I.push(idx[i] + off); }
-    else for (let i = 0; i < g.attributes.position.count; i++) I.push(i + off);
-    off += g.attributes.position.count;
+
+// a limb tapering from r0 to r1 along the points `pts`, in bark colour
+function limb(pts, r0, r1, seg = 5) {
+  const t = new V(), u = new V(), frames = [];
+  pts.forEach((p, j) => {
+    t.subVectors(pts[Math.min(j + 1, pts.length - 1)], pts[Math.max(j - 1, 0)]).normalize();
+    if (j === 0) u.set(Math.abs(t.y) < 0.9 ? 0 : 1, Math.abs(t.y) < 0.9 ? 1 : 0, 0);
+    u.addScaledVector(t, -u.dot(t)).normalize();
+    frames.push([u.clone(), u.clone().cross(t)]);
   });
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
-  geo.setIndex(I);
-  geo.computeVertexNormals();
-  return geo;
+  const g = ringSurface(pts.length, seg, (j, i, v) => {
+    const a = (i / seg) * Math.PI * 2, r = lerp(r0, r1, j / (pts.length - 1));
+    v.copy(pts[j]).addScaledVector(frames[j][0], Math.cos(a) * r).addScaledVector(frames[j][1], Math.sin(a) * r);
+  });
+  const C = new Float32Array(g.attributes.position.count * 3);
+  for (let i = 0; i < C.length; i += 3) C.set(BARK, i);
+  g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+  return g;
 }
+
+// a lumpy ellipsoid round c (radii s, sy), or with blobs the outer surface of those spheres seen from c
+function lobes(c, s, sy, rings, seg, rough, nz, blobs = null) {
+  const d = new V(), o = new V();
+  return ringSurface(rings, seg, (j, i, v) => {
+    const th = (Math.PI * j) / (rings - 1), a = (Math.PI * 2 * i) / seg;
+    d.set(Math.sin(th) * Math.cos(a), -Math.cos(th), Math.sin(th) * Math.sin(a));
+    let r = 1;
+    if (blobs) {
+      r = 0;
+      for (const b of blobs) {
+        o.subVectors(c, b.p);
+        const bb = -d.dot(o), q = bb * bb - o.lengthSq() + b.r * b.r;
+        if (q > 0) r = Math.max(r, bb + Math.sqrt(q));
+      }
+    }
+    r *= 1 + rough * nz.noise3(d.x * 3 + c.x * 7, d.y * 3 + c.y * 7, d.z * 3);
+    v.set(c.x + d.x * r * s, c.y + d.y * r * sy, c.z + d.z * r * s);
+  });
+}
+
+// sugi / hinoki: a trunk under a tall crown, tufted round its edge and built up in layers, each widest at its foot
+function conifer(nz, { w, base, tiers, layer, tuft, rings, seg, col }) {
+  const crown = ringSurface(rings, seg, (j, i, v) => {
+    const t = j / (rings - 1), a = (i / seg) * Math.PI * 2, k = t * tiers;
+    // closed underneath (the first ring is the centre), widest a little above the base, tapering to the tip
+    let r = j === 0 ? 0 : w * (0.55 + 0.45 * smoothstep(0, 0.12, t)) * Math.pow(1 - t, 0.85);
+    r *= 1 - layer * (k - Math.floor(k));
+    r *= 1 + tuft * nz.noise3(Math.cos(a) * 2.2 + w * 9, Math.sin(a) * 2.2, t * 12);
+    v.set(Math.cos(a) * r, base + t * (1 - base) + (j === 0 ? 0.02 : 0), Math.sin(a) * r);
+  });
+  shadeCrown(crown, (p, o) => o.set(0, p.y - 0.5 * Math.hypot(p.x, p.z), 0), col, 0.5, 0.5);
+  return mergeGeometries([limb([new V(0, -0.04, 0), new V(0, base + 0.12, 0)], 0.028, 0.018), crown]);
+}
+
+// a broadleaf tree (or a wild cherry): a short trunk forking into limbs under a billowy crown of lobes
+function broadleaf(nz, rng, { w, n, rough, col, low = 0.4 }) {
+  const c = new V(0, 0.56, 0), blobs = [{ p: new V(0, 0.55, 0), r: 0.24 * w }];
+  const parts = [limb([new V(0, -0.04, 0), new V(0.01, 0.12, 0), new V(0, 0.24, 0)], 0.03, 0.02)];
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + rng() * 0.8, e = rng() * 1.4 - 0.55;
+    const p = new V(Math.cos(a) * Math.cos(e) * 0.24 * w, 0.56 + Math.sin(e) * 0.2, Math.sin(a) * Math.cos(e) * 0.24 * w);
+    blobs.push({ p, r: (0.13 + rng() * 0.08) * (0.8 + 0.2 * w) });
+    if (k % 2 === 0) parts.push(limb([new V(0, 0.22, 0), new V(p.x * 0.45, 0.36, p.z * 0.45), new V(p.x * 0.8, p.y - 0.04, p.z * 0.8)], 0.016, 0.007, 4));
+  }
+  parts.push(shadeCrown(lobes(c, 1, 1, 10, 14, rough, nz, blobs), (p, o) => o.copy(c), col, 0.5, low));
+  return mergeGeometries(parts);
+}
+
+// a black pine leaning out over a drop (+x): a crooked trunk, flat cloud-like pads of needles on its limbs
+function pine(nz) {
+  const col = [0.05, 0.095, 0.045];
+  const trunk = [[0, -0.04, 0], [0.05, 0.22, 0.02], [0.2, 0.42, -0.03], [0.4, 0.55, 0.04], [0.62, 0.6, 0], [0.8, 0.6, 0.05]].map((a) => new V(...a));
+  const parts = [limb(trunk, 0.035, 0.012, 6)];
+  for (const [x, y, z, s] of [[0.82, 0.66, 0.05, 0.24], [0.6, 0.7, -0.16, 0.2], [0.42, 0.64, 0.2, 0.2], [0.26, 0.8, -0.06, 0.2], [0.5, 0.84, 0.1, 0.17], [0.12, 0.6, 0.14, 0.14], [0.7, 0.78, 0.22, 0.15]]) {
+    const c = new V(x, y, z);
+    const from = trunk.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a));
+    if (from.distanceTo(c) > 0.08) parts.push(limb([from, new V((from.x + x) / 2, Math.max(from.y, y) - 0.02, (from.z + z) / 2), new V(x, y - 0.02, z)], 0.012, 0.006, 4));
+    parts.push(shadeCrown(lobes(c, s, s * 0.34, 7, 11, 0.22, nz), (p, o) => o.copy(c).setY(y - 0.06), col, 0.6, 0.35));
+  }
+  return mergeGeometries(parts);
+}
+
+// kinds: geometry and height range (m)
+const SUGI = 0, HINOKI = 1, KONARA = 2, KASHI = 3, CHERRY = 4, PINE = 5;
+const HEIGHT = [[20, 12], [15, 8], [11, 6], [10, 5], [10, 6], [9, 4]];
 
 export function forestData(world, count) {
   const rng = mulberry32(555);
   const nz = makeNoise(31);
-  const kinds = [coniferGeometry(nz), roundTreeGeometry(nz, rng)];
-  const lists = [[], []];
+  const kinds = [
+    conifer(nz, { w: 0.16, base: 0.12, tiers: 9, layer: 0.14, tuft: 0.4, rings: 14, seg: 9, col: [0.045, 0.085, 0.05] }),
+    conifer(nz, { w: 0.24, base: 0.08, tiers: 6, layer: 0.28, tuft: 0.25, rings: 16, seg: 10, col: [0.06, 0.11, 0.05] }),
+    broadleaf(nz, mulberry32(3), { w: 1.15, n: 8, rough: 0.07, col: [0.19, 0.3, 0.06] }), // oaks and maples in new leaf
+    broadleaf(nz, mulberry32(4), { w: 1, n: 7, rough: 0.05, col: [0.07, 0.13, 0.045] }), // evergreen oak
+    broadleaf(nz, mulberry32(5), { w: 1.35, n: 10, rough: 0.09, col: [1.0, 0.58, 0.56], low: 0.75 }), // wild cherry in flower
+    pine(nz),
+  ];
+  const lists = kinds.map(() => []);
+  // the ground normal's y over about the terrain mesh's spacing out there (the terrain turns to rock from 0.82 to 0.6)
+  const flat = (x, z, e = 5) => {
+    const gx = (world.height(x + e, z) - world.height(x - e, z)) / (2 * e), gz = (world.height(x, z + e) - world.height(x, z - e)) / (2 * e);
+    return 1 / Math.hypot(gx, gz, 1);
+  };
+  const grid = new Map(), cell = 8;
+  const crowded = (x, z, r) => {
+    const cx = Math.floor(x / cell), cz = Math.floor(z / cell);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const t of grid.get(`${cx + i},${cz + j}`) || []) if (Math.hypot(t.x - x, t.z - z) < r) return true;
+    return false;
+  };
+  const add = (k, x, y, z, a) => {
+    const t = { x, y, z, a, h: HEIGHT[k][0] + rng() * HEIGHT[k][1] };
+    lists[k].push(t);
+    const key = `${Math.floor(x / cell)},${Math.floor(z / cell)}`;
+    grid.set(key, [...(grid.get(key) || []), t]);
+  };
   let tries = 0, n = 0;
-  while (n < count && tries < count * 30) {
+  while (n < count && tries < count * 80) {
     tries++;
-    const x = lerp(-650, 650, rng()), z = lerp(-800, 160, rng());
-    const ri = world.riverInfo(x, z);
-    if (Math.abs(ri.d) < 55 + Math.max(0, -z) * 0.05) continue;
-    if (Math.hypot(x + 10, z - 10) < 85) continue;
-    if (world.templeDist(x, z) < 4) continue;
+    const x = lerp(-560, 560, rng()), z = lerp(-700, 140, rng());
+    // groves: dense in their middle, thinning out into the meadow
+    const grove = world.grove(x, z);
+    if (rng() > grove) continue;
     const y = world.height(x, z);
-    if (y < 4 || y > 170) continue;
-    // clustered stands
-    if (nz.fbm2(x * 0.012, z * 0.012, 3) < -0.02) continue;
-    const kind = y > 30 || rng() < 0.8 ? 0 : 1;
-    lists[kind].push({ x, y, z, s: (kind === 0 ? 3.2 : 2.6) + rng() * 2.2 });
+    if (y < 4 || y > 170 || flat(x, z) < 0.74) continue;
+    // cedar and cypress are planted, so they stand in blocks (more of them higher up); broadleaf woods elsewhere
+    const cedar = nz.fbm2(x * 0.02 - 7, z * 0.02 + 3, 2) + (y - 40) / 160;
+    const r = rng();
+    const k = grove < 0.3 ? (r < 0.3 ? CHERRY : KONARA)
+      : cedar > 0.12 ? (r < 0.7 ? SUGI : HINOKI)
+      : r < 0.16 ? CHERRY : r < 0.62 ? KONARA : r < 0.85 ? KASHI : HINOKI;
+    if (crowded(x, z, k <= HINOKI ? 4.5 : 6.5)) continue;
+    add(k, x, y, z, rng() * Math.PI * 2);
     n++;
   }
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), c = new THREE.Color();
-  const out = lists.map((list, k) => {
-    const mesh = new THREE.InstancedMesh(kinds[k], undefined, list.length);
+  // black pines on cliff rims: level ground with a drop of several metres just past it, leaning out over it
+  for (let t = 0, pines = 0; t < 30000 && pines < 14; t++) {
+    const x = lerp(-500, 500, rng()), z = lerp(-520, 150, rng());
+    const ri = world.riverInfo(x, z);
+    if (Math.abs(ri.d) < ri.hw + 1 || Math.hypot(x + 10, z - 10) < 40 || world.templeDist(x, z) < 3) continue;
+    if (flat(x, z, 2) < 0.9) continue;
+    const y = world.height(x, z);
+    let drop = 0, a = 0;
+    for (let i = 0; i < 16; i++) {
+      const b = (i / 16) * Math.PI * 2, d = y - world.height(x + Math.cos(b) * 7, z + Math.sin(b) * 7);
+      if (d > drop) { drop = d; a = b; }
+    }
+    if (drop < 6 || y - world.height(x + Math.cos(a) * 14, z + Math.sin(a) * 14) < 5) continue;
+    if (lists[PINE].some((p) => Math.hypot(p.x - x, p.z - z) < 25)) continue;
+    add(PINE, x, y, z, -a);
+    pines++;
+  }
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), c = new THREE.Color(), up = new V(0, 1, 0);
+  const out = lists.map((list) => {
+    const matrix = new Float32Array(list.length * 16), color = new Float32Array(list.length * 3);
     list.forEach((t, i) => {
-      p.set(t.x, t.y - 0.6, t.z);
-      q.setFromAxisAngle(new V(0, 1, 0), rng() * 6.28);
-      s.set(t.s, t.s * (k === 0 ? 1.3 + rng() * 0.5 : 1 + rng() * 0.3), t.s);
-      m.compose(p, q, s);
-      mesh.setMatrixAt(i, m);
-      const g = 0.75 + rng() * 0.5;
-      if (k === 0) c.setRGB(0.05 * g, 0.11 * g, 0.06 * g);
-      else c.setRGB(0.12 * g, 0.2 * g, 0.07 * g);
-      
-      mesh.setColorAt(i, c);
+      p.set(t.x, t.y - 0.03 * t.h, t.z);
+      q.setFromAxisAngle(up, t.a);
+      s.set(t.h * (0.9 + rng() * 0.2), t.h, t.h * (0.9 + rng() * 0.2));
+      m.compose(p, q, s).toArray(matrix, i * 16);
+      const g = 0.82 + rng() * 0.36, h = (rng() - 0.5) * 0.12;
+      c.setRGB(g * (1 + h), g, g * (1 - h)).toArray(color, i * 3);
     });
-    return { matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length };
+    return { matrix, color, n: list.length };
   });
   return { kinds, lists: out };
 }

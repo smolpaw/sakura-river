@@ -67,6 +67,15 @@ export function createWorld(seed = 7) {
     return Math.hypot(Math.max(0, Math.abs(dx * tc - dz * ts) - temple.hw), Math.max(0, Math.abs(dx * ts + dz * tc) - temple.hd));
   }
 
+  // density of the woods on the hills (vegetation.js plants them, the terrain darkens under them): 1 in the heart
+  // of a grove, a lone tree now and then out in the meadow, none on the valley floor, round the cherry tree or at
+  // the temple
+  const NG = makeNoise(31);
+  function grove(x, z) {
+    const open = smoothstep(55, 75, Math.abs(x - riverX(z)) - Math.max(0, -z) * 0.05) * smoothstep(85, 105, Math.hypot(x + 10, z - 10)) * smoothstep(8, 16, templeDist(x, z));
+    return open && open * Math.max(0.003, smoothstep(0.38, 0.46, NG.fbm2(x * 0.009, z * 0.009, 3)));
+  }
+
   function riverInfo(x, z) {
     const rx = riverX(z), hw = riverHW(z);
     return { rx, hw, d: x - rx, t: Math.abs(x - rx) / hw };
@@ -111,7 +120,7 @@ export function createWorld(seed = 7) {
     const grassA = new THREE.Color(0.20, 0.34, 0.075), grassB = new THREE.Color(0.34, 0.44, 0.10), grassDry = new THREE.Color(0.45, 0.45, 0.18);
     const moss = new THREE.Color(0.13, 0.24, 0.06), mud = new THREE.Color(0.19, 0.15, 0.10), sand = new THREE.Color(0.36, 0.31, 0.23);
     const bedDeep = new THREE.Color(0.13, 0.13, 0.10), rock = new THREE.Color(0.27, 0.25, 0.25), rockDark = new THREE.Color(0.13, 0.12, 0.13);
-    const forest = new THREE.Color(0.07, 0.13, 0.05), snow = new THREE.Color(0.92, 0.94, 0.98), alpine = new THREE.Color(0.20, 0.22, 0.12);
+    const forest = new THREE.Color(0.07, 0.13, 0.05), woodFloor = new THREE.Color(0.045, 0.07, 0.03), snow = new THREE.Color(0.92, 0.94, 0.98), alpine = new THREE.Color(0.20, 0.22, 0.12);
     const tmp = new THREE.Color();
     for (let v = 0; v < nv; v++) {
       const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2];
@@ -135,6 +144,8 @@ export function createWorld(seed = 7) {
       // far hills: forest tone
       const hillT = smoothstep(4, 22, y) * smoothstep(-40, -200, z) + smoothstep(8, 20, y) * smoothstep(60, 140, z);
       c.lerp(forest, clamp(hillT, 0, 1) * 0.75 * (1 - steep * 0.6));
+      // shaded floor under the groves' trees
+      c.lerp(woodFloor, grove(x, z) * 0.75 * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y));
       // mountains: alpine -> rock -> snow
       if (y > 90) {
         c.lerp(alpine, smoothstep(90, 170, y) * (1 - steep));
@@ -262,7 +273,7 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = HC.data, k = j * HC.nx + i;
     return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + HC.nx] * (1 - u) + d[k + HC.nx + 1] * u) * v;
   }
-  return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist };
+  return { N, height, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove };
 }
 
 // water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map (G = rock foam)

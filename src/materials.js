@@ -120,7 +120,7 @@ export function rockMaterial() {
 }
 
 export function forestMaterial() {
-  return new LitMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, colorNode: vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8)) });
+  return new LitMaterial({ vertexColors: true, roughness: 1, colorNode: vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8)) });
 }
 
 // the temple (temple.js). After dusk the hall's paper doors and the lanterns' fireboxes glow (aGlow: strength), the

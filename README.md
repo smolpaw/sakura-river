@@ -21,7 +21,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/main.js`: engine entry point: renderer, scene assembly, camera and controls, post-processing chain, adaptive quality, and the public API.
 - `src/world.js`: height field, river path, terrain mesh, river ribbon, water-depth map and the finer map of rocks in the water (with the white water where the current breaks on them).
 - `src/tree.js`: procedural cherry tree (Somei Yoshino form), single-flower blossoms, bark and flower textures.
-- `src/vegetation.js`: instanced grass (split into tiles for frustum culling), wildflowers, rocks and distant forest.
+- `src/vegetation.js`: instanced grass (split into tiles for frustum culling), wildflowers, rocks, and the woods on the hills: groves of cedar, cypress, oak and wild cherry, and black pines on the cliff rims.
 - `src/props.js`: Fuji-style volcano and arched bridge (with its lanterns' hanging points).
 - `src/temple.js`: the old temple compound on its terrace (generation), with its lamp and floodlight positions.
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
