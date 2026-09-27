@@ -133,7 +133,7 @@ export class PetalSystem {
 }
 
 // static carpet of fallen petals under the tree
-export function fallenData(world, center, count, avoid) {
+export function fallenData(world, center, count, avoid, lawn) {
   const rng = mulberry32(88);
   const pos = new Float32Array(count * 3), rot = new Float32Array(count * 4), tint = new Float32Array(count);
   let n = 0, tries = 0;
@@ -144,7 +144,8 @@ export function fallenData(world, center, count, avoid) {
     const y = world.height(x, z);
     if (y < 0.05) continue;
     if (avoid && avoid(x, z)) continue;
-    pos[n * 3] = x; pos[n * 3 + 1] = y + 0.04 + rng() * 0.12; pos[n * 3 + 2] = z;
+    const top = lawn ? lerp(0.25, 1, lawn(x, z)) : 1; // on top of the grass: lower on the short lawn
+    pos[n * 3] = x; pos[n * 3 + 1] = y + (0.04 + rng() * 0.12) * top; pos[n * 3 + 2] = z;
     rot[n * 4] = rng() * 6.28; rot[n * 4 + 1] = (rng() - 0.5) * 0.8; rot[n * 4 + 2] = (rng() - 0.5) * 0.8; rot[n * 4 + 3] = 0.8 + rng() * 0.5;
     tint[n] = rng();
     n++;

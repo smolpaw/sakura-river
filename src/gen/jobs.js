@@ -8,7 +8,7 @@ import { templeData } from '../temple.js';
 import { fallenData } from '../petals.js';
 import { lanternData, lanternGeometry } from '../lanterns.js';
 import { tessellate } from '../stress.js';
-import { layout, rockAvoid, trunkAvoid } from './layout.js';
+import { layout, rockAvoid, trunkAvoid, underTree } from './layout.js';
 
 let W = null;
 const world = () => (W ||= createWorld(7));
@@ -37,12 +37,12 @@ export const JOBS = {
   grass: ({ count, tier }) => {
     const l = L();
     const avoid = rockAvoid(l, rockPlan(world(), tier, xz(l.tree)).placements);
-    return grassData(world(), count, { focus: xz(l.focus), radius: 62, avoid });
+    return grassData(world(), count, { focus: xz(l.focus), radius: 62, avoid, lawn: underTree(l) });
   },
   flowers: ({ count, tier }) => {
     const l = L();
     const avoid = rockAvoid(l, rockPlan(world(), tier, xz(l.tree)).placements);
-    return flowersData(world(), count, { focus: xz(l.focus), radius: 48, avoid });
+    return flowersData(world(), count, { focus: xz(l.focus), radius: 48, avoid, lawn: underTree(l) });
   },
   forest: ({ count }) => forestData(world(), count),
   lanterns: ({ tier }) => {
@@ -51,7 +51,7 @@ export const JOBS = {
     const rocks = rockPlan(world(), tier, xz(l.tree)).placements.map((r) => ({ x: r.x, z: r.z, r: r.sc }));
     return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world())), lantern: lanternGeometry() };
   },
-  fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L())),
+  fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L()), underTree(L())),
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling

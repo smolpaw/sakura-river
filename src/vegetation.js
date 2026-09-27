@@ -73,7 +73,7 @@ export function grassData(world, count, opts) {
     const lush = clamp(0.6 + patchN * 0.9, 0.15, 1.2);
     if (rng() > 0.35 + lush * 0.6) continue;
     const nearBank = smoothstep(1.35, 1.0, ri.t);
-    const hs = lerp(0.35, 0.8, lush) * (1 + nearBank * 0.9 * rng());
+    const hs = lerp(0.35, 0.8, lush) * (1 + nearBank * 0.9 * rng()) * (opts.lawn ? lerp(0.13, 1, opts.lawn(x, z)) : 1);
     p.set(x, y - 0.03, z);
     q.setFromAxisAngle(new V(0, 1, 0), rng() * Math.PI * 2);
     const ws = 0.9 + rng() * 0.6;
@@ -148,6 +148,7 @@ export function flowersData(world, count, opts) {
     if (opts.avoid && opts.avoid(x, z)) continue;
     // clumped
     if (world.N.noise2(x * 0.09 + 3, z * 0.09) < 0.05) continue;
+    if (opts.lawn && opts.lawn(x, z) < 0.5) continue;
     p.set(x, y + 0.28 + rng() * 0.25, z);
     e.set((rng() - 0.5) * 0.6, rng() * 6.28, (rng() - 0.5) * 0.6);
     q.setFromEuler(e);
