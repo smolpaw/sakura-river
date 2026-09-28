@@ -111,12 +111,6 @@ import { WEATHERS, TIMES } from './weather.js';
   $('btn-reset').addEventListener('click', function () {
     setPressed($('btn-cine'), false); if (engine) engine.resetCamera();
   });
-  $('btn-ui').addEventListener('click', function () {
-    var hide = !document.body.classList.contains('ui-hidden');
-    document.body.classList.toggle('ui-hidden', hide);
-    setPressed(this, hide);
-    this.setAttribute('aria-label', hide ? 'Show controls' : 'Hide controls');
-  });
   var fullBtn = $('btn-full');
   var canFull = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
   if (!canFull) fullBtn.hidden = true;
@@ -132,6 +126,24 @@ import { WEATHERS, TIMES } from './weather.js';
   });
   document.addEventListener('fullscreenchange', function () {
     fullBtn.setAttribute('aria-label', document.fullscreenElement ? 'Exit full screen' : 'Enter full screen');
+  });
+
+  // ---------- the controls fade out after a few seconds without activity ----------
+  var idleTimer = 0, mouse = false;
+  function idle() {
+    // stay while the mouse rests on a control or keyboard focus is in one
+    if ((mouse && document.querySelector('.side:hover, .top-right:hover')) ||
+        document.querySelector('.side :focus-visible, .top-right :focus-visible')) return wake();
+    document.body.classList.add('ui-idle');
+  }
+  function wake(e) {
+    if (e && e.pointerType) mouse = e.pointerType === 'mouse'; // a tapped control keeps :hover on touch screens
+    document.body.classList.remove('ui-idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(idle, 3500);
+  }
+  ['pointermove', 'pointerdown', 'keydown', 'wheel'].forEach(function (t) {
+    window.addEventListener(t, wake, { capture: true, passive: true });
   });
 
   function start() {
@@ -157,6 +169,7 @@ import { WEATHERS, TIMES } from './weather.js';
       showTime();
       setInterval(showTime, 250);
       $('veil').classList.add('done');
+      wake();
     }).catch(function () {
       $('veil-text').textContent = 'This device could not start WebGL. Try a desktop browser with hardware acceleration on.';
     });

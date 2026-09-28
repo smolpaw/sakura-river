@@ -5,6 +5,7 @@
   --washi: #f7f1ec;
   --washi-dim: rgba(247, 241, 236, 0.64);
   --glass: rgba(26, 21, 32, 0.56);
+  --fade: 0.35s; /* how fast the controls come back */
   --glass-edge: rgba(255, 236, 244, 0.13);
   --sakura: #f4bfd0;
   --beni: #d0527a;
@@ -35,7 +36,7 @@ body { margin: 0; background: var(--ink); color: var(--washi); overflow: hidden;
 
 .btn { appearance: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font: 500 13px/1 var(--sans); color: var(--washi); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--glass-edge);
-  border-radius: 10px; padding: 10px 13px; white-space: nowrap; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+  border-radius: 10px; padding: 10px 13px; white-space: nowrap; transition: background 0.2s, color 0.2s, border-color 0.2s, opacity var(--fade) ease; }
 .btn:hover { background: rgba(255, 255, 255, 0.14); }
 .btn.icon { padding: 0; width: 40px; height: 40px; }
 .btn.primary { background: var(--beni); border-color: transparent; }
@@ -46,11 +47,16 @@ body { margin: 0; background: var(--ink); color: var(--washi); overflow: hidden;
 button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; }
 
 .side { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); width: 372px;
-  display: flex; flex-direction: column; align-items: stretch; gap: 10px; transition: opacity 0.35s ease, transform 0.35s ease; }
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px; transition: transform var(--fade) ease; }
 .panel { padding: 14px 18px; display: flex; flex-direction: column; gap: 16px; border-radius: 16px; box-shadow: 0 18px 50px rgba(8, 4, 12, 0.35); }
-.ui-hidden .side { opacity: 0; transform: translateY(12px); pointer-events: none; }
-.ui-hidden .brand, .ui-hidden .stats { opacity: 0; pointer-events: none; }
-.brand, .stats { transition: opacity 0.35s ease; }
+.panel, .quality, .stats { transition: opacity var(--fade) ease; }
+/* no activity: the controls (not the title) and the cursor fade out slowly, and come back quickly on any.
+   The glass itself fades, not its container: under a translucent parent, backdrop-filter stops blurring the scene */
+.ui-idle { --fade: 1.2s; }
+.ui-idle .side { transform: translateY(12px); }
+.ui-idle .side, .ui-idle .top-right { pointer-events: none; }
+.ui-idle :is(.panel, .quality, .actions .btn, .top-right > *) { opacity: 0; }
+.ui-idle #scene { cursor: none; }
 
 .group { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .label { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 22px;
