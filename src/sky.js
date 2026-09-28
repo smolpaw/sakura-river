@@ -1,8 +1,8 @@
-// Sky dome with sun, a crescent moon, glow and drifting procedural clouds + time-of-day palette
+// Sky dome with sun, a crescent moon, stars, shooting stars, glow and drifting procedural clouds + time-of-day palette
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, positionWorld, cameraPosition, If } from 'three/tsl';
-import { U, vnoise, hashSin, sstep } from './tsl.js';
-import { clamp as clampJS, lerp, smoothstep } from './noise.js';
+import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If } from 'three/tsl';
+import { U, vnoise, hashSin, hash12, sstep } from './tsl.js';
+import { clamp as clampJS, lerp, smoothstep, mulberry32 } from './noise.js';
 
 const cfbm = Fn(([p0]) => {
   const p = vec2(p0).toVar(), s = float(0).toVar(), a = float(0.5).toVar();
@@ -13,6 +13,29 @@ const cfbm = Fn(([p0]) => {
 
 const MOON_R = Math.tan(THREE.MathUtils.degToRad(1.15)); // drawn about 4x its real size
 const CUT_R = 1.35, CUT_K = 0.9; // the circle that cuts the crescent, in moon radii
+const MOON_COS = [Math.cos(THREE.MathUtils.degToRad(1.4)), Math.cos(THREE.MathUtils.degToRad(1.1))]; // stars hidden behind it
+
+// Stars: a cube map of cells around the sky, STAR_N cells per unit of face coordinate, one star in STAR_P of them,
+// kept off the cell edges so a star is never cut. The sky turns about the celestial pole (north is +z, Japan's
+// latitude) with the clock.
+const STAR_N = 70, STAR_P = 0.3;
+const POLE = new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(35)), Math.cos(THREE.MathUtils.degToRad(35)));
+const starField = Fn(([s]) => {
+  const a = abs(s).toVar();
+  const m = max(a.x, max(a.y, a.z)).toVar();
+  const ax = step(vec3(m), a); // the major axis
+  const q = select(ax.x.greaterThan(0.5), s.yz, select(ax.y.greaterThan(0.5), s.xz, s.xy)).div(m).mul(STAR_N).toVar();
+  const c = floor(q).add(dot(ax.mul(sign(s)), vec3(1000.0, 2000.0, 3000.0))).toVar(); // cell id, per face
+  const o = vec2(hash12(c.add(17.3)), hash12(c.add(41.7))).mul(0.5).add(0.25);
+  // distance in pixels: the pixel's angle from fwidth of the direction (continuous across the cube's seams)
+  const px = length(fwidth(s)).div(m).mul(STAR_N * 0.6);
+  const r = length(fract(q).sub(o)).div(px);
+  const k = hash12(c.add(5.1)).toVar();
+  const b = pow(hash12(c.add(9.7)), 9.0).mul(2.6).add(0.05); // many faint stars, a few bright ones
+  const twinkle = sin(U.uTime.mul(k.mul(5.0).add(2.0)).add(k.mul(60.0))).mul(0.22).add(0.85);
+  const tint = mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.68), hash12(c.add(3.3)));
+  return tint.mul(b.mul(twinkle).mul(exp(r.mul(r).mul(-1.0))).mul(step(k, STAR_P)));
+});
 
 // one crater per cell at most: a darker floor inside a bright rim
 const crater = Fn(([q]) => {
@@ -43,8 +66,14 @@ export function makeSky() {
     uBoltDir: uniform(new THREE.Vector3(0, 0.3, -1).normalize()), // where lightning flashes
     uMoonDir: uniform(new THREE.Vector3(0, 0.4, -1).normalize()),
     uMoonVis: uniform(0),
+    uStarVis: uniform(0),
+    uStarRot: uniform(new THREE.Matrix3()), // world direction -> the stars' frame
+    uMeteor: uniform(0), // shooting star brightness (0: none)
+    uMeteorHead: uniform(new THREE.Vector3(0, 1, 0)),
+    uMeteorAxis: uniform(new THREE.Vector3(1, 0, 0)), // it moves along the great circle about this axis
+    uMeteorLen: uniform(0), // trail length, radians
   };
-  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade, uCover, uBoltDir, uMoonDir, uMoonVis } = uniforms;
+  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade, uCover, uBoltDir, uMoonDir, uMoonVis, uStarVis, uStarRot, uMeteor, uMeteorHead, uMeteorAxis, uMeteorLen } = uniforms;
   const skyColor = Fn(() => {
     const d = normalize(positionWorld.sub(cameraPosition)).toVar();
     const h = d.y, mu = dot(d, U.uSunDir).toVar();
@@ -60,6 +89,21 @@ export function makeSky() {
     const hidden = float(1.0).sub(sstep(0.5, 0.9, uCover));
     col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2).mul(hidden))).mul(U.uSunVis));
     col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis).mul(hidden));
+    // stars, dimmed towards the horizon and hidden behind the moon's disc (its dark side included)
+    If(uStarVis.greaterThan(0.0), () => {
+      const behindMoon = sstep(MOON_COS[0], MOON_COS[1], dot(d, uMoonDir));
+      col.addAssign(starField(uStarRot.mul(d)).mul(uStarVis).mul(sstep(-0.01, 0.3, h)).mul(float(1.0).sub(behindMoon)));
+    });
+    // a shooting star: a streak along a great circle, brightest at its head, its trail fading behind
+    If(uMeteor.greaterThan(0.0), () => {
+      const off = dot(d, uMeteorAxis);
+      const x = dot(d, cross(uMeteorAxis, uMeteorHead)).negate(); // angle behind the head
+      const px = length(fwidth(d)).mul(0.6);
+      const r = length(vec2(off, max(x.negate(), 0.0))).div(px);
+      const along = clamp(x.div(uMeteorLen), 0.0, 1.0);
+      const trail = float(1.0).sub(along).mul(float(1.0).sub(along)).mul(step(0.0, dot(d, uMeteorHead)));
+      col.addAssign(vec3(0.85, 0.9, 1.0).mul(exp(r.mul(r).mul(-0.8)).mul(trail).mul(uMeteor).mul(sstep(0.0, 0.08, h))));
+    });
     // moon: a crescent cut from the disc by a larger circle (a gentle inner arc), shaded as a sphere with seas and
     // craters and a slightly ragged inner edge; the dark part is left to the sky; a glow off the lit limb
     If(uMoonVis.greaterThan(0.0), () => {
@@ -116,7 +160,44 @@ export function makeSky() {
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(7000, 48, 24), mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;
-  return { mesh, uniforms };
+  // Night sky per frame: the stars turn with the clock; now and then a shooting star, somewhere ahead of the
+  // camera (vis: how clear and dark the sky is, 0..1; view: the camera's forward direction).
+  const rng = mulberry32(2718);
+  const rot = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(), east = new THREE.Vector3();
+  let meteor = null, wait = 6;
+  function launch(view) {
+    // in the upper part of the view (42 degrees tall), at least 14 degrees up
+    const az = Math.atan2(view.x, -view.z) + (rng() - 0.5) * 1.0;
+    const el = Math.max(THREE.MathUtils.degToRad(14), Math.asin(view.y) + THREE.MathUtils.degToRad(4 + rng() * 14));
+    const p = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+    // heading: downwards, up to 70 degrees either side
+    up.set(0, 1, 0).addScaledVector(p, -p.y).normalize();
+    east.crossVectors(up, p).normalize();
+    const phi = (rng() - 0.5) * 2.4;
+    const dir = up.clone().multiplyScalar(-Math.cos(phi)).addScaledVector(east, Math.sin(phi));
+    meteor = {
+      p, axis: new THREE.Vector3().crossVectors(p, dir).normalize(),
+      speed: THREE.MathUtils.degToRad(18 + rng() * 16), dur: 0.4 + rng() * 0.6, len: THREE.MathUtils.degToRad(5 + rng() * 7),
+      bright: 1.5 + rng() * 2.5, t: 0,
+    };
+  }
+  function night(dt, hour, vis, view) {
+    uniforms.uStarVis.value = vis;
+    rot.makeRotationAxis(POLE, -(hour / 24) * Math.PI * 2);
+    uniforms.uStarRot.value.setFromMatrix4(rot);
+    if (!meteor && vis > 0.3 && (wait -= dt) <= 0) { launch(view); wait = 3 - Math.log(1 - rng()) * 10; }
+    uniforms.uMeteor.value = 0;
+    if (!meteor) return;
+    const m = meteor;
+    m.t += dt;
+    if (m.t >= m.dur) { meteor = null; return; }
+    const a = m.speed * m.t;
+    uniforms.uMeteorHead.value.copy(m.p).applyQuaternion(q.setFromAxisAngle(m.axis, a));
+    uniforms.uMeteorAxis.value.copy(m.axis);
+    uniforms.uMeteorLen.value = Math.min(a, m.len);
+    uniforms.uMeteor.value = m.bright * vis * Math.min(1, m.t / (0.15 * m.dur)) * Math.min(1, (m.dur - m.t) / (0.4 * m.dur));
+  }
+  return { mesh, uniforms, night, shootingStar: launch };
 }
 
 // keyframes by sun elevation (degrees). Linear HDR colours.

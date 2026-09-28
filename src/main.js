@@ -610,6 +610,8 @@ export async function create(canvas, opts = {}) {
     sunScreen.copy(camera.position).addScaledVector(sd, 2000).project(camera);
     const camDir = camera.getWorldDirection(new THREE.Vector3());
     const facing = smoothstep(0.05, 0.55, camDir.dot(sd));
+    // stars once the sky is dark, fewer through haze, none under heavy cloud
+    sky.night(dt, clockH, smoothstep(-4.5, -14, skyNow.elev) * (1 - smoothstep(0.45, 0.8, S.clouds)) * lerp(1, 0.3, smoothstep(0.3, 0.8, S.fog)), camDir);
     const onScreen = smoothstep(1.9, 1.0, Math.max(Math.abs(sunScreen.x), Math.abs(sunScreen.y)));
     // uv of the sun in the post passes: three's fullscreen quad runs uv.y top-down on both backends
     rays.sun.value.set(sunScreen.x * 0.5 + 0.5, 0.5 - sunScreen.y * 0.5);
@@ -745,7 +747,8 @@ export async function create(canvas, opts = {}) {
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
     backend: backendName,
-    birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
+    birdInfo() { return birds.info(); },
+    shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera // birds in the air per species, [x, y, z]
     info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
     dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); sound.dispose(); },
   };
