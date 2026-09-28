@@ -12,14 +12,15 @@ const TALL = { blades: 5, segs: 4, spread: 0.13, h: [0.65, 0.45], w: [0.038, 0.0
 // the deer's cropped turf: many thin, short, upright blades
 const TURF = { blades: 6, segs: 2, spread: 0.09, h: [0.1, 0.12], w: [0.008, 0.006], lean: [0.04, 0.16] };
 
-function grassClumpGeometry(rng, { blades, segs, spread, h: H, w: W, lean: L } = TALL) {
+// `wScale` widens every blade (the one-segment far version: its straight taper is ~15% thinner than the curved one)
+function grassClumpGeometry(rng, { blades, segs, spread, h: H, w: W, lean: L } = TALL, wScale = 1) {
   const P = [], Nn = [], F = [], C = [], I = [];
   let base = 0;
   for (let b = 0; b < blades; b++) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * spread;
     const ox = Math.cos(a) * r, oz = Math.sin(a) * r;
     const yaw = rng() * Math.PI * 2;
-    const h = H[0] + rng() * H[1], w = W[0] + rng() * W[1];
+    const h = H[0] + rng() * H[1], w = (W[0] + rng() * W[1]) * wScale;
     const lean = L[0] + rng() * L[1];
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     for (let s = 0; s <= segs; s++) {
@@ -60,6 +61,8 @@ export function grassData(world, count, opts) {
   const rng = mulberry32(42);
   const nz = makeNoise(77);
   const geo = grassClumpGeometry(rng);
+  // far level of detail: the same blades (same rng draws) in one segment each, a quarter of the triangles
+  const farGeo = grassClumpGeometry(mulberry32(42), { ...TALL, segs: 1 }, 1.17);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
   const col = new THREE.Color();
   const cA = new THREE.Color(0.09, 0.26, 0.05), cB = new THREE.Color(0.24, 0.42, 0.08), cC = new THREE.Color(0.42, 0.42, 0.14), reed = new THREE.Color(0.2, 0.28, 0.08);
@@ -109,7 +112,7 @@ export function grassData(world, count, opts) {
     out.push({ matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length, bs: [bs.center.x, bs.center.y, bs.center.z, bs.radius + 1.5] });
     total += list.length;
   }
-  return { geo, tiles: out, total, turf: opts.turf ? turfData(world, opts.turf, nz, cA, cB) : null };
+  return { geo, farGeo, tiles: out, total, turf: opts.turf ? turfData(world, opts.turf, nz, cA, cB) : null };
 }
 
 // the turf: one instanced draw over the grazing ground's box, as dense as turf.density(x, z) (0..1)
@@ -136,20 +139,40 @@ function turfData(world, turf, nz, cA, cB) {
   return { geo, matrix: mesh.instanceMatrix.array.slice(0, n * 16), color: mesh.instanceColor.array.slice(0, n * 3), n, bs: [bs.center.x, bs.center.y, bs.center.z, bs.radius + 0.5] };
 }
 
+// Each tile is drawn with the full clumps near the camera and with the one-segment ones (farGeo) from FAR metres
+// out, where a blade's curve is a few pixels; both meshes share the tile's instance data.
+const FAR = 32;
 export function makeGrass(data, mat) {
   const group = new THREE.Group();
-  for (const t of data.turf ? [...data.tiles, data.turf] : data.tiles) {
-    const mesh = new THREE.InstancedMesh(t.geo || data.geo, mat, t.n);
-    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(t.matrix, 16);
-    mesh.instanceColor = new THREE.InstancedBufferAttribute(t.color, 3);
+  const lods = [];
+  const add = (geo, t, inst) => {
+    const mesh = new THREE.InstancedMesh(geo, mat, t.n);
+    mesh.instanceMatrix = inst ? inst.instanceMatrix : new THREE.InstancedBufferAttribute(t.matrix, 16);
+    mesh.instanceColor = inst ? inst.instanceColor : new THREE.InstancedBufferAttribute(t.color, 3);
     mesh.boundingSphere = new THREE.Sphere(new V(t.bs[0], t.bs[1], t.bs[2]), t.bs[3]);
     mesh.receiveShadow = true; mesh.castShadow = false;
     mesh.layers.set(1);
     mesh.userData.max = t.n;
     group.add(mesh);
+    return mesh;
+  };
+  for (const t of data.tiles) {
+    const near = add(data.geo, t), far = add(data.farGeo, t, near);
+    far.visible = false;
+    lods.push({ near, far, c: near.boundingSphere.center, r: near.boundingSphere.radius, isFar: false });
   }
+  if (data.turf) add(data.turf.geo, data.turf); // short turf: two segments already
   group.userData.total = data.total;
   group.userData.setFraction = (f) => { group.children.forEach((m) => (m.count = Math.max(0, Math.round(m.userData.max * f)))); };
+  // pick each tile's level by its nearest point to the camera (2 m of hysteresis); `both` shows both (warm-up)
+  group.userData.lod = (cam, both = false) => {
+    for (const l of lods) {
+      const d = l.c.distanceTo(cam) - l.r;
+      l.isFar = l.isFar ? d > FAR - 2 : d > FAR + 2;
+      l.near.visible = both || !l.isFar;
+      l.far.visible = both || l.isFar;
+    }
+  };
   return group;
 }
 

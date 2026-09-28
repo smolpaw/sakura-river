@@ -609,6 +609,7 @@ export async function create(canvas, opts = {}) {
     }
     camera.updateMatrixWorld();
     sky.mesh.position.copy(camera.position);
+    grass.userData.lod(camera.position, warming); // warm-up builds both grass levels
 
     // sun light / shadow frustum anchored on the tree
     const sd = U.uSunDir.value;
