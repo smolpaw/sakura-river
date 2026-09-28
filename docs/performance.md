@@ -48,7 +48,7 @@ Each item passed the visual gate or is pixel-identical to what it replaced.
 
 Checked by eye only; no timing runs.
 
-- Tree (single flowers): 38k bark triangles, 23k flowers × 8 triangles.
+- Tree (single flowers): 38k bark triangles, 28k flowers × 8 triangles (23k before the inner branches got their own umbels).
 - Riverside and bridge lanterns: ~100 instances × 400 triangles in one draw; their light is analytic (distance to the bank lines), not scene lights.
 - Temple: 84k triangles, one draw, no shadows. Its material sums 14 lamp terms only after dusk and only on temple pixels.
 - Rocks: five boulder shapes of 500 triangles (93 instances, cast shadows) and one 80-triangle stone for the 900 pebbles, which cast no shadow. The pebbles had used the boulder shapes (~450k triangles in the scene, shadow and reflection passes); they sit at the waterline, under water or in the grass, and look the same.

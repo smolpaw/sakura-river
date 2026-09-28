@@ -13,6 +13,7 @@ export const MAIN_TREE = {
   limbs: [5, 6],
   maxDepth: 5,
   umbels: [0, 0, 0, 3, 5, 10], // blossom umbels per branch, by depth
+  fill: [0, 0, 2, 4, 4, 0], // more umbels along the inner branches (full bloom), from their own rng: same tree
   flowerSize: 1,
   minY: 2.2,
   roots: 6,
@@ -37,7 +38,7 @@ function anyPerp(d) {
 }
 
 export function growTree(seed, cfg, groundAt = () => 0) {
-  const rng = mulberry32(seed);
+  const rng = mulberry32(seed), rngFill = mulberry32(seed + 3);
   const rr = (a, b) => a + (b - a) * rng();
   const nz = makeNoise(seed + 99);
   const k = cfg.scale, D = cfg.maxDepth;
@@ -78,6 +79,10 @@ export function growTree(seed, cfg, groundAt = () => 0) {
     const nU = cfg.umbels[depth] || 0;
     for (let u = 0; u < nU; u++) {
       const s = at(depth === D ? 1 - rng() * rng() * 0.75 : rr(0.3, 1)); // terminal twigs flower towards the tip
+      anchors.push({ p: s.p, d: s.d, f: s.f, depth });
+    }
+    for (let u = 0; u < ((cfg.fill && cfg.fill[depth]) || 0); u++) {
+      const s = at(0.25 + 0.75 * rngFill());
       anchors.push({ p: s.p, d: s.d, f: s.f, depth });
     }
     if (depth === D) return;
@@ -430,7 +435,7 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
       const p = mid.clone().add(new V(rr(-1, 1), rr(-1, 1), rr(-1, 1)).multiplyScalar(0.12 * k * Math.sqrt(cfg.flowerSize)));
       const nrm = p.clone().sub(an.p).normalize().add(new V(rr(-0.6, 0.6), rr(-0.3, 0.7), rr(-0.6, 0.6))).normalize();
       q.setFromUnitVectors(Z, nrm).multiply(q2.setFromAxisAngle(Z, rng() * TAU));
-      const sz = rr(0.13, 0.19) * k * cfg.flowerSize;
+      const sz = rr(0.14, 0.21) * k * cfg.flowerSize;
       m.compose(p, q, sv.set(sz, sz, sz));
       m.toArray(matrix, n * 16);
       const cn = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y * 0.8, (p.z - center.z) / ext.z);
