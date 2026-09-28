@@ -568,6 +568,8 @@ export async function create(canvas, opts = {}) {
     sky.uniforms.uCloud.value.y -= dt * (0.003 + S.wind * 0.005);
     U.uFogDensity.value = 0.0006 + Math.pow(S.fog, 1.5) * 0.013;
     U.uFogFalloff.value = 0.028;
+    // river mist (kawagiri) from before dawn to mid-morning, thinned by the wind
+    U.uMist.value = smoothstep(4.2, 5.0, clockH) * smoothstep(8.3, 6.8, clockH) * lerp(1, 0.4, S.wind / 1.6);
     post.bloom.uniforms.strength.value = S.bloom * 1.6;
     post.grade.uniforms.time.value = U.uTime.value;
 
