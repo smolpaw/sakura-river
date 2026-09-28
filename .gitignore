@@ -10,3 +10,4 @@ bench/goldens/
 __pycache__/
 bench/goldens-*/
 tools/.audio-cache/
+tools/.model-cache/
