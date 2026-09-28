@@ -433,7 +433,7 @@ export async function create(canvas, opts = {}) {
 
   // ---------- sizing / adaptive quality ----------
   let W = 1, H = 1;
-  let pixelScale = 1; // adaptive render scale without temporal upscaling: the canvas resolution itself
+  let pixelScale = 1; // adaptive render scale: the canvas resolution itself
   function resize() {
     const w = Math.max(1, canvas.clientWidth | 0), h = Math.max(1, canvas.clientHeight | 0);
     W = w; H = h;

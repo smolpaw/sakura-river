@@ -96,7 +96,7 @@ export function createGPUProbe(renderer) {
     ctx.getCurrentTexture = () => { const t0 = performance.now(); const t = orig(); blocked += performance.now() - t0; return t; };
   }
 
-  // Pass timestamps miss work between passes (texture copies such as TAA history), which the WebGL probe's
+  // Pass timestamps miss work between passes (texture copies), which the WebGL probe's
   // contiguous segments include. So a frame's GPU time is its span, from its first pass's begin to its last pass's
   // end: with the GPU the bottleneck (queue always full, bench unthrottled) nothing idles inside it. Like the WebGL
   // segments it leaves out the browser compositor's work between frames; the period (first begin to the next

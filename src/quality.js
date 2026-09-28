@@ -1,5 +1,5 @@
-// Adaptive quality driven by GPU time. The main knob is the internal render scale (temporal upscaling
-// reconstructs full resolution); second-order settings step in only at the scale floor and step out first.
+// Adaptive quality driven by GPU time. The main knob is the render scale (the canvas resolution; the browser
+// stretches it to the screen); second-order settings step in only at the scale floor and step out first.
 //
 // Model: gpuMs ~= fixed + perPixel * scale^2. Each decision solves for the scale that meets the target from
 // smoothed measurements, moves at most one step, and waits for fresh samples before the next decision, so the
@@ -28,7 +28,7 @@ export class QualityController {
   update(ms, frame = Infinity) {
     if (!(ms > 0) || !Number.isFinite(ms) || frame <= this.changedFrame) return false;
     this.lastMs = ms;
-    // panic: several frames far over budget -> drop immediately (and tell the caller to reset temporal history)
+    // panic: several frames far over budget -> drop immediately
     this.over = ms > this.targetMs * this.panicFactor ? this.over + 1 : 0;
     if (this.over >= this.panicFrames && (this.scale > this.minScale || this.level < this.levels.length)) {
       this.over = 0; this.samples = []; this.cooldown = this.window;
