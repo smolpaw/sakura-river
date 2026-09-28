@@ -393,7 +393,7 @@ function limb(pts, r0, r1, seg = 5) {
 }
 
 // a lumpy ellipsoid round c (radii s, sy), or with blobs the outer surface of those spheres seen from c
-function lobes(c, s, sy, rings, seg, rough, nz, blobs = null) {
+function lobes(c, s, sy, rings, seg, rough, nz, blobs = null, freq = 3) {
   const d = new V(), o = new V();
   return ringSurface(rings, seg, (j, i, v) => {
     const th = (Math.PI * j) / (rings - 1), a = (Math.PI * 2 * i) / seg;
@@ -407,7 +407,7 @@ function lobes(c, s, sy, rings, seg, rough, nz, blobs = null) {
         if (q > 0) r = Math.max(r, bb + Math.sqrt(q));
       }
     }
-    r *= 1 + rough * nz.noise3(d.x * 3 + c.x * 7, d.y * 3 + c.y * 7, d.z * 3);
+    r *= 1 + rough * nz.noise3(d.x * freq + c.x * 7, d.y * freq + c.y * 7, d.z * freq);
     v.set(c.x + d.x * r * s, c.y + d.y * r * sy, c.z + d.z * r * s);
   });
 }
@@ -426,17 +426,26 @@ function conifer(nz, { w, base, tiers, layer, tuft, rings, seg, col }) {
   return mergeGeometries([limb([new V(0, -0.04, 0), new V(0, base + 0.12, 0)], 0.028, 0.018), crown]);
 }
 
-// a broadleaf tree (or a wild cherry): a short trunk forking into limbs under a billowy crown of lobes
-function broadleaf(nz, rng, { w, n, rough, col, low = 0.4 }) {
+// a broadleaf tree (or a wild cherry): a short trunk forking into limbs under a billowy crown of lobes; `leaf`
+// mottles the crown with a second colour (a cherry's bronze new leaves among its flowers)
+function broadleaf(nz, rng, { w, n, rough, col, low = 0.4, res = [10, 14], leaf = null, blobR = 1, freq = 3 }) {
   const c = new V(0, 0.56, 0), blobs = [{ p: new V(0, 0.55, 0), r: 0.24 * w }];
   const parts = [limb([new V(0, -0.04, 0), new V(0.01, 0.12, 0), new V(0, 0.24, 0)], 0.03, 0.02)];
   for (let k = 0; k < n; k++) {
     const a = (k / n) * Math.PI * 2 + rng() * 0.8, e = rng() * 1.4 - 0.55;
     const p = new V(Math.cos(a) * Math.cos(e) * 0.24 * w, 0.56 + Math.sin(e) * 0.2, Math.sin(a) * Math.cos(e) * 0.24 * w);
-    blobs.push({ p, r: (0.13 + rng() * 0.08) * (0.8 + 0.2 * w) });
+    blobs.push({ p, r: (0.13 + rng() * 0.08) * (0.8 + 0.2 * w) * blobR });
     if (k % 2 === 0) parts.push(limb([new V(0, 0.22, 0), new V(p.x * 0.45, 0.36, p.z * 0.45), new V(p.x * 0.8, p.y - 0.04, p.z * 0.8)], 0.016, 0.007, 4));
   }
-  parts.push(shadeCrown(lobes(c, 1, 1, 10, 14, rough, nz, blobs), (p, o) => o.copy(c), col, 0.5, low));
+  const crown = shadeCrown(lobes(c, 1, 1, res[0], res[1], rough, nz, blobs, freq), (p, o) => o.copy(c), col, 0.5, low);
+  if (leaf) {
+    const P = crown.attributes.position, C = crown.attributes.color;
+    for (let i = 0; i < P.count; i++) {
+      const f = 0.35 * smoothstep(0.1, 0.5, nz.noise3(P.getX(i) * 14 + 4, P.getY(i) * 14, P.getZ(i) * 14));
+      for (let k = 0; k < 3; k++) C.array[i * 3 + k] *= lerp(1, leaf[k] / col[k], f);
+    }
+  }
+  parts.push(crown);
   return mergeGeometries(parts);
 }
 
@@ -466,7 +475,7 @@ export function forestData(world, count) {
     conifer(nz, { w: 0.24, base: 0.08, tiers: 6, layer: 0.28, tuft: 0.25, rings: 16, seg: 10, col: [0.06, 0.11, 0.05] }),
     broadleaf(nz, mulberry32(3), { w: 1.15, n: 8, rough: 0.07, col: [0.19, 0.3, 0.06] }), // oaks and maples in new leaf
     broadleaf(nz, mulberry32(4), { w: 1, n: 7, rough: 0.05, col: [0.07, 0.13, 0.045] }), // evergreen oak
-    broadleaf(nz, mulberry32(5), { w: 1.35, n: 10, rough: 0.09, col: [1.0, 0.58, 0.56], low: 0.75 }), // wild cherry in flower
+    broadleaf(nz, mulberry32(5), { w: 1.35, n: 22, rough: 0.14, freq: 10, blobR: 0.8, col: [1.0, 0.7, 0.74], low: 0.5, res: [16, 26], leaf: [0.6, 0.3, 0.22] }), // wild cherry in flower
     pine(nz),
   ];
   const lists = kinds.map(() => []);

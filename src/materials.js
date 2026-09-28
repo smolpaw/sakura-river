@@ -121,7 +121,14 @@ export function rockMaterial() {
 }
 
 export function forestMaterial() {
-  return new LitMaterial({ vertexColors: true, roughness: 1, colorNode: vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8)) });
+  return new LitMaterial({ vertexColors: true, roughness: 1, colorNode: vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8)) }, (out) => Fn(() => {
+    // wild cherries in flower (the only crowns this red) glow like the main tree's blossoms, so their shaded side
+    // stays pink instead of turning lilac under the blue sky light
+    const bloom = sstep(0.45, 0.7, diffuseColor.r);
+    const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
+    const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
+    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom));
+  })());
 }
 
 // the temple (temple.js). After dusk the hall's paper doors and the lanterns' fireboxes glow (aGlow: strength), the
