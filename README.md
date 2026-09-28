@@ -1,6 +1,6 @@
 # Sakura River
 
-A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain under a crescent moon and a turning field of stars at night, with the odd shooting star, with a lantern-lit vermilion drum bridge, an old temple on a knoll (five-storey pagoda, main hall, bell tower, stone lanterns, lit up at night), paper lanterns strung along both banks and koi in the river. On the far bank two sika hinds and a young stag graze a patch of short turf. Birds fly over the valley by day: swallows hunt over the river (high in fair weather, skimming the water under heavy cloud and in drizzle, gone in heavy rain), black kites circle high on clear days, and crows fly home to the temple woods at dusk and out again at dawn; lightning scatters them. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), water lapping under the bridge, wind, rain, thunder after each lightning strike, birds and bush warblers by day, and the temple bell as the lanterns come on. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used. The exceptions are the deer, which are ready-made models (see Models), and the sounds, which are recordings (see Sound).
+A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain under a crescent moon and a turning field of stars at night, with the odd shooting star, with a lantern-lit vermilion drum bridge, an old temple on a knoll (five-storey pagoda, main hall, bell tower, stone lanterns, lit up at night), paper lanterns strung along both banks, koi in the river and fallen petals gathering into rafts along its banks. On the far bank two sika hinds and a young stag graze a patch of short turf. Birds fly over the valley by day: swallows hunt over the river (high in fair weather, skimming the water under heavy cloud and in drizzle, gone in heavy rain), black kites circle high on clear days, and crows fly home to the temple woods at dusk and out again at dawn; lightning scatters them. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, mist lies on the river around dawn, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), water lapping under the bridge, wind, rain, thunder after each lightning strike, birds and bush warblers by day, and the temple bell as the lanterns come on. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used. The exceptions are the deer, which are ready-made models (see Models), and the sounds, which are recordings (see Sound).
 
 Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on every push to `main`).
 
@@ -25,14 +25,14 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/props.js`: Fuji-style volcano and arched bridge (with its lanterns' hanging points).
 - `src/temple.js`: the old temple compound on its terrace (generation), with its lamp and floodlight positions.
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
-- `src/water.js`: river shader and planar reflections.
+- `src/water.js`: river shader and planar reflections, and the mist on the river at dawn.
 - `src/koi.js`: koi swimming under the river surface.
 - `src/deer.js`: the grazing deer: models loaded and lit like the scene, their grazing clip looped mostly head-down.
 - `src/models/`: the deer models, built by `tools/models.mjs` (`node tools/models.mjs`) from the sources in Models and inlined in the page.
 - `src/birds.js`: birds in flight (swallows, kites, crows): their paths by weather and time of day, wings flapped in the vertex stage.
 - `src/sky.js`: sky dome, moon, stars and shooting stars, clouds and time-of-day palette.
 - `src/weather.js`: weather presets and times of day, the sky under cloud cover, rain streaks and lightning.
-- `src/petals.js`: simulated falling petals and the fallen-petal carpet.
+- `src/petals.js`: simulated falling petals, the fallen-petal carpet and the petal rafts on the water.
 - `src/fx.js`: petal, pollen-mote and lantern materials, the temple lamps' glows.
 - `src/post.js`: light shafts pass and final grade (sharpening, local contrast, vignette).
 - `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera, thunder, bird songs, the evening bell.
