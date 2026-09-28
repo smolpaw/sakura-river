@@ -456,7 +456,7 @@ function pine(nz) {
 
 // kinds: geometry and height range (m)
 const SUGI = 0, HINOKI = 1, KONARA = 2, KASHI = 3, CHERRY = 4, PINE = 5;
-const HEIGHT = [[20, 12], [15, 8], [11, 6], [10, 5], [10, 6], [9, 4]];
+const HEIGHT = [[18, 8], [15, 8], [11, 6], [10, 5], [10, 6], [9, 4]];
 
 export function forestData(world, count) {
   const rng = mulberry32(555);
@@ -481,8 +481,8 @@ export function forestData(world, count) {
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const t of grid.get(`${cx + i},${cz + j}`) || []) if (Math.hypot(t.x - x, t.z - z) < r) return true;
     return false;
   };
-  const add = (k, x, y, z, a) => {
-    const t = { x, y, z, a, h: HEIGHT[k][0] + rng() * HEIGHT[k][1] };
+  const add = (k, x, y, z, a, hs = 1) => {
+    const t = { x, y, z, a, h: (HEIGHT[k][0] + rng() * HEIGHT[k][1]) * hs };
     lists[k].push(t);
     const key = `${Math.floor(x / cell)},${Math.floor(z / cell)}`;
     grid.set(key, [...(grid.get(key) || []), t]);
@@ -500,10 +500,11 @@ export function forestData(world, count) {
     const cedar = nz.fbm2(x * 0.02 - 7, z * 0.02 + 3, 2) + (y - 40) / 160;
     const r = rng();
     const k = grove < 0.3 ? (r < 0.3 ? CHERRY : KONARA)
-      : cedar > 0.12 ? (r < 0.7 ? SUGI : HINOKI)
+      : cedar > 0.12 ? (r < 0.7 && grove > 0.55 ? SUGI : HINOKI) // tall sugi only inside a stand, never alone
       : r < 0.16 ? CHERRY : r < 0.62 ? KONARA : r < 0.85 ? KASHI : HINOKI;
     if (crowded(x, z, k <= HINOKI ? 4.5 : 6.5)) continue;
-    add(k, x, y, z, rng() * Math.PI * 2);
+    // conifers shorter towards a stand's edge, so a stand rises to its middle instead of spikes standing out of it
+    add(k, x, y, z, rng() * Math.PI * 2, k <= HINOKI ? lerp(0.65, 1, smoothstep(0.3, 0.9, grove)) : 1);
     n++;
   }
   // black pines on cliff rims: level ground with a drop of several metres just past it, leaning out over it
