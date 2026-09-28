@@ -17,6 +17,7 @@ import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
 import { makeKoi, koiClearing } from './koi.js';
 import { makeBirds } from './birds.js';
+import { makeDeer } from './deer.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
 import { QualityController } from './quality.js';
@@ -300,6 +301,8 @@ export async function create(canvas, opts = {}) {
   scene.add(motes.mesh);
   const birds = makeBirds(world, { x: TX, z: TZ });
   scene.add(birds.group);
+  const deer = await makeDeer(world, Lay.graze);
+  scene.add(deer.group);
   const rain = makeRain(Q.rain);
   rain.name = 'rain';
   rain.visible = false;
@@ -565,6 +568,7 @@ export async function create(canvas, opts = {}) {
 
     petals.update(dt, U.uTime.value, S.wind, S.river);
     koi.update(dt, U.uTime.value);
+    deer.update(dt);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = warming || U.uLights.value > 0.001;
