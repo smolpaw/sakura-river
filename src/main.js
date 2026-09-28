@@ -397,6 +397,7 @@ export async function create(canvas, opts = {}) {
   let flashed = false;
 
   let lastTime = -1, lastCover = -1;
+  const tmpAmb = new THREE.Color(), rayWarm = new THREE.Color(1, 0.9, 0.8);
   function applyTimeOfDay(t) {
     const st = overcast(skyState(t), S.clouds);
     sky.uniforms.uCover.value = S.clouds;
@@ -411,13 +412,13 @@ export async function create(canvas, opts = {}) {
     U.uFogSunColor.value.copy(st.fogSun);
     sun.color.copy(st.sun);
     sun.intensity = st.sunI * st.vis;
-    const amb = st.zenith.clone().lerp(st.horizon, 0.45);
+    const amb = tmpAmb.copy(st.zenith).lerp(st.horizon, 0.45);
     U.uSkyAmb.value.copy(amb);
     hemi.color.copy(amb).multiplyScalar(1.25);
     hemi.groundColor.setRGB(0.16, 0.15, 0.08).lerp(st.fog, 0.25);
     hemi.intensity = lerp(0.62, 1.0, 1 - st.vis * 0.6);
     hemiBase.copy(hemi.color); ambBase.copy(amb);
-    rays.tint.value.copy(st.sun).lerp(new THREE.Color(1, 0.9, 0.8), 0.3);
+    rays.tint.value.copy(st.sun).lerp(rayWarm, 0.3);
     renderer.toneMappingExposure = lerp(1.35, 0.98, st.vis) * (st.elev > 30 ? 0.92 : 1);
     lastTime = t; lastCover = S.clouds;
     return st;
@@ -512,7 +513,7 @@ export async function create(canvas, opts = {}) {
 
   // ---------- loop ----------
   const timer = new THREE.Timer();
-  const tmpV = new THREE.Vector3();
+  const tmpV = new THREE.Vector3(), sdl = new THREE.Vector3(), camDir = new THREE.Vector3();
   let running = true;
   let frameNo = 0, warming = false;
   const sunScreen = new THREE.Vector3();
@@ -606,13 +607,13 @@ export async function create(canvas, opts = {}) {
     const sd = U.uSunDir.value;
     const anchor = tmpV.set(TX + 4, 3, TZ + 2);
     sun.target.position.copy(anchor);
-    const sdl = sd.clone(); if (sdl.y < 0.08) sdl.y = 0.08; sdl.normalize();
+    sdl.copy(sd); if (sdl.y < 0.08) sdl.y = 0.08; sdl.normalize();
     sun.position.copy(anchor).addScaledVector(sdl, 150);
     sun.target.updateMatrixWorld();
 
     // god-ray sun position
     sunScreen.copy(camera.position).addScaledVector(sd, 2000).project(camera);
-    const camDir = camera.getWorldDirection(new THREE.Vector3());
+    camera.getWorldDirection(camDir);
     const facing = smoothstep(0.05, 0.55, camDir.dot(sd));
     // stars once the sky is dark, fewer through haze, none under heavy cloud
     sky.night(dt, clockH, smoothstep(-4.5, -14, skyNow.elev) * (1 - smoothstep(0.45, 0.8, S.clouds)) * lerp(1, 0.3, smoothstep(0.3, 0.8, S.fog)), camDir);
