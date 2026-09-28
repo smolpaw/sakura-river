@@ -5,7 +5,7 @@ Procedural Three.js scene (cherry tree, river, Fuji-style mountain). See README.
 ## Working here
 
 - The owner cares about results, not about knowing the code. The GitHub issue workflow from the global instructions does not apply to this project. Any language or stack is fine when measurements show it helps.
-- Active work: `docs/performance-plan.md`. Its Status section is the progress log.
+- `docs/performance.md`: what the renderer does for speed, what was rejected and why, open cross-GPU risks. Check it before adding anything that costs GPU time, and add new findings there.
 
 ## Conventions
 
