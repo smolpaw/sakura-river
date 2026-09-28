@@ -42,6 +42,7 @@ body { margin: 0; background: var(--ink); color: var(--washi); overflow: hidden;
 .btn.primary:hover { background: #dc6189; }
 .btn[aria-pressed="true"], .top-right .btn[aria-pressed="true"], .actions .btn[aria-pressed="true"] { background: var(--washi); color: var(--sumi); border-color: transparent; }
 .top-right .btn:hover, .actions .btn:hover { background: rgba(60, 50, 70, 0.66); }
+.top-right .btn[aria-pressed="true"]:hover, .actions .btn[aria-pressed="true"]:hover { background: #fff; }
 button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; }
 
 .side { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); width: 372px;
