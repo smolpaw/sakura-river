@@ -632,10 +632,17 @@ export async function create(canvas, opts = {}) {
     if (probe) probe.endFrame();
   }
 
-  function loop() {
+  // capped at 60 fps: high-refresh displays skip callbacks until the next frame is due (the 2 ms tolerance keeps
+  // a 60 Hz display's jittery timestamps from skipping frames)
+  const frameMs = 1000 / 60;
+  let due = 0;
+  function loop(now) {
     if (!running) return;
     requestAnimationFrame(loop);
-    timer.update();
+    if (now < due - 2) return;
+    due += frameMs;
+    if (due < now) due = now + frameMs;
+    timer.update(now);
     const dt = timer.getDelta();
     step(dt);
     adapt(dt);

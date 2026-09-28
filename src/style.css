@@ -26,8 +26,7 @@ body { margin: 0; background: var(--ink); color: var(--washi); overflow: hidden;
 .brand-name { font-family: 'Shippori Mincho', serif; font-size: 15px; letter-spacing: 0.3em; text-transform: uppercase; color: #fbf6ee; }
 
 .top-right { position: fixed; top: calc(18px + env(safe-area-inset-top, 0px)); right: 18px; display: flex; align-items: center; gap: 8px; }
-.stats { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--washi-dim); font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 12px rgba(20, 10, 20, 0.5); }
+.stats { font-size: 11px; color: var(--washi-dim); font-variant-numeric: tabular-nums; text-shadow: 0 1px 12px rgba(20, 10, 20, 0.5); }
 
 /* glass surfaces floating over the scene */
 .panel, .top-right .btn, .quality, .actions .btn {

@@ -140,7 +140,11 @@ import { WEATHERS, TIMES } from './weather.js';
       quality: fixed ? quality : undefined,
       fixedQuality: fixed,
       hour: TIMES.find(function (t) { return t.id === 'night'; }).hour, // open at night
-      onStats: function (s) { $('stats').textContent = s.fps + ' fps'; },
+      onStats: function (s) { // shown only when the capped 60 fps drops (58+ is jitter)
+        var el = $('stats');
+        el.hidden = s.fps >= 58;
+        if (!el.hidden) el.textContent = s.fps + ' fps';
+      },
       onCinematicChange: function (on) { setPressed($('btn-cine'), on); },
       onReady: function (r) { if (!fixed) $('quality').options[0].textContent = 'Auto · ' + r.quality; },
     }).then(function (e) {
