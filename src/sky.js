@@ -18,7 +18,7 @@ const MOON_COS = [Math.cos(THREE.MathUtils.degToRad(1.4)), Math.cos(THREE.MathUt
 // Stars: a cube map of cells around the sky, STAR_N cells per unit of face coordinate, one star in STAR_P of them,
 // kept off the cell edges so a star is never cut. The sky turns about the celestial pole (north is +z, Japan's
 // latitude) with the clock.
-const STAR_N = 70, STAR_P = 0.3;
+const STAR_N = 70, STAR_P = 0.21;
 const POLE = new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(35)), Math.cos(THREE.MathUtils.degToRad(35)));
 const starField = Fn(([s]) => {
   const a = abs(s).toVar();
