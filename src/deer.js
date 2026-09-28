@@ -1,7 +1,8 @@
 // Sika deer grazing on the far bank: two hinds and a young stag on their patch of short turf (GRAZE in
 // gen/layout.js). Models: Quaternius (CC0), built into src/models/ by tools/models.mjs (coat colours in the vertices,
-// simplified to bigger facets) and inlined in the page. Each deer loops the head-down part of its grazing clip for a
-// while, then plays the rest of it once (head up, a look round, head down again). Lit by the scene's own material so fog, shadows and the lanterns fall on them too.
+// subdivided to a rounder shape) and inlined in the page. Each deer loops the head-down part of its grazing clip for a
+// while, then plays the rest of it once (head up, a look round, head down again). Lit by the scene's own material so
+// fog, shadows and the lanterns fall on them too.
 import * as THREE from 'three/webgpu';
 import { Fn, positionWorld, diffuseColor } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -34,12 +35,7 @@ export async function makeDeer(world, at) {
   for (const [kind, url] of [['doe', doeUrl], ['stag', stagUrl]]) {
     const gltf = await loader.loadAsync(url);
     const box = new THREE.Box3().setFromObject(gltf.scene, true);
-    gltf.scene.traverse((o) => {
-      if (!o.isSkinnedMesh) return;
-      o.geometry = o.geometry.toNonIndexed(); // flat facets
-      o.geometry.computeVertexNormals();
-      o.material = coatMaterial;
-    });
+    gltf.scene.traverse((o) => { if (o.isSkinnedMesh) o.material = coatMaterial; });
     const horns = gltf.scene.getObjectByName('Stag_Horns');
     if (horns) { horns.scale.multiplyScalar(ANTLERS); horns.material = litMaterial({ color: horns.material.color }); }
     src[kind] = { scene: gltf.scene, clip: gltf.animations[0], scale: LENGTH[kind] / (box.max.z - box.min.z) };

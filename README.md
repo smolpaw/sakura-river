@@ -27,7 +27,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
 - `src/water.js`: river shader and planar reflections.
 - `src/koi.js`: koi swimming under the river surface.
-- `src/deer.js`: the grazing deer: models loaded and shaded flat, their grazing clip looped mostly head-down.
+- `src/deer.js`: the grazing deer: models loaded and lit like the scene, their grazing clip looped mostly head-down.
 - `src/models/`: the deer models, built by `tools/models.mjs` (`node tools/models.mjs`) from the sources in Models and inlined in the page.
 - `src/birds.js`: birds in flight (swallows, kites, crows): their paths by weather and time of day, wings flapped in the vertex stage.
 - `src/sky.js`: sky dome, moon, stars and shooting stars, clouds and time-of-day palette.
@@ -85,4 +85,4 @@ Ambience:
 
 ## Models
 
-The deer are from the Ultimate Animated Animal Pack by Quaternius (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0: "Deer" (the hinds) and "Stag", as served by Poly Pizza (https://poly.pizza/m/T6Cs7tmMHJ, https://poly.pizza/m/tQdzbZ1Cmw). `tools/models.mjs` keeps only their grazing clip, bakes in the sika coat, simplifies them to bigger facets and compresses them; `src/deer.js` shortens the stag's antlers.
+The deer are from the Ultimate Animated Animal Pack by Quaternius (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0: "Deer" (the hinds) and "Stag", as served by Poly Pizza (https://poly.pizza/m/T6Cs7tmMHJ, https://poly.pizza/m/tQdzbZ1Cmw). `tools/models.mjs` keeps only their grazing clip, bakes in the sika coat, subdivides their bodies to a rounder shape (twice the source's triangles) and compresses them; `src/deer.js` shortens the stag's antlers.
