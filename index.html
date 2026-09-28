@@ -52,9 +52,14 @@
   </div>
   <section class="panel" aria-label="Scene controls">
     <div class="group">
-      <div class="label"><span id="w-label">Weather</span><output id="w-name"></output></div>
+      <div class="label"><span id="w-label">Weather</span>
+        <span class="clock-wrap"><output id="w-name"></output>
+          <button type="button" class="mini" id="w-random" aria-label="Random weather" title="Random weather">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"></rect><circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="15" cy="15" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="15" cy="9" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="9" cy="15" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"></circle></svg>
+          </button>
+        </span>
+      </div>
       <div class="seg" id="weathers" role="group" aria-labelledby="w-label"></div>
-      <button type="button" class="btn primary" id="w-random">Random weather</button>
     </div>
     <div class="group">
       <div class="label"><span id="t-label">Time</span>

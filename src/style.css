@@ -39,8 +39,6 @@ body { margin: 0; background: var(--ink); color: var(--washi); overflow: hidden;
   border-radius: 10px; padding: 10px 13px; white-space: nowrap; transition: background 0.2s, color 0.2s, border-color 0.2s, opacity var(--fade) ease; }
 .btn:hover { background: rgba(255, 255, 255, 0.14); }
 .btn.icon { padding: 0; width: 40px; height: 40px; }
-.btn.primary { background: var(--beni); border-color: transparent; }
-.btn.primary:hover { background: #dc6189; }
 .btn[aria-pressed="true"], .top-right .btn[aria-pressed="true"], .actions .btn[aria-pressed="true"] { background: var(--washi); color: var(--sumi); border-color: transparent; }
 .top-right .btn:hover, .actions .btn:hover { background: rgba(60, 50, 70, 0.66); }
 .top-right .btn[aria-pressed="true"]:hover, .actions .btn[aria-pressed="true"]:hover { background: #fff; }
