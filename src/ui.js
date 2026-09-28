@@ -102,22 +102,14 @@ import { WEATHERS, TIMES } from './weather.js';
   // ---------- camera ----------
   $('btn-cine').addEventListener('click', function () {
     var on = this.getAttribute('aria-pressed') !== 'true';
-    setPressed(this, on);
-    if (on) setPressed($('btn-kittens'), false);
-    if (engine) engine.setCinematic(on);
+    setPressed(this, on); if (engine) engine.setCinematic(on);
   });
   $('btn-orbit').addEventListener('click', function () {
     var on = this.getAttribute('aria-pressed') !== 'true';
     setPressed(this, on); if (engine) engine.setAutoOrbit(on);
   });
-  $('btn-kittens').addEventListener('click', function () {
-    var on = this.getAttribute('aria-pressed') !== 'true';
-    setPressed(this, on);
-    if (on) setPressed($('btn-cine'), false);
-    if (engine) engine.watchKittens(on);
-  });
   $('btn-reset').addEventListener('click', function () {
-    setPressed($('btn-cine'), false); setPressed($('btn-kittens'), false); if (engine) engine.resetCamera();
+    setPressed($('btn-cine'), false); if (engine) engine.resetCamera();
   });
   $('btn-ui').addEventListener('click', function () {
     var hide = !document.body.classList.contains('ui-hidden');

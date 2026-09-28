@@ -1,6 +1,6 @@
 # Sakura River
 
-A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain under a crescent moon at night, with a lantern-lit vermilion drum bridge, an old temple on a knoll (five-storey pagoda, main hall, bell tower, stone lanterns, lit up at night), paper lanterns strung along both banks, koi in the river, and two kittens (a calico and a ginger tabby) living under the cherry tree: they wander, groom, nap curled up, hunt falling petals, race around the trunk and play together (stalk and pounce, wrestle, chase, box, greet and groom each other), shelter from the rain and flinch at thunder. Birds fly over the valley by day: swallows hunt over the river (high in fair weather, skimming the water under heavy cloud and in drizzle, gone in heavy rain), black kites circle high on clear days, and crows fly home to the temple woods at dusk and out again at dawn; lightning scatters them. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), water lapping under the bridge, wind, rain, thunder after each lightning strike, birds and bush warblers by day, and the temple bell as the lanterns come on. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky, petals and the kittens. No image assets are used; the sounds are recordings (see Sound).
+A full-screen, interactive 3D scene built with Three.js. It shows a cherry tree beside a river that flows from a snow-capped, Fuji-style mountain under a crescent moon at night, with a lantern-lit vermilion drum bridge, an old temple on a knoll (five-storey pagoda, main hall, bell tower, stone lanterns, lit up at night), paper lanterns strung along both banks and koi in the river. Birds fly over the valley by day: swallows hunt over the river (high in fair weather, skimming the water under heavy cloud and in drizzle, gone in heavy rain), black kites circle high on clear days, and crows fly home to the temple woods at dusk and out again at dawn; lightning scatters them. Weather presets (clear, haze, petal storm, overcast, drizzle, downpour, thunderstorm) combine with any time of day; the clock runs a minute per second, and from dusk into the night the lanterns glow. Koto and shakuhachi music plays over the sound of the scene: the river (louder and clearer near it), water lapping under the bridge, wind, rain, thunder after each lightning strike, birds and bush warblers by day, and the temple bell as the lanterns come on. Everything you see is generated in code: terrain, tree, grass, rocks, water, sky and petals. No image assets are used; the sounds are recordings (see Sound).
 
 Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on every push to `main`).
 
@@ -27,10 +27,6 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
 - `src/water.js`: river shader and planar reflections.
 - `src/koi.js`: koi swimming under the river surface.
-- `src/kitten-body.js`: the kitten's body (a signed-distance sculpt meshed by surface nets, skinned to its skeleton), ears, tail, eyes and whiskers (generation).
-- `src/kitten-rig.js`: kitten postures, gait, leg IK, gaze and tail, as bone matrices.
-- `src/kitten.js`: kitten materials: the coats, shell-textured fur, eyes.
-- `src/kittens.js`: the two kittens' behaviour: needs, actions, games together, reactions to weather.
 - `src/birds.js`: birds in flight (swallows, kites, crows): their paths by weather and time of day, wings flapped in the vertex stage.
 - `src/sky.js`: sky dome, moon, clouds and time-of-day palette.
 - `src/weather.js`: weather presets and times of day, the sky under cloud cover, rain streaks and lightning.
@@ -59,7 +55,6 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
     scene.setSound(true | false);         // starts with the page's first click or key press if it has had none
     scene.setVolume('music' | 'nature', value0to1);
     scene.soundWaiting();                 // true while the browser holds sound back until a click or key press
-    scene.watchKittens(true | false);     // camera follows the kittens (orbit and zoom stay free); resetCamera ends it
     scene.resetCamera();
     scene.dispose();
 

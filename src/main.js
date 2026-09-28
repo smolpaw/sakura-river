@@ -16,7 +16,6 @@ import { clamp, lerp, smoothstep } from './noise.js';
 import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
 import { makeKoi, koiClearing } from './koi.js';
-import { makeKittens } from './kittens.js';
 import { makeBirds } from './birds.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
@@ -24,13 +23,13 @@ import { QualityController } from './quality.js';
 import { hashScene } from './bench-hash.js';
 import { tessellate, makeStressObjects } from './stress.js';
 import { runJobs } from './gen/pool.js';
-import { layout, underTree } from './gen/layout.js';
+import { layout } from './gen/layout.js';
 import { createSound } from './audio.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 1200, bloomRes: 1, koi: 12, rain: 24000, kitten: [0.0036, 10] },
-  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 850, bloomRes: 0.75, koi: 10, rain: 14000, kitten: [0.0042, 6] },
-  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 500, bloomRes: 0.5, koi: 6, rain: 7000, kitten: [0.005, 4] },
+  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 1200, bloomRes: 1, koi: 12, rain: 24000 },
+  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 850, bloomRes: 0.75, koi: 10, rain: 14000 },
+  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 500, bloomRes: 0.5, koi: 6, rain: 7000 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -130,7 +129,6 @@ export async function create(canvas, opts = {}) {
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
     forest: { name: 'forest', args: { count: Q.forest } },
     fallen: { name: 'fallen', args: { count: Q.fallen } },
-    kitten: { name: 'kitten', args: { cell: Q.kitten[0], tier: tierName } },
   }, { mainThread: opts.workers === false });
   world.setHeightCache(G.heightCache);
   mark('generated');
@@ -300,9 +298,6 @@ export async function create(canvas, opts = {}) {
   const motes = makeMotes(new THREE.Vector3(...Lay.motes), Q.motes);
   motes.mesh.name = 'motes';
   scene.add(motes.mesh);
-  // ---------- kittens ----------
-  const kittens = makeKittens({ world, data: G.kitten, tree: { x: TX, z: TZ }, roots: G.treeMain[0].roots, rocks: G.kitten.rocks, petals, camera: camera.position, a2c: msaa > 0, shells: Q.kitten[1] });
-  scene.add(kittens.group);
   const birds = makeBirds(world, { x: TX, z: TZ });
   scene.add(birds.group);
   const rain = makeRain(Q.rain);
@@ -342,16 +337,15 @@ export async function create(canvas, opts = {}) {
   controls.update();
 
   const trunkTop = MAIN_TREE.trunk.length * MAIN_TREE.scale + 1.5;
-  const lawnAt = underTree(Lay); // short grass under the tree: the camera may go lower there (kittens)
   function clampCamera() {
     const p = camera.position;
-    const g = Math.max(world.heightFast(p.x, p.z), 0), floor = 0.32 + 0.48 * lawnAt(p.x, p.z);
-    if (p.y < g + floor) p.y = g + floor;
+    const g = Math.max(world.heightFast(p.x, p.z), 0);
+    if (p.y < g + 0.8) p.y = g + 0.8;
     const dx = p.x - TX, dz = p.z - TZ, d = Math.hypot(dx, dz);
     if (p.y < trunkTop && d < 1.8) { const k = 1.8 / Math.max(d, 1e-3); p.x = TX + dx * k; p.z = TZ + dz * k; }
     const t = controls.target;
     t.x = clamp(t.x, -160, 160); t.z = clamp(t.z, -220, 90);
-    t.y = clamp(t.y, Math.max(world.heightFast(t.x, t.z), 0) + 0.1 + 0.2 * lawnAt(t.x, t.z), 40);
+    t.y = clamp(t.y, Math.max(world.heightFast(t.x, t.z), 0) + 0.3, 40);
     const r = Math.hypot(p.x - TX, p.z - TZ);
     if (r > 260) { p.x = TX + (p.x - TX) * 260 / r; p.z = TZ + (p.z - TZ) * 260 / r; }
   }
@@ -370,8 +364,7 @@ export async function create(canvas, opts = {}) {
   ];
   const posCurve = new THREE.CatmullRomCurve3(camKeys.map((k) => k.p), true, 'centripetal');
   const tgtCurve = new THREE.CatmullRomCurve3(camKeys.map((k) => k.t), true, 'centripetal');
-  let cinematic = false, cineT = 0, autoOrbit = false, watch = false;
-  const MIN_DIST = controls.minDistance;
+  let cinematic = false, cineT = 0, autoOrbit = false;
   let tween = null; // {from:{pos,target}, to:{pos,target}, t, dur}
   function startTween(toPos, toTarget, dur) {
     tween = { fp: camera.position.clone(), ft: controls.target.clone(), tp: toPos.clone(), tt: toTarget.clone(), t: 0, dur };
@@ -516,15 +509,7 @@ export async function create(canvas, opts = {}) {
 
   // ---------- loop ----------
   const timer = new THREE.Timer();
-  const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
-  // where the kitten camera looks: between the two when they are together, else at the one nearer the view
-  function kittenFocus(out) {
-    const [a, b] = kittens.kittens.map((k) => k.rig);
-    if (Math.hypot(a.x - b.x, a.z - b.z) < 2.5) out.set((a.x + b.x) / 2, 0, (a.z + b.z) / 2);
-    else { const t = controls.target, n = Math.hypot(a.x - t.x, a.z - t.z) < Math.hypot(b.x - t.x, b.z - t.z) ? a : b; out.set(n.x, 0, n.z); }
-    out.y = Math.max(world.heightFast(out.x, out.z), 0) + 0.14;
-    return out;
-  }
+  const tmpV = new THREE.Vector3();
   let running = true;
   let frameNo = 0, warming = false;
   const sunScreen = new THREE.Vector3();
@@ -583,7 +568,6 @@ export async function create(canvas, opts = {}) {
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = warming || U.uLights.value > 0.001;
-    kittens.update(dt, { t: U.uTime.value, rain: S.rain, wind: S.wind / 1.6, windDir: U.uWindDir.value, sunVis: U.uSunVis.value, lights: U.uLights.value, hour: clockH, flash });
     birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
@@ -606,11 +590,6 @@ export async function create(canvas, opts = {}) {
       camera.lookAt(controls.target);
       if (tween.t >= 1) tween = null;
     } else {
-      if (watch) {
-        // follow the kittens: target and camera move together, so orbiting and zooming still work
-        const d = kittenFocus(tmpV2).sub(controls.target).multiplyScalar(1 - Math.exp(-dt * 2.5));
-        controls.target.add(d); camera.position.add(d);
-      } else if (controls.minDistance < MIN_DIST) controls.minDistance = Math.min(MIN_DIST, Math.max(controls.minDistance, camera.position.distanceTo(controls.target)));
       controls.autoRotate = autoOrbit;
       controls.update();
       clampCamera();
@@ -714,25 +693,12 @@ export async function create(canvas, opts = {}) {
     },
     setClockRunning(on) { clockRunning = !!on; },
     timeOfDay() { return clockH; },
-    // follow the kittens with the camera (a flight there first); orbit and zoom stay free
-    watchKittens(on) {
-      watch = !!on;
-      if (!watch) return;
-      cinematic = false; controls.enabled = true;
-      controls.minDistance = 0.6;
-      const t = kittenFocus(new THREE.Vector3());
-      const dir = tmpV2.copy(camera.position).sub(t).setY(0);
-      if (dir.lengthSq() < 1e-6) dir.set(0.5, 0, 0.87);
-      dir.normalize();
-      startTween(t.clone().addScaledVector(dir, 2.1).add(new THREE.Vector3(0, 0.55, 0)), t, 2.5);
-    },
     resetCamera() {
-      cinematic = false; controls.enabled = true; watch = false;
+      cinematic = false; controls.enabled = true;
       startTween(DEFAULT.pos, DEFAULT.target, 1.8);
     },
     setCinematic(on) {
       cinematic = !!on; controls.enabled = !cinematic;
-      if (cinematic) watch = false;
       if (cinematic) {
         tween = null;
         // start from the nearest point on the path
@@ -772,18 +738,7 @@ export async function create(canvas, opts = {}) {
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
     backend: backendName,
-    // kittens: what each is doing; make one do something ('groom', 'hunt', 'sleep', 'zoomies', 'ambush', 'box', 'chase', 'greet', ...); look at one from `dist` metres
-    kittenInfo() { return kittens.info(); },
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
-    kittenAct(i, name) { return kittens.act(i, name); },
-    kittenView(i = 0, dist = 1.6, angle = 0.6, height = 0.4) {
-      const r = kittens.kittens[i].rig, a = r.yaw + angle;
-      tween = null; cinematic = false;
-      controls.minDistance = Math.min(controls.minDistance, dist * 0.8);
-      const g = Math.max(world.heightFast(r.x, r.z), 0);
-      camera.position.set(r.x + Math.sin(a) * dist, g + height, r.z + Math.cos(a) * dist);
-      controls.target.set(r.x, g + 0.12, r.z); controls.update();
-    },
     info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
     dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); sound.dispose(); },
   };

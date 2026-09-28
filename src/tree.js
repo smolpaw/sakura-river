@@ -452,7 +452,5 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   return {
     bark, n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * 6),
     spawn: new Float64Array(spawn),
-    // surface roots in world space, a tube per root: x, y, z, radius per point (the kittens walk over them)
-    roots: t.branches.filter((b) => b.depth === -1).map((b) => Float32Array.from(b.pts.flatMap((p, i) => [p.x + pos.x, p.y, p.z + pos.z, b.rad[i]]))),
   };
 }
