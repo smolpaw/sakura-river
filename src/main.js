@@ -130,6 +130,7 @@ export async function create(canvas, opts = {}) {
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
     forest: { name: 'forest', args: { count: Q.forest } },
     fallen: { name: 'fallen', args: { count: Q.fallen } },
+    rafts: { name: 'rafts', args: { count: Math.round(Q.fallen * 1.2), tier: tierName } },
   }, { mainThread: opts.workers === false });
   world.setHeightCache(G.heightCache);
   mark('generated');
@@ -296,6 +297,9 @@ export async function create(canvas, opts = {}) {
   const fallen = makeFallenPetals(G.fallen, petalMat);
   fallen.name = 'fallenPetals';
   scene.add(fallen);
+  const rafts = makeFallenPetals(G.rafts, petalMat); // hanaikada: petal mats on the slack water
+  rafts.name = 'petalRafts';
+  scene.add(rafts);
   const motes = makeMotes(new THREE.Vector3(...Lay.motes), Q.motes);
   motes.mesh.name = 'motes';
   scene.add(motes.mesh);
@@ -569,6 +573,7 @@ export async function create(canvas, opts = {}) {
 
     petals.update(dt, U.uTime.value, S.wind, S.river);
     koi.update(dt, U.uTime.value);
+    rafts.geometry.instanceCount = Math.round(G.rafts.n * Math.min(1, S.petals / 0.6)); // fewer when fewer petals fall
     deer.update(dt);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud

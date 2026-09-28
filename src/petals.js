@@ -153,6 +153,49 @@ export function fallenData(world, center, count, avoid, lawn) {
   return { pos, rot, tint, n };
 }
 
+// Hanaikada ("flower rafts"): mats of fallen petals caught on the slack water along the banks and behind the rocks
+// that break the surface, drawn as the fallen carpet is. Each raft is an ellipse stretched along the current; the
+// petals are shuffled across rafts so any leading share of them (instanceCount, set by the petal amount) thins
+// every raft evenly.
+export function raftData(world, count, rocksInWater) {
+  const rng = mulberry32(61);
+  const rafts = [];
+  for (let i = 0; i < 22; i++) {
+    const z = lerp(-75, 45, rng()), side = rng() < 0.5 ? -1 : 1;
+    const hw = world.riverHW(z);
+    rafts.push({ x: world.riverX(z) + side * hw * lerp(0.74, 0.86, rng()), z, len: 3 + rng() * 5, wid: 0.6 + rng() * 0.7, lean: side });
+  }
+  for (const r of rocksInWater) {
+    if (r.top < 0.05 || r.z < -110 || r.z > 60) continue; // under water: nothing to catch on
+    const zz = r.z + r.r * (1.1 + rng() * 0.6); // in its lee, downstream (+z)
+    rafts.push({ x: r.x + (rng() - 0.5) * r.r * 0.5, z: zz, len: r.r * (1.4 + rng()), wid: r.r * (0.5 + rng() * 0.3), lean: 0 });
+  }
+  const weight = rafts.map((r) => r.len * r.wid), total = weight.reduce((a, b) => a + b, 0);
+  const pts = [];
+  rafts.forEach((r, k) => {
+    const [fx, fz] = world.flowDir(r.z);
+    const m = Math.round((count * weight[k]) / total);
+    for (let j = 0; j < m; j++) {
+      // denser in the middle, and against the bank for the bank rafts
+      const a = rng() * Math.PI * 2, d = Math.pow(rng(), 0.7);
+      let u = Math.cos(a) * d * r.len * 0.5, v = Math.sin(a) * d * r.wid * 0.5;
+      if (r.lean) v = Math.abs(v) * r.lean * (rng() < 0.8 ? 1 : -1);
+      const x = r.x + fx * u + fz * v, z = r.z + fz * u - fx * v;
+      if (world.height(x, z) > -0.02) continue; // stays on the water
+      pts.push([x, z]);
+    }
+  });
+  for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [pts[i], pts[j]] = [pts[j], pts[i]]; }
+  const n = pts.length;
+  const pos = new Float32Array(n * 3), rot = new Float32Array(n * 4), tint = new Float32Array(n);
+  pts.forEach(([x, z], i) => {
+    pos[i * 3] = x; pos[i * 3 + 1] = 0.012 + rng() * 0.006; pos[i * 3 + 2] = z;
+    rot[i * 4] = rng() * 6.28; rot[i * 4 + 1] = (rng() - 0.5) * 0.3; rot[i * 4 + 2] = (rng() - 0.5) * 0.3; rot[i * 4 + 3] = 0.75 + rng() * 0.45;
+    tint[i] = rng();
+  });
+  return { pos, rot, tint, n };
+}
+
 export function makeFallenPetals({ pos, rot, tint, n }, material) {
   const g = petalGeometry();
   const ig = new THREE.InstancedBufferGeometry();
