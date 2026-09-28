@@ -82,8 +82,8 @@ export function lanternData(world, blockers, anchors) {
       for (let k = 0; k < n; k++) {
         const p = at((k + 1) / (n + 1));
         hang.push(p.x, p.y, p.z);
-        // phase, paper (0 white, 1 pink: alternating, now and then two alike), brightness, yaw
-        look.push(rng() * 6.28, (k + i + (rng() < 0.15 ? 1 : 0)) % 2, 0.85 + rng() * 0.3, rng() * 6.28);
+        // phase, (unused), brightness, yaw
+        look.push(rng() * 6.28, 0, 0.85 + rng() * 0.3, rng() * 6.28);
       }
     }
   }

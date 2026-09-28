@@ -72,7 +72,7 @@ export function bridgeData(world, zc) {
   const N = 40;
   const rng = mulberry32(17);
   const parts = [], hang = [], look = [];
-  const lantern = (p, paper) => { hang.push(p.x, p.y, p.z); look.push(rng() * 6.28, paper, 1.0 + rng() * 0.15, rng() * 6.28); };
+  const lantern = (p) => { hang.push(p.x, p.y, p.z); look.push(rng() * 6.28, 0, 1.0 + rng() * 0.15, rng() * 6.28); };
   const giboshi = (t, s = 1) => {
     const cap = lathe([[0, 0], [0.1, 0], [0.1, 0.05], [0.07, 0.07], [0.12, 0.13], [0.13, 0.19], [0.09, 0.27], [0.03, 0.34], [0.012, 0.42], [0, 0.44]], 14, BRONZE);
     cap.scale(s, s, s).translate(t.x, t.y, t.z);
@@ -109,7 +109,7 @@ export function bridgeData(world, zc) {
         // bracket out over the water with a lantern
         const tip = pt(u, off + sd * 0.34, h - 0.02);
         parts.push(beam(pt(u, off, h - 0.2), tip, 0.04, 0.05, LACQUER));
-        lantern(tip.clone().add(new V(0, -0.03, 0)), 0);
+        lantern(tip.clone().add(new V(0, -0.03, 0)));
       }
     }
     for (let i = 0; i < N; i++) {
@@ -159,7 +159,7 @@ export function bridgeData(world, zc) {
       const tip = pt(u, off + sd * 0.55, 2.3);
       parts.push(beam(pt(u, off, 2.3), tip, 0.08, 0.1, LACQUER));
       parts.push(beam(pt(u, off + sd * 0.1, 1.95), pt(u, off + sd * 0.4, 2.28), 0.05, 0.05, LACQUER));
-      lantern(tip.clone().add(new V(0, -0.05, 0)), 1);
+      lantern(tip.clone().add(new V(0, -0.05, 0)));
     }
   }
   return { geo: mergeGeometries(parts), center: center.toArray(), half, across: across.toArray(), endY, rise, lamps: { hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 } };

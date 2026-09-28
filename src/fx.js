@@ -89,8 +89,9 @@ export function makeMotes(center, count) {
 }
 
 // Paper lanterns (see lanterns.js): the rope and bamboo frame, the lanterns swinging in the wind, and at dusk a
-// soft round halo per lantern. The halo keeps distant lanterns round: bloom turns sub-pixel bright points into
-// blocky squares, so the paper's own glow also dims with distance to stay under the bloom threshold.
+// small round halo per lantern. The halo keeps distant lanterns round (bloom turns sub-pixel bright points into
+// blocky squares, so the paper's own glow also dims with distance to stay under the bloom threshold); up close the
+// paper itself is the light, so the halo fades out there.
 export function makeLanterns(d, lanternGeo) {
   const group = new THREE.Group();
   const frame = new THREE.Mesh(d.frame, new LitMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 }));
@@ -114,20 +115,22 @@ export function makeLanterns(d, lanternGeo) {
     return vec3(r.x.add(U.uWindDir.x.mul(a2.sub(a))), y2, r.z.add(U.uWindDir.y.mul(a2.sub(a))));
   };
   const mat = new LitMaterial({ roughness: 0.65, metalness: 0, side: THREE.DoubleSide }, (out) => Fn(() => {
-    // lit from inside: warm through the paper, fainter along the ribs and towards the silhouette
+    // lit from inside: warm yellow through the paper, brightest across the bulge, fainter towards the rims, along the
+    // ribs and towards the silhouette
     const dist = length(cameraPosition.sub(positionWorld));
     const facing = normalView.z.abs();
-    const glow = U.uLights.mul(look.z).mul(mix(1.0, 0.5, sstep(14.0, 50.0, dist))).mul(facing.mul(0.35).add(0.65)).mul(2.6);
+    const bulge = sin(vv.clamp(0.0, 1.0).mul(Math.PI)).mul(0.35).add(0.65);
+    const glow = U.uLights.mul(look.z).mul(mix(1.0, 0.5, sstep(14.0, 50.0, dist))).mul(facing.mul(0.35).add(0.65)).mul(bulge).mul(2.4);
     // by day the thin paper lets light through: sun from behind, and sky light scattered inside
     const back = pow(max(dot(normalize(positionWorld.sub(cameraPosition)), U.uSunDir), 0.0), 2.0);
     const through = U.uSunColor.mul(U.uSunVis).mul(back.mul(0.9).add(0.25)).add(U.uSkyAmb.mul(0.35));
-    return out.add(diffuseColor.rgb.mul(vec3(1.0, 0.8, 0.55).mul(glow).add(through)).mul(sstep(0.5, 0.4, part)));
+    return out.add(diffuseColor.rgb.mul(vec3(1.0, 0.88, 0.5).mul(glow).add(through)).mul(sstep(0.5, 0.4, part)));
   })());
   mat.positionNode = pose(positionGeometry).add(hang);
   mat.normalNode = transformNormalToView(pose(normalGeometry)).normalize();
   mat.colorNode = Fn(() => {
-    // white or pink washi, red bands at top and bottom and two across the middle, thin bamboo ribs
-    const paper = mix(vec3(0.9, 0.86, 0.78), vec3(0.92, 0.42, 0.52), look.y);
+    // pale yellow washi, red bands at top and bottom and two across the middle, thin bamboo ribs
+    const paper = vec3(0.96, 0.9, 0.62);
     const mid = sstep(0.05, 0.035, vv.sub(0.35).abs()).add(sstep(0.05, 0.035, vv.sub(0.65).abs()));
     const band = sstep(0.16, 0.13, vv).add(sstep(0.84, 0.87, vv)).add(mid).min(1.0);
     const rib = sstep(0.75, 1.0, sin(vv.mul(Math.PI * 26)).abs());
@@ -151,11 +154,11 @@ export function makeLanterns(d, lanternGeo) {
     blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
   });
   hm.positionNode = at;
-  hm.sizeNode = clamp(uFocal.mul(1.6).div(mvz), 7.0, 400.0).div(screenDPR);
+  hm.sizeNode = clamp(uFocal.mul(0.9).div(mvz), 7.0, 400.0).div(screenDPR);
   hm.colorNode = Fn(() => {
     const c = uv().sub(0.5);
-    const tint = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.42, 0.36), seed.y);
-    return vec4(tint.mul(dot(c, c).mul(-22.0).exp().mul(0.45).mul(seed.z)), U.uLights);
+    const far = mix(0.05, 0.35, sstep(8.0, 40.0, mvz)); // barely there up close, where the paper shows its own light
+    return vec4(vec3(1.0, 0.82, 0.42).mul(dot(c, c).mul(-22.0).exp().mul(far).mul(seed.z)), U.uLights);
   })();
   const halos = new THREE.Sprite(hm);
   halos.count = d.n;
