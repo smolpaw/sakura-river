@@ -29,10 +29,6 @@ export const U = {
   uMist: uniform(0), // river mist at dawn (kawagiri) 0..1
 };
 
-// the river's centre line at z (world.js riverX)
-const riverX = (z) => sin(z.mul(0.021).add(0.9)).mul(8.5).add(sin(z.mul(0.0072).sub(0.35)).mul(20.0)).add(sin(z.mul(0.047).add(2.2)).mul(3.5)).sub(4.0);
-const riverHW = (z) => mix(float(7.6), float(3.4), sstep(20.0, -520.0, z));
-
 // Warm light from the lantern lines (lanterns.js) on whatever is near them: ground, grass, rocks, the tree. The
 // lines follow both banks, so the distance to them is |x - riverX(z)| against the bank offset (the river's
 // formulas from world.js), corrected for the river's slant; light falls off in 3D from the lanterns' height.
@@ -41,9 +37,9 @@ export const lanternLight = Fn(([wp]) => {
   If(U.uLights.greaterThan(0.0), () => {
     const z = wp.z;
     const a1 = z.mul(0.021).add(0.9), a2 = z.mul(0.0072).sub(0.35), a3 = z.mul(0.047).add(2.2);
-    const rx = riverX(z);
+    const rx = sin(a1).mul(8.5).add(sin(a2).mul(20.0)).add(sin(a3).mul(3.5)).sub(4.0);
     const slope = cos(a1).mul(8.5 * 0.021).add(cos(a2).mul(20 * 0.0072)).add(cos(a3).mul(3.5 * 0.047));
-    const hw = riverHW(z);
+    const hw = mix(float(7.6), float(3.4), sstep(20.0, -520.0, z));
     const d = abs(wp.x.sub(rx)).sub(hw.mul(LINE.K).add(LINE.PAD)).div(sqrt(slope.mul(slope).add(1.0)));
     const dy = wp.y.sub(LINE.lampY);
     const along = sstep(LINE.z0 - 3, LINE.z0 + 1, z).mul(sstep(LINE.z1 + 3, LINE.z1 - 1, z));
@@ -125,38 +121,11 @@ export const fogTint = Fn(([wp]) => {
   const dir = normalize(wp.sub(cameraPosition));
   return mix(U.uFogColor, U.uFogSunColor, pow(max(dot(dir, U.uSunDir), 0.0), 14.0));
 });
-// Kawagiri: on spring mornings mist lies on the river. A layer thinning out over the first couple of metres above
-// the water (integrated along the view ray like the height fog), only over the river and a strip of each bank
-// (the ray's cover of that corridor, sampled at four points), drifting slowly. Nothing to do while uMist is 0.
-const MIST_H = 1.6;
-export const mistAmount = Fn(([wp]) => {
-  const m = float(0).toVar();
-  If(U.uMist.greaterThan(0.0), () => {
-    const v = wp.sub(cameraPosition).toVar();
-    const hc = max(cameraPosition.y, 0.0), hp = max(wp.y, 0.0);
-    const ec = exp(hc.div(-MIST_H)), ep = exp(hp.div(-MIST_H)), dh = hp.sub(hc);
-    const layer = abs(dh).greaterThan(0.01).select(ec.sub(ep).mul(MIST_H).div(dh), ec); // mean density along the ray
-    let cover = float(0);
-    for (const t of [0.2, 0.45, 0.7, 0.95]) {
-      const q = cameraPosition.xz.add(v.xz.mul(t)), hw = riverHW(q.y);
-      cover = cover.add(sstep(hw.add(9.0), hw.mul(0.6), abs(q.x.sub(riverX(q.y)))));
-    }
-    const drift = vnoise(wp.xz.mul(0.06).add(U.uTime.mul(vec2(0.05, 0.02)))).mul(0.8).add(0.6);
-    m.assign(float(1.0).sub(exp(length(v).mul(layer).mul(cover).mul(drift).mul(-0.05 / 4))).mul(U.uMist));
-  });
-  return m;
-});
-// the mist is lit, paler than the distance fog behind it
-const mistTint = (wp) => fogTint(wp).mul(1.35);
+export const applyFog = Fn(([col, wp]) => mix(col, fogTint(wp), fogAmount(wp)));
 
-export const applyFog = Fn(([col, wp]) => mix(mix(col, fogTint(wp), fogAmount(wp)), mistTint(wp), mistAmount(wp)));
-
-// scene.fogNode for lit materials: fog(color, factor) mixes the lit output by the world position; fog then mist as
-// one mix: colour (T a (1 - m) + M m) / F by factor F = 1 - (1 - a)(1 - m)
+// scene.fogNode for lit materials: fog(color, factor) mixes the lit output by the world position
 export function sceneFog() {
-  const a = fogAmount(positionWorld), m = mistAmount(positionWorld), T = fogTint(positionWorld);
-  const f = float(1.0).sub(float(1.0).sub(a).mul(float(1.0).sub(m)));
-  return fog(T.mul(a).mul(float(1.0).sub(m)).add(mistTint(positionWorld).mul(m)).div(max(f, 1e-4)), f);
+  return fog(fogTint(positionWorld), fogAmount(positionWorld));
 }
 
 // ---------- lit material ----------

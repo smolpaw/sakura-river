@@ -2,9 +2,9 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, vec4, uniform, texture, attribute, mix, max, min, pow, dot, normalize, clamp, length, reflect, sin, cos, abs, floor, fract,
-  positionWorld, cameraPosition, reflector, If, select,
+  positionWorld, cameraPosition, reflector, If, select, exp,
 } from 'three/tsl';
-import { U, vnoise, hash12, sstep, applyFog } from './tsl.js';
+import { U, vnoise, hash12, sstep, applyFog, fogTint } from './tsl.js';
 
 export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null } = {}) {
   const uniforms = { uHasRefl: uniform(0), uSpeed: uniform(1) };
@@ -136,3 +136,33 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
 }
 
 const uniformMix = (vis) => vis.mul(0.65).add(0.35);
+
+// Kawagiri: on spring mornings mist lies on the river. Four translucent sheets on the river ribbon, 0.25-1.75 m up,
+// each standing for half a metre of mist: its opacity is that layer's density times the ray's path through it
+// (longer at grazing angles, capped), thinner higher up, drifting, fading out before the banks so no sheet cuts
+// through the ground. A sheet material rather than a term in every material's fog: that cost ~1.5 s of pipeline
+// compilation at start-up. Hidden while U.uMist is 0.
+export function makeMist(riverGeo) {
+  const LAYERS = 4, DY = 0.5;
+  const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  mat.colorNode = Fn(() => {
+    const wp = positionWorld;
+    const dy = abs(normalize(wp.sub(cameraPosition)).y);
+    const path = min(float(DY).div(max(dy, 1e-3)), 40.0);
+    const density = exp(wp.y.div(-1.6)).mul(0.065);
+    const drift = vnoise(wp.xz.mul(0.06).add(U.uTime.mul(vec2(0.05, 0.02))).add(wp.y.mul(3.1))).mul(0.8).add(0.6);
+    // over the water only (the ribbon runs to 1.32 half-widths: full to 0.5, gone by 0.8, before the bank rises)
+    const edge = sstep(0.6, 0.38, abs(attribute('uv', 'vec2').x.mul(2.0).sub(1.0)));
+    const level = sstep(0.05, 0.35, abs(cameraPosition.y.sub(wp.y))); // a sheet at eye level would show as a line
+    const a = float(1.0).sub(exp(density.mul(path).mul(drift).negate())).mul(edge).mul(level).mul(U.uMist);
+    return vec4(applyFog(fogTint(wp).mul(1.35), wp), a); // lit mist, paler than the distance fog behind it
+  })();
+  const mesh = new THREE.InstancedMesh(riverGeo, mat, LAYERS);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < LAYERS; i++) mesh.setMatrixAt(i, m.makeTranslation(0, DY * (i + 0.5), 0));
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 5; // over the water (2), the petals (3) and the rain (4)
+  mesh.layers.set(1); // not in the reflection
+  mesh.visible = false;
+  return mesh;
+}

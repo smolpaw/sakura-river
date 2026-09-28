@@ -7,7 +7,7 @@ import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
 import { makeSky, skyState, moonState } from './sky.js';
-import { makeWater } from './water.js';
+import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
 import { petalMaterial, makeMotes, makeLanterns, makeGlows } from './fx.js';
 import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
@@ -277,6 +277,9 @@ export async function create(canvas, opts = {}) {
   const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr), clearing: koiClearing(koi.state, koi.count) });
   water.mesh.name = 'water';
   scene.add(water.mesh);
+  const mist = makeMist(G.river);
+  mist.name = 'mist';
+  scene.add(mist);
   const reflector = water.reflector ? water.reflector.reflector : null;
   if (reflector) {
     // the old planar reflection rendered layer 0 only (no grass, flowers, petals, motes)
@@ -570,6 +573,7 @@ export async function create(canvas, opts = {}) {
     U.uFogFalloff.value = 0.028;
     // river mist (kawagiri) from before dawn to mid-morning, thinned by the wind
     U.uMist.value = smoothstep(4.2, 5.0, clockH) * smoothstep(8.3, 6.8, clockH) * lerp(1, 0.4, S.wind / 1.6);
+    mist.visible = warming || U.uMist.value > 0.001; // warm-up builds its pipeline
     post.bloom.uniforms.strength.value = S.bloom * 1.6;
     post.grade.uniforms.time.value = U.uTime.value;
 
