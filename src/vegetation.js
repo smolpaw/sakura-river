@@ -291,37 +291,45 @@ export function rocksData(world, tier, treePos, triMul = 1) {
   const variants = 5;
   const geos = [];
   for (let i = 0; i < variants; i++) geos.push(rockGeometry(500 + i * 17, tier === 'low' ? 3 : 4));
+  // pebbles (5-23 cm) share one coarse stone of 80 triangles instead of a boulder's 500, and cast no shadow
+  const pebbleGeo = rockGeometry(611, 1);
   const { rng, placements, pebbles, rocksInWater } = rockPlan(world, tier, treePos);
+  const isPebble = new Set(pebbles);
   const all = placements.concat(pebbles);
   const byV = Array.from({ length: variants }, () => []);
   all.forEach((p) => byV[p.v].push(p));
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), col = new THREE.Color();
-  const out = byV.map((list, vi) => {
-    const mesh = new THREE.InstancedMesh(geos[vi], undefined, list.length);
-    list.forEach((r, i) => {
-      p.set(r.x, r.y, r.z);
-      q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.25, r.rot, (rng() - 0.5) * 0.25));
-      s.set(r.sc, r.sc * r.flatten * (0.8 + rng() * 0.4), r.sc);
-      m.compose(p, q, s);
-      mesh.setMatrixAt(i, m);
-      const tint = 0.8 + rng() * 0.35;
-      col.setRGB(tint, tint * (0.97 + rng() * 0.05), tint * (0.93 + rng() * 0.08));
-      mesh.setColorAt(i, col);
-    });
-    return { matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length };
-  });
-  return { geos: triMul > 1 ? geos.map((g) => tessellate(g, triMul)) : geos, variants: out, rocksInWater, blockers: placements };
+  const make = (n) => new THREE.InstancedMesh(undefined, undefined, n);
+  const meshes = byV.map((list) => make(list.filter((r) => !isPebble.has(r)).length)), pebbleMesh = make(pebbles.length);
+  const fill = meshes.map(() => 0);
+  let np = 0;
+  // one pass in the old order, so the rng sequence (and every stone's pose and tint) stays as it was
+  byV.forEach((list, vi) => list.forEach((r) => {
+    p.set(r.x, r.y, r.z);
+    q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.25, r.rot, (rng() - 0.5) * 0.25));
+    s.set(r.sc, r.sc * r.flatten * (0.8 + rng() * 0.4), r.sc);
+    m.compose(p, q, s);
+    const tint = 0.8 + rng() * 0.35;
+    col.setRGB(tint, tint * (0.97 + rng() * 0.05), tint * (0.93 + rng() * 0.08));
+    const [mesh, i] = isPebble.has(r) ? [pebbleMesh, np++] : [meshes[vi], fill[vi]++];
+    mesh.setMatrixAt(i, m); mesh.setColorAt(i, col);
+  }));
+  const data = (mesh) => ({ matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: mesh.count });
+  const tess = (g) => (triMul > 1 ? tessellate(g, triMul) : g);
+  return { geos: geos.map(tess), variants: meshes.map(data), pebbleGeo: tess(pebbleGeo), pebbles: data(pebbleMesh), rocksInWater, blockers: placements };
 }
 
 export function makeRocks(d, mat) {
   const group = new THREE.Group();
-  d.variants.forEach((v, vi) => {
-    const mesh = new THREE.InstancedMesh(d.geos[vi], mat, v.n);
+  const add = (geo, v, shadow) => {
+    const mesh = new THREE.InstancedMesh(geo, mat, v.n);
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(v.matrix, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(v.color, 3);
-    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.castShadow = shadow; mesh.receiveShadow = true;
     group.add(mesh);
-  });
+  };
+  d.variants.forEach((v, vi) => add(d.geos[vi], v, true));
+  add(d.pebbleGeo, d.pebbles, false);
   return { group, rocksInWater: d.rocksInWater, blockers: d.blockers };
 }
 

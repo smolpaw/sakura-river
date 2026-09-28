@@ -51,6 +51,7 @@ Checked by eye only; no timing runs.
 - Tree (single flowers): 38k bark triangles, 23k flowers × 8 triangles.
 - Riverside and bridge lanterns: ~100 instances × 400 triangles in one draw; their light is analytic (distance to the bank lines), not scene lights.
 - Temple: 84k triangles, one draw, no shadows. Its material sums 14 lamp terms only after dusk and only on temple pixels.
+- Rocks: five boulder shapes of 500 triangles (93 instances, cast shadows) and one 80-triangle stone for the 900 pebbles, which cast no shadow. The pebbles had used the boulder shapes (~450k triangles in the scene, shadow and reflection passes); they sit at the waterline, under water or in the grass, and look the same.
 - Birds: three instanced draws of 50–60 triangles per bird, no shadows.
 - Deer: three skinned meshes of ~4.2k triangles (the models' per-material parts joined into one, coat in vertex colours, subdivided and simplified to twice the source's triangles), one draw each plus one for the antlers (1.6k); they cast shadows. The models add ~200 KB (base64) to the page.
 - Turf on the deer's grazing ground: one instanced draw, 9% of the grass count in clumps of 6 thin two-segment blades (~70k triangles on high; 9 three-segment blades, ~155k, looked the same); the tall grass is thinned out there.
