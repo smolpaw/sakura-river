@@ -98,7 +98,8 @@ export function grassMaterial() {
     const back = pow(max(dot(vdir, U.uSunDir), 0.0), 3.0);
     const tip = aFlex; // fragment-stage attribute becomes a varying
     const o = out.add(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(back.mul(1.6).add(0.15)).mul(clamp(tip.mul(2.2), 0.0, 1.0)));
-    return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35))).add(diffuseColor.rgb.mul(lanternLight(wp)));
+    // lantern light at half strength: at full, the lawn under the lines read as floodlit
+    return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(0.5));
   })());
 }
 const sin01 = (x) => x.sin().mul(0.5).add(0.5);
