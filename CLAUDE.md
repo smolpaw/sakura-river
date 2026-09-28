@@ -17,6 +17,7 @@ Procedural Three.js scene (cherry tree, river, Fuji-style mountain). See README.
 
 - Run `pnpm dev` and look at the scene in a browser. There are no automated tests.
 - Quick look without a window on the owner's desktop: `node bench/build.mjs look && LOOK_BACKEND=webgl BENCH_HEADLESS=1 node bench/look.mjs look out/look <time,...> [hero|x,y,z:tx,ty,tz ...]` writes PNGs to `bench/out/` (headless WebGPU canvases read back blank, hence WebGL). Headless WebGPU runs always log `OperationError: Instance dropped in popErrorScope` (about 14 times) as the browser closes, on every build including known-good ones: ignore it, don't bisect it; look for other errors.
+- In one `look.mjs` run, a night time captured after day times can show the day's reflection on the river (the reflection renders every other frame and the settle steps don't render). Capture night in its own run before calling a bright river a regression.
 - The engine handle (`window.SakuraRiver.create`'s return value) has debug hooks for headless checks: `setView(pos, target)`, `cineView(u)`, `tick(n, dt)`, `simulate(sec)`, `info()`, `soundInfo()`, `birdInfo()`, `shootingStar()` (launches one ahead of the camera); `create(canvas, { manual: true })` disables the RAF loop.
 - Birds: `node bench/birds-look.mjs look out/b '<json shots>'` sets time and weather, simulates and captures the scene or a view following one bird (shot format at the top of the script).
 
