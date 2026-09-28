@@ -35,7 +35,9 @@ export function petalMaterial() {
     const ndl = dot(N, U.uSunDir);
     const diff = max(ndl, 0.0).mul(0.7).add(ndl.mul(0.5).add(0.5).mul(0.3));
     const trans = pow(max(dot(V.negate(), U.uSunDir), 0.0), 3.0).mul(1.3).add(0.12);
-    const col = alb.mul(U.uSkyAmb.mul(0.9).add(U.uSunColor.mul(U.uSunVis).mul(diff.add(trans)).mul(0.9)).add(lanternLight(positionWorld).mul(1.4)));
+    // the canopy's own glow (blossomMaterial's floor) so a falling petal matches the flowers it left: without it
+    // petals away from the lanterns turn into dark blue flecks at night
+    const col = alb.mul(U.uSkyAmb.mul(0.9).add(U.uSunColor.mul(U.uSunVis).mul(diff.add(trans)).mul(0.9)).add(lanternLight(positionWorld).mul(1.4)).add(vec3(0.16).add(U.uSkyAmb.mul(0.1))));
     return vec4(applyFog(col, positionWorld), 1.0);
   });
   const m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, fog: false });
