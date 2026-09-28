@@ -52,7 +52,8 @@ Checked by eye only; no timing runs.
 - Riverside and bridge lanterns: ~100 instances × 400 triangles in one draw; their light is analytic (distance to the bank lines), not scene lights.
 - Temple: 84k triangles, one draw, no shadows. Its material sums 14 lamp terms only after dusk and only on temple pixels.
 - Birds: three instanced draws of 50–60 triangles per bird, no shadows.
-- Deer: three skinned meshes (2.1k triangles per hind, 3.7k for the stag), each merged from its per-material parts into one draw with the coat in vertex colours, plus one for the antlers; they cast shadows. The models add ~260 KB (base64) to the page.
+- Deer: three skinned meshes of ~1k triangles (the models' per-material parts joined into one, coat in vertex colours), one draw each plus one for the antlers; they cast shadows. The models add ~130 KB (base64) to the page.
+- Turf on the deer's grazing ground: one instanced draw, 9% of the grass count in clumps of 9 thin blades (~155k triangles on high); the tall grass is thinned out there.
 - Stars and shooting stars: in the sky shader, behind uniform branches (nothing by day). At night each sky pixel does one cube-map cell lookup (five `hash12`, one `fwidth`); a shooting star adds a few dot products while one is in flight.
 
 ## Bench tools
