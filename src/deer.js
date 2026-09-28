@@ -20,7 +20,7 @@ const HERD = [
   { kind: 'doe', dx: 1.4, dz: -1.8, yaw: 2.6, s: 0.95 },
   { kind: 'stag', dx: 0.6, dz: 3.8, yaw: 1.1, s: 1 },
 ];
-const LENGTH = { doe: 1.56, stag: 1.68 }; // nose to tail, m (the stag is a young one: little bigger than the hinds)
+const LENGTH = { doe: 1.72, stag: 1.85 }; // nose to tail, m (the stag is a young one: little bigger than the hinds)
 // head-down stretch of each clip (s): looped `bout` times before the clip plays through its lift once
 const DOWN = { doe: [1.0, 4.0], stag: [2.0, 8.0] };
 const BOUT = [3, 8];
