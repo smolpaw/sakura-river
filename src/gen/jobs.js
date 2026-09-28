@@ -8,7 +8,7 @@ import { templeData } from '../temple.js';
 import { fallenData } from '../petals.js';
 import { lanternData, lanternGeometry } from '../lanterns.js';
 import { tessellate } from '../stress.js';
-import { layout, rockAvoid, trunkAvoid, underTree, lawn } from './layout.js';
+import { layout, rockAvoid, trunkAvoid, underTree, lawn, turf } from './layout.js';
 
 let W = null;
 const world = () => (W ||= createWorld(7));
@@ -37,7 +37,7 @@ export const JOBS = {
   grass: ({ count, tier }) => {
     const l = L();
     const avoid = rockAvoid(l, rockPlan(world(), tier, xz(l.tree)).placements);
-    return grassData(world(), count, { focus: xz(l.focus), radius: 62, avoid, lawn: lawn(l) });
+    return grassData(world(), count, { focus: xz(l.focus), radius: 62, avoid, lawn: lawn(l), turf: turf(l, Math.round(count * 0.09)) });
   },
   flowers: ({ count, tier }) => {
     const l = L();

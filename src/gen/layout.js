@@ -18,13 +18,23 @@ export function layout(world) {
 // short lawn under the main tree: 0 near the trunk (short grass, kept down in the canopy's shade) .. 1 outside
 export const underTree = (L) => (x, z) => { const t = Math.min(1, Math.max(0, (Math.hypot(x - L.TX, z - L.TZ) - 3.4) / 2.8)); return t * t * (3 - 2 * t); };
 
-// short grass (0 .. 1 as above): the lawn under the tree and the deer's grazing ground, stretched along the bank
+// the grazing ground, stretched along the bank: 0 inside .. 1 outside, over EDGE metres
+const EDGE = 3, STRETCH = 1.6;
+const grazed = (L) => {
+  const [gx, gz] = L.graze;
+  return (x, z) => { const t = Math.min(1, Math.max(0, (Math.hypot(x - gx, (z - gz) / STRETCH) - GRAZE.r) / EDGE)); return t * t * (3 - 2 * t); };
+};
+
+// short grass (0 .. 1 as above): the lawn under the tree, and the tall grass shortening towards the grazing ground
 export const lawn = (L) => {
-  const under = underTree(L), [gx, gz] = L.graze;
-  return (x, z) => {
-    const t = Math.min(1, Math.max(0, (Math.hypot(x - gx, (z - gz) / 1.6) - GRAZE.r) / 3));
-    return Math.min(under(x, z), 0.25 + 0.75 * t * t * (3 - 2 * t)); // cropped, not bare
-  };
+  const under = underTree(L), g = grazed(L);
+  return (x, z) => Math.min(under(x, z), 0.25 + 0.75 * g(x, z));
+};
+
+// the grazing ground's turf (vegetation.js): where and how dense, count clumps in all
+export const turf = (L, count) => {
+  const g = grazed(L), [gx, gz] = L.graze, rx = GRAZE.r + EDGE, rz = rx * STRETCH;
+  return { count, box: [gx - rx, gz - rz, gx + rx, gz + rz], density: (x, z) => 1 - g(x, z) };
 };
 
 export const trunkAvoid = (L) => (x, z) => Math.hypot(x - L.TX, z - L.TZ) < 0.95;

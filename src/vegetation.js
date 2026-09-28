@@ -7,15 +7,20 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 const V = THREE.Vector3;
 
 // ---------- grass ----------
-function grassClumpGeometry(rng, blades = 5, segs = 4) {
+// blade height, base half-width and lean: [min, spread]; spread: clump radius
+const TALL = { blades: 5, segs: 4, spread: 0.13, h: [0.65, 0.45], w: [0.038, 0.022], lean: [0.12, 0.35] };
+// the deer's cropped turf: many thin, short, upright blades
+const TURF = { blades: 9, segs: 3, spread: 0.09, h: [0.1, 0.12], w: [0.008, 0.006], lean: [0.04, 0.16] };
+
+function grassClumpGeometry(rng, { blades, segs, spread, h: H, w: W, lean: L } = TALL) {
   const P = [], Nn = [], F = [], C = [], I = [];
   let base = 0;
   for (let b = 0; b < blades; b++) {
-    const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 0.13;
+    const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * spread;
     const ox = Math.cos(a) * r, oz = Math.sin(a) * r;
     const yaw = rng() * Math.PI * 2;
-    const h = 0.65 + rng() * 0.45, w = 0.038 + rng() * 0.022;
-    const lean = 0.12 + rng() * 0.35;
+    const h = H[0] + rng() * H[1], w = W[0] + rng() * W[1];
+    const lean = L[0] + rng() * L[1];
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     for (let s = 0; s <= segs; s++) {
       const t = s / segs;
@@ -70,6 +75,7 @@ export function grassData(world, count, opts) {
     if (y < 0.12) continue;
     const ri = world.riverInfo(x, z);
     if (opts.avoid && opts.avoid(x, z)) continue;
+    if (opts.turf && opts.turf.density(x, z) > nz.noise2(x * 2.1, z * 2.1) * 0.5 + 0.5) continue; // cropped: turf instead
     const patchN = nz.fbm2(x * 0.08, z * 0.08, 3);
     const lush = clamp(0.6 + patchN * 0.9, 0.15, 1.2);
     if (rng() > 0.35 + lush * 0.6) continue;
@@ -103,13 +109,37 @@ export function grassData(world, count, opts) {
     out.push({ matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length, bs: [bs.center.x, bs.center.y, bs.center.z, bs.radius + 1.5] });
     total += list.length;
   }
-  return { geo, tiles: out, total };
+  return { geo, tiles: out, total, turf: opts.turf ? turfData(world, opts.turf, nz, cA, cB) : null };
+}
+
+// the turf: one instanced draw over the grazing ground's box, as dense as turf.density(x, z) (0..1)
+function turfData(world, turf, nz, cA, cB) {
+  const rng = mulberry32(43);
+  const geo = grassClumpGeometry(rng, TURF);
+  const [x0, z0, x1, z1] = turf.box;
+  const mesh = new THREE.InstancedMesh(geo, undefined, turf.count);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), c = new THREE.Color();
+  let n = 0;
+  for (let tries = 0; n < turf.count && tries < turf.count * 20; tries++) {
+    const x = lerp(x0, x1, rng()), z = lerp(z0, z1, rng()), d = turf.density(x, z);
+    if (rng() > d) continue;
+    p.set(x, world.height(x, z) - 0.02, z);
+    q.setFromAxisAngle(new V(0, 1, 0), rng() * Math.PI * 2);
+    const ws = 0.8 + rng() * 0.5;
+    s.set(ws, lerp(1.4, 0.9, d) * (0.8 + rng() * 0.4), ws); // a little longer where it meets the tall grass
+    mesh.setMatrixAt(n, m.compose(p, q, s));
+    mesh.setColorAt(n++, c.copy(cA).lerp(cB, clamp(0.65 + nz.fbm2(x * 0.08, z * 0.08, 3) + (rng() - 0.5) * 0.3, 0, 1)));
+  }
+  mesh.count = n;
+  mesh.computeBoundingSphere();
+  const bs = mesh.boundingSphere;
+  return { geo, matrix: mesh.instanceMatrix.array.slice(0, n * 16), color: mesh.instanceColor.array.slice(0, n * 3), n, bs: [bs.center.x, bs.center.y, bs.center.z, bs.radius + 0.5] };
 }
 
 export function makeGrass(data, mat) {
   const group = new THREE.Group();
-  for (const t of data.tiles) {
-    const mesh = new THREE.InstancedMesh(data.geo, mat, t.n);
+  for (const t of data.turf ? [...data.tiles, data.turf] : data.tiles) {
+    const mesh = new THREE.InstancedMesh(t.geo || data.geo, mat, t.n);
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(t.matrix, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(t.color, 3);
     mesh.boundingSphere = new THREE.Sphere(new V(t.bs[0], t.bs[1], t.bs[2]), t.bs[3]);
