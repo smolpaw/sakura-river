@@ -20,15 +20,6 @@
 
 <div class="top-right">
   <span class="stats" id="stats" hidden></span>
-  <label class="quality" title="Rendering quality (changing it reloads the scene)">
-    <span class="quality-label">Quality</span>
-    <select id="quality" aria-label="Rendering quality">
-      <option value="auto">Auto</option>
-      <option value="high">High</option>
-      <option value="medium">Medium</option>
-      <option value="low">Low</option>
-    </select>
-  </label>
   <button type="button" class="btn icon" id="btn-sound" aria-pressed="true" aria-label="Mute sound" title="Music and ambience">
     <svg class="i-on" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"></path></svg>
     <svg class="i-off" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M16 9.5l5 5M21 9.5l-5 5"></path></svg>
@@ -42,6 +33,26 @@
 </div>
 
 <div class="side" id="side">
+  <div class="actions">
+    <label class="quality" title="Rendering quality (changing it reloads the scene)">
+      <span class="quality-label">Quality</span>
+      <select id="quality" aria-label="Rendering quality">
+        <option value="auto">Auto</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </label>
+    <button type="button" class="btn icon" id="btn-cine" aria-pressed="false" aria-label="Cinematic" title="Cinematic">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="12" height="10" rx="2"></rect><path d="M15 10.5l5-3v9l-5-3z"></path></svg>
+    </button>
+    <button type="button" class="btn icon" id="btn-orbit" aria-pressed="false" aria-label="Orbit" title="Orbit">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8"></circle><path d="M19.94 8.95A8.5 8.5 0 1 1 15.05 4.06"></path><circle cx="18.01" cy="5.99" r="1.8" fill="currentColor"></circle></svg>
+    </button>
+    <button type="button" class="btn icon" id="btn-reset" aria-label="Reset view" title="Reset view">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"></path><path d="M4.5 3.5v4h4"></path></svg>
+    </button>
+  </div>
   <section class="panel" aria-label="Scene controls">
     <div class="group">
       <div class="label"><span id="w-label">Weather</span><output id="w-name"></output></div>
@@ -67,11 +78,6 @@
       </div>
     </div>
   </section>
-  <div class="actions">
-    <button type="button" class="btn" id="btn-cine" aria-pressed="false">Cinematic</button>
-    <button type="button" class="btn" id="btn-orbit" aria-pressed="false">Orbit</button>
-    <button type="button" class="btn" id="btn-reset">Reset view</button>
-  </div>
 </div>
 
 <div class="veil" id="veil" role="status">
