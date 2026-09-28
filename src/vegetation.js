@@ -10,7 +10,7 @@ const V = THREE.Vector3;
 // blade height, base half-width and lean: [min, spread]; spread: clump radius
 const TALL = { blades: 5, segs: 4, spread: 0.13, h: [0.65, 0.45], w: [0.038, 0.022], lean: [0.12, 0.35] };
 // the deer's cropped turf: many thin, short, upright blades
-const TURF = { blades: 9, segs: 3, spread: 0.09, h: [0.1, 0.12], w: [0.008, 0.006], lean: [0.04, 0.16] };
+const TURF = { blades: 6, segs: 2, spread: 0.09, h: [0.1, 0.12], w: [0.008, 0.006], lean: [0.04, 0.16] };
 
 function grassClumpGeometry(rng, { blades, segs, spread, h: H, w: W, lean: L } = TALL) {
   const P = [], Nn = [], F = [], C = [], I = [];
