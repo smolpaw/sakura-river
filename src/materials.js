@@ -176,7 +176,8 @@ export function bridgeMaterial(hang) {
     If(U.uLights.greaterThan(0.0), () => {
       for (const c of lamps) { const d = positionWorld.sub(c); glow.addAssign(float(1.0).div(dot(d, d).mul(3.0).add(0.25))); }
     });
-    return out.add(diffuseColor.rgb.mul(U.uLightColor).mul(U.uLights).mul(glow).mul(0.45));
+    // the sunlit water and banks light the girders' sides and the arch's underside (groundBounce, as on rock)
+    return out.add(diffuseColor.rgb.mul(U.uLightColor.mul(U.uLights).mul(glow).mul(0.45).add(groundBounce())));
   })());
 }
 
