@@ -52,7 +52,7 @@ Checked by eye only; no timing runs.
 
 - Tree (single flowers): 38k bark triangles, 28k flowers × 8 triangles (23k before the inner branches got their own umbels).
 - Riverside and bridge lanterns: ~100 instances × 400 triangles in one draw; their light is analytic (distance to the bank lines), not scene lights.
-- Temple: 84k triangles, one draw, no shadows. Its material sums 14 lamp terms only after dusk and only on temple pixels.
+- Temple: 84k triangles, one draw, no shadows. Its material sums 14 lamp terms only after dusk and only on temple pixels. In place of shadows, the sky light each vertex sees past the rest of the compound is baked into its colour at generation (`skyLight` in `src/temple.js`: a top-down height map, 20 rays per vertex): ~+70 ms on the props job (~60 → ~130 ms in Node), which still ends well before the terrain job.
 - Rocks: five boulder shapes of 500 triangles (93 instances, cast shadows) and one 80-triangle stone for the 900 pebbles, which cast no shadow. The pebbles had used the boulder shapes (~450k triangles in the scene, shadow and reflection passes); they sit at the waterline, under water or in the grass, and look the same.
 - Petal rafts (hanaikada) on the water: one instanced draw of the fallen-petal mesh, ~4k petals × 16 triangles on high, fewer drawn when fewer petals fall; not in the reflection.
 - Birds: three instanced draws of 50–60 triangles per bird, no shadows.

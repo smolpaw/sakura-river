@@ -108,6 +108,10 @@ export function flowerMaterial() {
   return new LitMaterial({ roughness: 0.7, side: THREE.DoubleSide, positionNode: windPosition(attribute('aFlex', 'float')), receivedShadowPositionNode: windShadowPosition() });
 }
 
+// light thrown back by the sunlit ground onto faces turned sideways or down, at full strength once the sun is a little
+// above the horizon: a wall in shade stays warm grey rather than going the blue of the sky light alone
+const groundBounce = () => U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
+
 export function rockMaterial() {
   const wet = sstep(0.28, -0.05, wp.y);
   return new LitMaterial({
@@ -116,10 +120,7 @@ export function rockMaterial() {
   }, (out) => Fn(() => {
     // (as in the original: view-space normal against world-space vectors)
     const vv = viewDir();
-    // light thrown back by the sunlit meadow onto the faces turned from the sky, so a wall in shade stays warm grey
-    // rather than going the blue of the sky light alone
-    const bounce = U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
-    return out.add(U.uSunColor.mul(U.uSunVis).mul(pow(max(dot(reflect(U.uSunDir.negate(), normalView), vv), 0.0), 24.0)).mul(wet).mul(0.25)).add(diffuseColor.rgb.mul(lanternLight(wp).add(bounce)));
+    return out.add(U.uSunColor.mul(U.uSunVis).mul(pow(max(dot(reflect(U.uSunDir.negate(), normalView), vv), 0.0), 24.0)).mul(wet).mul(0.25)).add(diffuseColor.rgb.mul(lanternLight(wp).add(groundBounce())));
   })());
 }
 
@@ -152,7 +153,8 @@ export function templeMaterial(d) {
     return c;
   })();
   return new LitMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, colorNode }, (out) => Fn(() => {
-    const o = out.toVar();
+    // the sunlit gravel and meadow light the walls and the eaves' undersides from below (as on rock)
+    const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
     If(U.uLights.greaterThan(0.0), () => {
       const near = float(0).toVar(), up = float(0).toVar();
       for (const c of lamps) { const v = wp.sub(c); near.addAssign(float(1.0).div(dot(v, v).mul(1.5).add(0.3))); }

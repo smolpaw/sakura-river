@@ -1,6 +1,7 @@
 // Old temple on the knoll across the river (world.temple): a stone-walled terrace with a five-storey pagoda, a main
 // hall under a hip-and-gable (irimoya) roof, a bell tower, ochre boundary walls with five white lines, and stone
-// lanterns along the approach. Weathered bengara wood, white plaster, ribbed grey tile, verdigris bronze. After dusk
+// lanterns along the approach. Weathered bengara wood (the pagoda lacquered vermilion), white plaster, ribbed grey
+// tile, verdigris bronze; the sky light each part sees past the others is baked into the colours (skyLight). After dusk
 // the hall's lattice doors and the lanterns' fireboxes glow (aGlow), and floodlights hidden in the gravel light the
 // pagoda from below, as at a temple's spring light-up (materials.js templeMaterial, fx.js makeGlows).
 // Generation only (runs in a worker).
@@ -12,6 +13,7 @@ const V = THREE.Vector3;
 const WOOD = [0.27, 0.1, 0.06], WOOD_D = [0.1, 0.07, 0.05], PLASTER = [0.8, 0.77, 0.7], TILE = [0.2, 0.21, 0.22], TILE_D = [0.11, 0.115, 0.12];
 const ENDS = [0.8, 0.74, 0.58], BRONZE = [0.22, 0.36, 0.3], BRONZE_D = [0.16, 0.2, 0.15], STONE = [0.43, 0.41, 0.38], GRAVEL = [0.6, 0.58, 0.53];
 const OCHRE = [0.62, 0.45, 0.22], PAPER = [0.86, 0.8, 0.66], FIREBOX = [0.5, 0.45, 0.38];
+const SHU = [0.56, 0.07, 0.03], SHU_D = [0.3, 0.05, 0.03]; // the pagoda's vermilion lacquer (the bridge's, weathered)
 
 // parts in a local frame; at() places what its callback adds (lamps too)
 function kit() {
@@ -43,7 +45,16 @@ function kit() {
     for (let i = n; i < parts.length; i++) parts[i].applyMatrix4(m);
     for (let i = nl; i < lamps.length; i++) lamps[i].applyMatrix4(m);
   };
-  return { parts, lamps, add, box, beam, lathe, at };
+  // what fn() adds in colour `from` takes colour `to` instead
+  const paint = (pairs, fn) => {
+    const n = parts.length;
+    fn();
+    for (let i = n; i < parts.length; i++) {
+      const c = parts[i].attributes.color.array, hit = pairs.find(([f]) => f.every((v, j) => Math.abs(c[j] - v) < 1e-6));
+      if (hit) for (let j = 0; j < c.length; j += 3) c.set(hit[1], j);
+    }
+  };
+  return { parts, lamps, add, box, beam, lathe, at, paint };
 }
 
 // A roof face: f(u, t) is the tiled surface for u 0 (eave) .. 1 (top) and t 0..1 along the eave. Rows of round tiles
@@ -129,8 +140,14 @@ function hipRoof(k, { y0, a, b, H, kick, ridge = 0, gable = 0, rib = 0.09, pitch
       k.beam(edge(i / 5, sz, -0.35, 0.3), edge((i + 1) / 5, sz, -0.35, 0.3), 0.32, 0.32, TILE_D);
     }
     k.box(0.14, 0.9, 0.55, s * (X + 0.05), top - 0.7, 0, ENDS);
-    // shibi: a dark tile fin curling up at each end of the main ridge
-    for (let j = 0; j < 5; j++) k.box(0.36 - j * 0.03, 0.38, 0.4 - j * 0.04, s * (X - 0.3 + j * j * 0.035), top + 0.75 + j * 0.3, 0, TILE_D);
+    // shibi: a dark tile fin at each end of the main ridge, its tip curling in over the ridge
+    const fin = new THREE.Shape();
+    fin.moveTo(0, 0); fin.lineTo(1.0, 0);
+    fin.quadraticCurveTo(0.42, 0.3, 0.5, 1.55);
+    fin.quadraticCurveTo(0.1, 1.35, 0, 0.9);
+    fin.lineTo(0, 0);
+    const g = new THREE.ExtrudeGeometry(fin, { depth: 0.34, bevelEnabled: false, curveSegments: 5 });
+    k.add(g.translate(0, 0, -0.17).scale(-s, 1, 1).translate(s * (X - 0.05), top + 0.6, 0), TILE_D);
   }
   k.box(2 * X, 0.75, 0.55, 0, top + 0.3, 0, TILE_D);
   return top;
@@ -361,19 +378,23 @@ function compound(k, T, ground) {
   for (const [ox, oz, tx, tz, L] of sides) {
     const nx = -tz, nz = tx, ry = Math.atan2(nx, nz); // outward
     for (let s = 0; s < L;) { const w = Math.min(1.6 + rng() * 0.8, L - s); const c = s + w / 2; k.box(w - 0.04, 0.35, 0.8, ox + tx * c - nx * 0.35, -0.175, oz + tz * c - nz * 0.35, STONE.map((v) => v * 1.12), ry); s += w; }
-    // battered courses of rough blocks, down to the ground
-    for (let r = 1; r < 14; r++) {
-      const top = -0.35 - (r - 1) * 0.6, out = -0.45 + r * 0.1;
+    // courses of rough blocks of uneven size down to the ground, battered in a curve that steepens towards the top,
+    // each block set a little proud or back, mossier low down
+    for (let r = 1, top = -0.35; r < 24; r++) {
+      const ch = 0.42 + rng() * 0.3, d = -top + ch / 2, out = -0.4 + 0.1 * d + 0.012 * d * d;
       let any = false;
-      for (let s = (r % 2) * -0.6; s < L;) {
-        const w = 1.1 + rng() * 0.7, c = Math.max(0, Math.min(L, s + w / 2)), ww = Math.min(s + w, L) - Math.max(s, 0);
-        const px = ox + tx * c + nx * out, pz = oz + tz * c + nz * out;
+      for (let s = -rng() * 0.8; s < L;) {
+        const w = 0.7 + rng() * 1.2, c = Math.max(0, Math.min(L, s + w / 2)), ww = Math.min(s + w, L) - Math.max(s, 0);
+        const o = out + (rng() - 0.5) * 0.08, px = ox + tx * c + nx * o, pz = oz + tz * c + nz * o;
         s += w;
         if (top < ground(px, pz) - 0.2 || ww < 0.3) continue;
         any = true;
-        const tone = 0.78 + rng() * 0.36, moss = rng() * 0.12;
-        k.box(ww - 0.06, 0.56 + rng() * 0.06, 0.9, px, top - 0.3, pz, [STONE[0] * tone - moss * 0.3, STONE[1] * tone, STONE[2] * tone - moss * 0.5], ry + (rng() - 0.5) * 0.04);
+        const tone = 0.72 + rng() * 0.45, warm = (rng() - 0.5) * 0.04, moss = rng() * 0.1 + Math.min(0.12, d * 0.012);
+        // leaning back with the batter, so the face runs on up the wall instead of stepping out in ledges
+        k.add(new THREE.BoxGeometry(ww - 0.05, ch - 0.04 - rng() * 0.07, 0.9).rotateX(-Math.atan(0.1 + 0.024 * d)).rotateY(ry + (rng() - 0.5) * 0.06)
+          .translate(px, top - ch / 2 + (rng() - 0.5) * 0.05, pz), [STONE[0] * tone + warm - moss * 0.3, STONE[1] * tone, STONE[2] * tone - warm - moss * 0.5]);
       }
+      top -= ch;
       if (!any) break;
     }
   }
@@ -393,12 +414,70 @@ function compound(k, T, ground) {
   for (let x = sx + 2.2; x < 8.5; x += 0.95) k.box(0.88, 0.1, 1.6, x, 0.02, 10.8, STONE.map((v) => v * (1.05 + rng() * 0.1)), (rng() - 0.5) * 0.03);
   for (const s of [1, -1]) { toro(k, sx + s * 2.6, 0, 8.2); toro(k, sx + s * 2.6, 0, 4.8); toro(k, 8.5 + s * 3.2, 0, 9.4); }
   k.at(-7, 0, -4, 0, () => hall(k));
-  k.at(8.5, 0, 3, 0, () => pagoda(k));
+  k.at(8.5, 0, 3, 0, () => k.paint([[WOOD, SHU], [WOOD_D, SHU_D]], () => pagoda(k)));
   k.at(-13.5, 0, 8.5, 0, () => belfry(k));
   tsuiji(k, -W + 0.4, -D + 0.4, W - 0.4, -D + 0.4);
   for (const s of [1, -1]) tsuiji(k, s * (W - 0.4), -D + 0.4, s * (W - 0.4), -1);
   // floodlights hidden in the gravel round the pagoda
   return [[8.5 + 6.5, 3 + 6.5], [8.5 - 6.5, 3 + 6.5], [8.5 + 6.5, 3 - 6.5], [8.5 - 6.5, 3 - 6.5]].map(([x, z]) => new V(x, 0.2, z));
+}
+
+// Sky light in the vertex colours: how much of the sky each vertex sees past the roofs, walls and lanterns (the
+// temple casts no shadows, so without it the walls under the eaves are lit like the ridges). The compound is
+// rasterized top-down into a height map (each triangle's top over its footprint, CELL metres), then from each
+// vertex rays towards DIRS points of the sky march through it; the walls in the eaves' shade see little of it.
+const CELL = 0.3, DIRS = 20, STEPS = [0.25, 0.5, 0.8, 1.2, 1.7, 2.4, 3.3, 4.5, 6.2, 8.5];
+function skyLight(parts) {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, top = -Infinity;
+  for (const g of parts) {
+    const p = g.attributes.position.array;
+    for (let i = 0; i < p.length; i += 3) {
+      x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); z0 = Math.min(z0, p[i + 2]); z1 = Math.max(z1, p[i + 2]); top = Math.max(top, p[i + 1]);
+    }
+  }
+  const nx = Math.ceil((x1 - x0) / CELL) + 1, nz = Math.ceil((z1 - z0) / CELL) + 1, H = new Float32Array(nx * nz).fill(-Infinity);
+  for (const g of parts) {
+    const p = g.attributes.position.array, I = g.index.array;
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+      const y = Math.max(p[a + 1], p[b + 1], p[c + 1]);
+      const i0 = Math.floor((Math.min(p[a], p[b], p[c]) - x0) / CELL), i1 = Math.floor((Math.max(p[a], p[b], p[c]) - x0) / CELL);
+      const j0 = Math.floor((Math.min(p[a + 2], p[b + 2], p[c + 2]) - z0) / CELL), j1 = Math.floor((Math.max(p[a + 2], p[b + 2], p[c + 2]) - z0) / CELL);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (H[j * nx + i] < y) H[j * nx + i] = y;
+    }
+  }
+  const at = (x, z) => {
+    const i = Math.floor((x - x0) / CELL), j = Math.floor((z - z0) / CELL);
+    return i < 0 || j < 0 || i >= nx || j >= nz ? -Infinity : H[j * nx + i];
+  };
+  // the sky's points, spread evenly over the upper hemisphere (none right on the horizon)
+  const D = [];
+  for (let i = 0; i < DIRS; i++) {
+    const y = 0.08 + 0.92 * (i + 0.5) / DIRS, r = Math.sqrt(1 - y * y), a = i * 2.39996;
+    D.push([Math.cos(a) * r, y, Math.sin(a) * r]);
+  }
+  for (const g of parts) {
+    const p = g.attributes.position.array, n = g.attributes.normal.array, col = g.attributes.color.array;
+    for (let v = 0; v < p.length; v += 3) {
+      const ox = p[v] + n[v] * 0.08, oy = p[v + 1] + n[v + 1] * 0.08, oz = p[v + 2] + n[v + 2] * 0.08;
+      let sum = 0, seen = 0;
+      for (const [dx, dy, dz] of D) {
+        const w = dx * n[v] + dy * n[v + 1] + dz * n[v + 2];
+        if (w <= 0) continue;
+        sum += w;
+        let open = 1;
+        for (const s of STEPS) {
+          const y = oy + dy * s;
+          if (y > top) break;
+          if (at(ox + dx * s, oz + dz * s) > y) { open = 0; break; }
+        }
+        seen += w * open;
+      }
+      // faces turned down see no sky, only what the ground throws back
+      const k = sum > 0 ? 0.5 + 0.5 * seen / sum : 0.5;
+      col[v] *= k; col[v + 1] *= k; col[v + 2] *= k;
+    }
+  }
 }
 
 // the temple in world space: one geometry (color, aGlow), its lamp and floodlight positions
@@ -408,6 +487,7 @@ export function templeData(world) {
   const ground = (x, z) => { const p = new V(x, 0, z).applyMatrix4(m); return world.height(p.x, p.z) - T.y; };
   const k = kit();
   const flood = compound(k, T, ground);
+  skyLight(k.parts);
   for (const g of k.parts) g.applyMatrix4(m);
   const flat = (list) => new Float32Array(list.flatMap((p) => p.applyMatrix4(m).toArray()));
   return { geo: mergeGeometries(k.parts), lamps: flat(k.lamps), flood: flat(flood) };
