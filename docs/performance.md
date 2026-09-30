@@ -50,7 +50,7 @@ Each item passed the visual gate or is pixel-identical to what it replaced.
 
 Checked by eye only; no timing runs.
 
-- Tree (single flowers): 38k bark triangles, 28k flowers × 8 triangles (23k before the inner branches got their own umbels).
+- Tree (single flowers): 57k bark triangles, 43k flowers × 8 triangles on high (38k and 28k before the extra flowering twigs and umbels of full bloom, +3% GPU on the hero and cinematic views; 23k flowers before the inner branches got their own umbels).
 - Riverside and bridge lanterns: ~100 instances × 400 triangles in one draw; their light is analytic (distance to the bank lines), not scene lights.
 - Temple: 84k triangles, one draw, no shadows. Its material sums 14 lamp terms only after dusk and only on temple pixels. In place of shadows, the sky light each vertex sees past the rest of the compound is baked into its colour at generation (`skyLight` in `src/temple.js`: a top-down height map, 20 rays per vertex): ~+70 ms on the props job (~60 → ~130 ms in Node), which still ends well before the terrain job.
 - Bridge: 25k triangles, one draw, casts shadows (15k before its rebuild: boxes stepped along the arch). Members that follow the arch are swept along it; the sky light baked into its colours as on the temple (`skyLight`), ~100 ms on the props job in Node (~40 ms before).

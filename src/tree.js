@@ -13,7 +13,8 @@ export const MAIN_TREE = {
   limbs: [5, 6],
   maxDepth: 5,
   umbels: [0, 0, 0, 3, 5, 10], // blossom umbels per branch, by depth
-  fill: [0, 0, 2, 4, 4, 0], // more umbels along the inner branches (full bloom), from their own rng: same tree
+  fill: [0, 0, 2, 6, 6, 3], // more umbels along the branches (full bloom), from their own rng: same tree
+  spray: [0, 0, 0, 0, 2, 0], // more flowering twigs off the branches of each depth, from their own rng: same tree
   flowerSize: 1,
   minY: 2.2,
   roots: 6,
@@ -38,14 +39,15 @@ function anyPerp(d) {
 }
 
 export function growTree(seed, cfg, groundAt = () => 0) {
-  const rng = mulberry32(seed), rngFill = mulberry32(seed + 3);
-  const rr = (a, b) => a + (b - a) * rng();
+  const main = mulberry32(seed), rngFill = mulberry32(seed + 3), rngSpray = mulberry32(seed + 5);
   const nz = makeNoise(seed + 99);
   const k = cfg.scale, D = cfg.maxDepth;
   const branches = [];
   const anchors = []; // umbel sites: { p, d, f, depth }
 
-  function grow(start, dir, length, radius, depth, pathLen) {
+  // rng: the stream this branch and its offshoots draw from (the sprays have their own, so the rest stays the same)
+  function grow(start, dir, length, radius, depth, pathLen, rng = main) {
+    const rr = (a, b) => a + (b - a) * rng();
     const n = depth < 2 ? 6 : 4;
     const step = length / n;
     const r1 = radius * (depth === D ? 0.28 : depth === 0 ? 0.8 : 0.66);
@@ -91,41 +93,45 @@ export function growTree(seed, cfg, groundAt = () => 0) {
 
     const kids = depth === 0 ? cfg.limbs[0] + Math.floor(rng() * (cfg.limbs[1] - cfg.limbs[0] + 1)) : depth === D - 1 ? 2 : 3;
     const az0 = rng() * TAU;
+    // a side shoot (or the leader) off this branch
+    const shoot = (lead, rng) => {
+      const rr = (a, b) => a + (b - a) * rng();
+      const s = at(lead ? 1 : rr(0.4, 0.88));
+      const axis = anyPerp(s.d).applyAxisAngle(s.d, rng() * TAU);
+      const cd = s.d.clone().applyAxisAngle(axis, lead ? rr(0.12, 0.32) : rr(0.5, 0.95));
+      const out = new V(s.p.x, 0, s.p.z);
+      if (out.lengthSq() > 1e-4) cd.addScaledVector(out.normalize(), 0.22); // open crown
+      cd.normalize();
+      const clen = length * (lead ? rr(0.72, 0.84) : rr(0.55, 0.74)), crad = s.r * (lead ? 0.8 : rr(0.52, 0.68));
+      grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f, rng);
+    };
     for (let c = 0; c < kids; c++) {
-      let s, cd, clen, crad;
       if (depth === 0) {
+        let s, cd, clen, crad;
         // limbs: evenly around the trunk, 53-70 degrees from vertical
         s = at(rr(0.8, 1));
         const az = az0 + (c / kids) * TAU + rr(-0.3, 0.3), pol = rr(0.92, 1.22);
         cd = new V(Math.sin(pol) * Math.cos(az), Math.cos(pol), Math.sin(pol) * Math.sin(az));
         clen = (length - 0.5) * rr(1.1, 1.35);
         crad = s.r * rr(0.66, 0.78);
-      } else {
-        const lead = c === 0;
-        s = at(lead ? 1 : rr(0.4, 0.88));
-        const axis = anyPerp(s.d).applyAxisAngle(s.d, rng() * TAU);
-        cd = s.d.clone().applyAxisAngle(axis, lead ? rr(0.12, 0.32) : rr(0.5, 0.95));
-        const out = new V(s.p.x, 0, s.p.z);
-        if (out.lengthSq() > 1e-4) cd.addScaledVector(out.normalize(), 0.22); // open crown
-        cd.normalize();
-        clen = length * (lead ? rr(0.72, 0.84) : rr(0.55, 0.74));
-        crad = s.r * (lead ? 0.8 : rr(0.52, 0.68));
-      }
-      grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f);
+        grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f, rng);
+      } else shoot(c === 0, rng);
     }
+    // more flowering twigs for full bloom, from their own stream
+    for (let c = 0; c < ((cfg.spray && cfg.spray[depth]) || 0); c++) shoot(false, rngSpray);
   }
 
   // trunk (starts half a unit below the ground so the flare sits in it)
   const T = cfg.trunk;
   const g0 = groundAt(0, 0);
-  const tdir = new V((rng() - 0.5) * T.lean, 1, (rng() - 0.5) * T.lean).normalize();
+  const tdir = new V((main() - 0.5) * T.lean, 1, (main() - 0.5) * T.lean).normalize();
   grow(new V(0, g0 - 0.5, 0), tdir, T.length * k + 0.5, T.radius * k, 0, 0);
 
   // surface roots
   const roots = [];
   for (let i = 0; i < cfg.roots; i++) {
-    const a = (i / cfg.roots) * Math.PI * 2 + rng() * 0.6;
-    const len = 1.6 + rng() * 1.6;
+    const a = (i / cfg.roots) * Math.PI * 2 + main() * 0.6;
+    const len = 1.6 + main() * 1.6;
     const pts = [], rad = [], flex = [];
     const segs = 10;
     for (let k = 0; k <= segs; k++) {
@@ -410,7 +416,7 @@ export function barkTextures({ size, map, bump }) {
 }
 
 // flowers per umbel by quality tier
-const UMBEL = { high: [4, 7], medium: [3, 6], low: [2, 4] };
+const UMBEL = { high: [3, 5], medium: [2, 5], low: [2, 3] };
 
 // one tree: bark geometry and flower instance data
 export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
