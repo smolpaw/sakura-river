@@ -72,10 +72,11 @@ export function createWorld(seed = 7) {
   // of a grove, a lone tree now and then out in the meadow, none on the valley floor, round the cherry tree or at
   // the temple
   const NG = makeNoise(31);
-  function grove(x, z) {
+  function grove(x, z, gn) {
     const open = smoothstep(55, 75, Math.abs(x - riverX(z)) - Math.max(0, -z) * 0.05) * smoothstep(85, 105, Math.hypot(x + 10, z - 10)) * smoothstep(8, 16, templeDist(x, z));
-    return open && open * Math.max(0.003, smoothstep(0.24, 0.34, NG.fbm2(x * 0.009, z * 0.009, 3)));
+    return open && open * Math.max(0.003, smoothstep(0.24, 0.34, gn ?? groveN(x, z)));
   }
+  const groveN = (x, z) => NG.fbm2(x * 0.009, z * 0.009, 3);
 
   function riverInfo(x, z) {
     const rx = riverX(z), hw = riverHW(z);
@@ -121,6 +122,8 @@ export function createWorld(seed = 7) {
     const grassA = new THREE.Color(0.20, 0.34, 0.075), grassB = new THREE.Color(0.34, 0.44, 0.10), grassDry = new THREE.Color(0.45, 0.45, 0.18);
     const moss = new THREE.Color(0.13, 0.24, 0.06), mud = new THREE.Color(0.19, 0.15, 0.10), sand = new THREE.Color(0.36, 0.31, 0.23);
     const bedDeep = new THREE.Color(0.13, 0.13, 0.10), rock = new THREE.Color(0.27, 0.25, 0.25), rockDark = new THREE.Color(0.13, 0.12, 0.13);
+    // the hills' patchwork: straw (times the ground's brightness), and tints multiplying the ground's colour
+    const straw = new THREE.Color(1.5, 1.3, 0.62), fresh = new THREE.Color(1.1, 1.22, 0.7), lush = new THREE.Color(0.55, 0.74, 0.55), one = new THREE.Color(1, 1, 1), tint = new THREE.Color();
     const forest = new THREE.Color(0.07, 0.13, 0.05), woodFloor = new THREE.Color(0.045, 0.07, 0.03), snow = new THREE.Color(0.92, 0.94, 0.98), alpine = new THREE.Color(0.20, 0.22, 0.12);
     const tmp = new THREE.Color();
     for (let v = 0; v < nv; v++) {
@@ -130,7 +133,8 @@ export function createWorld(seed = 7) {
       const n1 = N.fbm2(x * 0.05, z * 0.05, 3), n2 = N.noise2(x * 0.3 + 7, z * 0.3);
       // grass
       c.copy(grassA).lerp(grassB, clamp(0.5 + 0.9 * n1, 0, 1));
-      c.lerp(grassDry, clamp(N.noise2(x * 0.02 - 4, z * 0.02) * 0.6 - 0.05, 0, 0.45));
+      const dry = N.noise2(x * 0.02 - 4, z * 0.02);
+      c.lerp(grassDry, clamp(dry * 0.6 - 0.05, 0, 0.45));
       // bank: moss & mud
       const bankT = smoothstep(1.45, 1.0, ri.t);
       tmp.copy(moss).lerp(mud, clamp(0.5 + n2, 0, 1));
@@ -145,8 +149,18 @@ export function createWorld(seed = 7) {
       // far hills: forest tone
       const hillT = smoothstep(4, 22, y) * smoothstep(-40, -200, z) + smoothstep(8, 20, y) * smoothstep(60, 140, z);
       c.lerp(forest, clamp(hillT, 0, 1) * 0.75 * (1 - steep * 0.6));
+      // out on the hills (the tall grass covers the ground round the cherry tree): a patchwork of last year's straw,
+      // fresh growth, and darker, lusher grass in clumps, in the hollows and round the groves
+      const out = smoothstep(75, 115, Math.hypot(x + 10, z - 10)) * smoothstep(1.8, 2.6, ri.t) * (1 - steep);
+      const gn = out > 0 ? groveN(x, z) : undefined;
+      if (out > 0) {
+        const hollow = smoothstep(0.1, -0.35, N.fbm2(x * 0.006 + 5, z * 0.006 - 2, 2));
+        c.multiply(tint.copy(one).lerp(fresh, out * smoothstep(0.05, -0.3, dry)));
+        c.lerp(tint.copy(straw).multiplyScalar(0.3 * c.r + 0.6 * c.g + 0.1 * c.b), out * smoothstep(0.0, 0.35, dry) * (1 - hollow) * 0.85);
+        c.multiply(tint.copy(one).lerp(lush, out * Math.max(hollow, smoothstep(0.06, 0.24, gn), smoothstep(-0.1, -0.45, N2.noise2(x * 0.07, z * 0.07)) * 0.7)));
+      }
       // shaded floor under the groves' trees
-      c.lerp(woodFloor, grove(x, z) * 0.75 * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y));
+      c.lerp(woodFloor, grove(x, z, gn) * 0.75 * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y));
       // mountains: alpine -> rock -> snow
       if (y > 90) {
         c.lerp(alpine, smoothstep(90, 170, y) * (1 - steep));
