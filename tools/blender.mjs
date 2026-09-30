@@ -1,6 +1,6 @@
 // Builds models in src/models/ with Blender and compresses them like the deer: each tools/<name>.py into
-// src/models/<name>.glb (the woods' trees, the gorge's rock walls).
-//   node tools/blender.mjs [forest cliffs ...]     (all by default; needs `blender` on PATH, or BLENDER=/path/to/blender)
+// src/models/<name>.glb (the woods' trees, the gorge's rock walls, the bamboo).
+//   node tools/blender.mjs [forest cliffs bamboo ...]     (all by default; needs `blender` on PATH, or BLENDER=/path/to/blender)
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -10,7 +10,7 @@ import { prune, dedup, meshopt } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const MODELS = ['forest', 'cliffs'];
+const MODELS = ['forest', 'cliffs', 'bamboo'];
 
 await MeshoptEncoder.ready;
 const io = new NodeIO().registerExtensions([EXTMeshoptCompression, KHRMeshQuantization]).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });

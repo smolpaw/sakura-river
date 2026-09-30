@@ -5,10 +5,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
-import { makeGrass, makeFlowers, makeRocks, FOREST_KINDS, CLIFF_KINDS } from './vegetation.js';
+import { makeGrass, makeFlowers, makeRocks, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods } from './lods.js';
 import forestUrl from './models/forest.glb?url&inline';
 import cliffsUrl from './models/cliffs.glb?url&inline';
+import bambooUrl from './models/bamboo.glb?url&inline';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
@@ -133,6 +134,7 @@ export async function create(canvas, opts = {}) {
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
     forest: { name: 'forest', args: { count: Q.forest } },
     cliffs: { name: 'cliffs' },
+    bamboo: { name: 'bamboo' },
     fallen: { name: 'fallen', args: { count: Q.fallen } },
     rafts: { name: 'rafts', args: { count: Math.round(Q.fallen * 1.2), tier: tierName } },
   }, { mainThread: opts.workers === false });
@@ -272,6 +274,9 @@ export async function create(canvas, opts = {}) {
   const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), [70]);
   cliffs.name = 'cliffs';
   scene.add(cliffs);
+  const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial(), [60, 160]);
+  bamboo.name = 'bamboo';
+  scene.add(bamboo);
 
   await yieldTask();
   // ---------- river ----------
@@ -623,6 +628,7 @@ export async function create(canvas, opts = {}) {
     grass.userData.lod(camera.position, warming); // warm-up builds both grass levels
     forest.userData.lod(camera.position);
     cliffs.userData.lod(camera.position);
+    bamboo.userData.lod(camera.position);
 
     // sun light / shadow frustum anchored on the tree
     const sd = U.uSunDir.value;

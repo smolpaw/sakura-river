@@ -390,6 +390,37 @@ export function cliffData(world) {
   return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
 }
 
+// ---------- bamboo ----------
+// Groves of moso bamboo behind and beside the temple, as round many old temples: stands of culms (Blender models,
+// tools/bamboo.py, one unit tall) close together in a few patches, thinning at their edges, none in front of the
+// temple, on the terrace, down in the gorge or on slopes steep enough to show rock.
+export const BAMBOO_KINDS = ['bamboo0', 'bamboo1'];
+
+export function bambooData(world) {
+  const rng = mulberry32(919), nz = makeNoise(47);
+  const T = world.temple, tc = Math.cos(T.yaw), ts = Math.sin(T.yaw);
+  const lists = BAMBOO_KINDS.map(() => []), placed = [];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), up = new V(0, 1, 0);
+  for (let t = 0; t < 20000 && placed.length < 170; t++) {
+    const x = T.x + lerp(-60, 60, rng()), z = T.z + lerp(-60, 60, rng());
+    const dx = x - T.x, dz = z - T.z, lz = dx * ts + dz * tc; // +lz: the temple's front, towards the river
+    const td = world.templeDist(x, z), ri = world.riverInfo(x, z);
+    const dens = smoothstep(4, 7, td) * smoothstep(42, 30, td) * smoothstep(4, -10, lz) * smoothstep(0.0, 0.3, nz.fbm2(x * 0.04, z * 0.04, 2) + 0.15);
+    if (rng() > dens || Math.abs(ri.d) < ri.hw * 2 + 5) continue;
+    const y = world.height(x, z), e = 3;
+    if (Math.hypot(world.height(x + e, z) - world.height(x - e, z), world.height(x, z + e) - world.height(x, z - e)) / (2 * e) > 0.55) continue;
+    if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 2.6)) continue;
+    placed.push([x, z]);
+    const h = lerp(10, 15, rng()) * lerp(0.75, 1, dens);
+    p.set(x, y - 0.3, z);
+    q.setFromAxisAngle(up, rng() * Math.PI * 2);
+    s.set(h, h, h);
+    const g = 0.88 + rng() * 0.24;
+    lists[Math.floor(rng() * BAMBOO_KINDS.length)].push({ m: m.compose(p, q, s).toArray(), c: [g * (1 + (rng() - 0.5) * 0.1), g, g * 0.95] });
+  }
+  return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
+}
+
 // ---------- woods on the hills ----------
 // A Japanese hillside in spring: dark stands of sugi (cedar) and hinoki (cypress), broadleaf woods in fresh green and
 // evergreen oak with wild cherries (yamazakura) flowering pale pink among them, all in groves with meadow between.

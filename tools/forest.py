@@ -43,18 +43,26 @@ def tris(me):
 # clumps: [(centre, radii)]; voxel: remesh size; amp/freq: leafy roughness along the normal; target: triangles
 def foliage(clumps, voxel, amp, freq, target, seed):
     rng = random.Random(seed)
-    bm = bmesh.new()
+    balls = []
     for c, r in clumps:
         # a clump is a cauliflower: a core and smaller tufts round its upper and outer side
-        balls = [(c, V(r) * 0.8)]
+        balls.append((c, V(r) * 0.8))
         for _ in range(6):
             d = V((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1) + 0.5)).normalized()
             balls.append((c + V((d.x * r[0], d.y * r[1], d.z * r[2])) * 0.62, V(r) * rng.uniform(0.38, 0.5)))
-        for bc, br in balls:
-            bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0, matrix=Matrix.Translation(bc) @ Matrix.Diagonal((*br, 1.0)))
-    me = bpy.data.meshes.new('clumps')
-    bm.to_mesh(me)
+    # one icosphere, copied scaled to each ball (adding each to one bmesh slows as it grows)
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0)
+    bm.verts.index_update()
+    ico, faces = [v.co.copy() for v in bm.verts], [[v.index for v in f.verts] for f in bm.faces]
     bm.free()
+    verts, polys = [], []
+    for bc, br in balls:
+        o = len(verts)
+        verts += [V((bc.x + p.x * br.x, bc.y + p.y * br.y, bc.z + p.z * br.z)) for p in ico]
+        polys += [[o + i for i in f] for f in faces]
+    me = bpy.data.meshes.new('clumps')
+    me.from_pydata(verts, [], polys)
     ob = link(me, 'clumps')
     rm = ob.modifiers.new('remesh', 'REMESH')
     rm.mode, rm.voxel_size, rm.adaptivity = 'VOXEL', voxel, 0.0
