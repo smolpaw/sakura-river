@@ -24,9 +24,9 @@ try {
       const b = H.call('birdInfo');
       if (sh.follow) {
         const [sp, i, d] = sh.follow, p = b[sp][i];
-        // the controls keep the target under 40 m: high birds are looked up at from the ground
+        // the controls keep the target under 40 m: high birds are looked down on from above, the target past them
         if (p && p[1] < 35) H.call('setView', [p[0] + d * 0.7, p[1] + d * 0.05, p[2] + d * 0.7], p);
-        else if (p) { const c = [p[0] + d * 0.7, 3, p[2] + d * 0.7], k = (38 - c[1]) / (p[1] - c[1]); H.call('setView', c, p.map((v, j) => c[j] + (v - c[j]) * k)); }
+        else if (p) { const c = [p[0] + d * 0.6, p[1] + d * 0.5, p[2] + d * 0.6], k = (38 - c[1]) / (p[1] - c[1]); H.call('setView', c, p.map((v, j) => c[j] + (v - c[j]) * k)); }
       }
       H.call('advance', 2, 1 / 60);
       return b;

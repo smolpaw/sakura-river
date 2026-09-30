@@ -50,12 +50,14 @@ function birdGeometry(sp) {
     I.push(a, c, b, b, c, d);
   }
   // tail and wings, mirrored; wing vertices are marked for the flap
+  // (the left half's triangles wound the other way, so both halves face up like their normals)
+  const tri = (m, a, b, c) => (m > 0 ? I.push(a, b, c) : I.push(a, c, b));
   for (const m of [1, -1]) {
     const root = vert(0, 0, sp.tail[0][1], [0, 1, 0], sp.top, 0);
     const t = sp.tail.map(([x, z]) => vert(x * m, 0, z, [0, 1, 0], sp.top, 0));
-    for (let k = 1; k < t.length; k++) I.push(root, t[k - 1], t[k]);
+    for (let k = 1; k < t.length; k++) tri(m, root, t[k - 1], t[k]);
     const w = sp.wing.map(([x, l, tr]) => [vert(x * m, 0, l, [0, 1, 0], sp.top, 1), vert(x * m, 0, tr, [0, 1, 0], sp.top, 1)]);
-    for (let k = 1; k < w.length; k++) I.push(w[k - 1][0], w[k][0], w[k - 1][1], w[k - 1][1], w[k][0], w[k][1]);
+    for (let k = 1; k < w.length; k++) { tri(m, w[k - 1][0], w[k][0], w[k - 1][1]); tri(m, w[k - 1][1], w[k][0], w[k][1]); }
   }
   const g = new THREE.InstancedBufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
