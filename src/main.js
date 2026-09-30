@@ -31,9 +31,9 @@ import { layout } from './gen/layout.js';
 import { createSound } from './audio.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 1200, bloomRes: 1, koi: 12, rain: 24000 },
-  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 850, bloomRes: 0.75, koi: 10, rain: 14000 },
-  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 500, bloomRes: 0.5, koi: 6, rain: 7000 },
+  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000 },
+  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000 },
+  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -266,10 +266,10 @@ export async function create(canvas, opts = {}) {
   const flowers = makeFlowers(G.flowers, M.flowerMaterial());
   flowers.name = 'flowers';
   scene.add(flowers);
-  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), 90);
+  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [90, 200]);
   forest.name = 'forest';
   scene.add(forest);
-  const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), 70);
+  const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), [70]);
   cliffs.name = 'cliffs';
   scene.add(cliffs);
 

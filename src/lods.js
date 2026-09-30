@@ -1,23 +1,24 @@
-// Instanced Blender models (tools/*.py, built by tools/blender.mjs into src/models/ and inlined in the page) in two
-// levels of detail: each kind has a full model for instances within `near` metres of the camera and a lighter one
-// (`<kind>_far`) beyond, two instanced draws per kind, the instances re-sorted when the camera has moved STEP metres.
+// Instanced Blender models (tools/*.py, built by tools/blender.mjs into src/models/ and inlined in the page) in levels
+// of detail: each kind has a full model for instances within ranges[0] metres of the camera, a lighter one
+// (`<kind>_far`) beyond, and with a second range a lighter one again (`<kind>_dist`) beyond that; one instanced draw
+// per kind and level, the instances re-sorted when the camera has moved STEP metres.
 // The woods' trees (forestData in vegetation.js places them) and the gorge's rock walls (cliffData) are drawn so.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-const HYST = 5, STEP = 4;
+const HYST = 5, STEP = 4, SUFFIX = ['', '_far', '_dist'];
 
 // lists[k]: the instances of kinds[k] ({ matrix, color, n })
-export async function makeLods(url, kinds, lists, mat, near) {
+export async function makeLods(url, kinds, lists, mat, ranges) {
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url);
   gltf.scene.updateMatrixWorld(true);
   const group = new THREE.Group(), m = new THREE.Matrix4();
   const sets = lists.map((l, k) => ({
     l,
-    far: new Uint8Array(l.n),
-    lod: [kinds[k], `${kinds[k]}_far`].map((name) => {
-      const src = gltf.scene.getObjectByName(name);
+    level: new Uint8Array(l.n),
+    lod: [0, ...ranges].map((_, v) => {
+      const src = gltf.scene.getObjectByName(kinds[k] + SUFFIX[v]);
       const mesh = new THREE.InstancedMesh(src.geometry, mat, Math.max(1, l.n));
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, l.n) * 3), 3);
       mesh.frustumCulled = false; // each level's instances change; together they span the valley anyway
@@ -30,12 +31,15 @@ export async function makeLods(url, kinds, lists, mat, near) {
   group.userData.lod = (cam) => {
     if (cam.distanceToSquared(last) < STEP * STEP) return;
     last.copy(cam);
-    for (const { l, far, lod } of sets) {
-      const count = [0, 0];
+    for (const { l, level, lod } of sets) {
+      const count = lod.map(() => 0);
       for (let i = 0; i < l.n; i++) {
         const o = i * 16, d = Math.hypot(l.matrix[o + 12] - cam.x, l.matrix[o + 13] - cam.y, l.matrix[o + 14] - cam.z);
-        far[i] = far[i] ? +(d > near - HYST) : +(d > near + HYST);
-        const L = lod[far[i]], j = count[far[i]]++;
+        // the level whose range holds d, kept while d is within HYST of the old level's range
+        let v = 0;
+        while (v < ranges.length && d > ranges[v] + (v < level[i] ? -HYST : HYST)) v++;
+        level[i] = v;
+        const L = lod[v], j = count[v]++;
         m.fromArray(l.matrix, o).multiply(L.node).toArray(L.mesh.instanceMatrix.array, j * 16);
         L.mesh.instanceColor.array.set(l.color.subarray(i * 3, i * 3 + 3), j * 3);
       }

@@ -193,28 +193,30 @@ def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0
 
 
 # ---------- the kinds ----------
-def conifer(name, seed, *, w, base, n, taper, droop, size, col, target, far=False):
+def conifer(name, seed, *, w, base, n, taper, droop, size, col, target, level=0):
     """sugi / hinoki: a straight trunk under a crown of tufts, spiralling up, each tier widest at its foot."""
     rng = random.Random(seed)
     R = lambda t: w * (0.55 + 0.45 * smoothstep(0, 0.12, t)) * (1 - t) ** taper
-    if far:  # fewer, bigger tufts: a small budget keeps their tiers only if there are few of them
+    if level:  # fewer, bigger tufts: a small budget keeps their tiers only if there are few of them
         n, size = int(n * 0.4), size * 1.3
-    clumps = []
+    clumps, smin = [], (0.018, 0.035, 0.035)[level]
     for i in range(n):
         t = (i + rng.random() * 0.8) / n
         z = base + t * (0.96 - base)
         a = i * 2.399963 + rng.uniform(-0.3, 0.3)
         r = R(t)
         d = r * rng.uniform(0.35, 0.7)
-        s = max(0.018, r * size * rng.uniform(0.8, 1.15))
+        s = max(smin, r * size * rng.uniform(0.8, 1.15))
         clumps.append((V((math.cos(a) * d, math.sin(a) * d, z)), (s, s, s * droop)))
-    clumps.append((V((0, 0, 0.95)), (0.016, 0.016, 0.06)))  # the leader, reaching down into the top tier
-    crown = foliage(clumps, 0.0065, 0.005, 18, target * (0.25 if far else 1), seed)
-    bark = limbs([([V((0, 0, -0.04)), V((0, 0, base + 0.1)), V((0, 0, 0.9))], 0.024, 0.006)], 4 if far else 6)
-    return assemble(name + ('_far' if far else ''), [(crown, col)], bark, lambda p: V((0, 0, p.z - 0.5 * math.hypot(p.x, p.y))), 0.75, 0.5, 0.12)
+    # the leader, reaching down into the top tier; the lighter levels' is a solid spire, as their small tufts at the
+    # top decimate to floating shards
+    clumps.append((V((0, 0, 0.95)), (0.016, 0.016, 0.06)) if not level else (V((0, 0, 0.88)), (smin, smin, 0.1)))
+    crown = foliage(clumps, (0.0065, 0.0065, 0.014)[level], 0.005, 18, target * (1, 0.25, 0.09)[level], seed)
+    bark = limbs([([V((0, 0, -0.04)), V((0, 0, base + 0.1)), V((0, 0, 0.84))], 0.024, 0.006)], (6, 4, 3)[level])
+    return assemble(name + LEVELS[level], [(crown, col)], bark, lambda p: V((0, 0, p.z - 0.5 * math.hypot(p.x, p.y))), 0.75, 0.5, 0.12)
 
 
-def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.4, n_limbs=4, mottle=None, flat=1.0, soft=0.85, ao_min=0.4, far=False):
+def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.4, n_limbs=4, mottle=None, flat=1.0, soft=0.85, ao_min=0.4, level=0):
     """A short trunk forking into limbs that carry clumps of leaves (or blossom) round an ellipsoidal crown."""
     rng = random.Random(seed)
     clumps = []
@@ -235,7 +237,7 @@ def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.
     for _ in range(n // 5):
         p = V((rng.uniform(-0.5, 0.5) * ex, rng.uniform(-0.5, 0.5) * ex, cz + rng.uniform(-0.1, 0.35) * ez))
         clumps.append((p, (size * 0.9,) * 2 + (size * 0.9 * flat,)))
-    crown = foliage(clumps, 0.008, 0.01, 14, target * (FAR if far else 1), seed)
+    crown = foliage(clumps, VOXEL[level] * 0.008, 0.01, 14, target * CROWN[level], seed)
     # limbs: the trunk forks at `fork` into n_limbs, each carrying the clumps on its side, twigs to each clump
     top = V((rng.uniform(-0.02, 0.02), rng.uniform(-0.02, 0.02), fork))
     paths, twigs = [([V((0, 0, -0.04)), V((0.005, 0, fork * 0.5)), top], 0.03, 0.022)], []
@@ -250,13 +252,13 @@ def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.
         end = top.lerp(g, 0.6)
         paths.append((bend(top, end, 0.02, rng), 0.019, 0.011))
         for c in mine:
-            if not far and (c - end).length > 0.05 and c.z < cz + 0.15 * ez:  # twigs only where they can show, under the crown
+            if not level and (c - end).length > 0.05 and c.z < cz + 0.15 * ez:  # twigs only where they can show, under the crown
                 twigs.append(([end, end.lerp(c, 0.5) + V((0, 0, 0.02)), end.lerp(c, 0.85)], 0.009, 0.004))
-    bark = limbs(paths, 4 if far else 5, twigs)
-    return assemble(name + ('_far' if far else ''), [(crown, col)], bark, lambda p: V((0, 0, cz)), soft, low, 0.18, mottle, ao_min)
+    bark = limbs(paths, (5, 4, 3)[level], twigs)
+    return assemble(name + LEVELS[level], [(crown, col)], bark, lambda p: V((0, 0, cz)), soft, low, 0.18, mottle, ao_min)
 
 
-def pine(name, seed, *, col, target, far=False):
+def pine(name, seed, *, col, target, level=0):
     """A black pine leaning out over a drop (+x): a crooked trunk, its limbs holding thick cloud-shaped pads of
     needles in tiers, ragged at their edges and flatter underneath, as the gardeners' pines are pruned."""
     rng = random.Random(seed)
@@ -281,25 +283,28 @@ def pine(name, seed, *, col, target, far=False):
         if (src - c).length > 0.05:
             m = src.lerp(c, 0.5) + V((0, 0, rng.uniform(-0.02, 0.04)))
             paths.append(([src, m, c - V((0, 0, 0.03))], 0.014, 0.007))
-    crown = foliage(clumps, 0.006, 0.006, 30, target * (FAR if far else 1), seed)
-    bark = limbs(paths, 4 if far else 6)
+    crown = foliage(clumps, VOXEL[level] * 0.006, 0.006, 30, target * CROWN[level], seed)
+    bark = limbs(paths, (6, 4, 3)[level])
     # pads bulge from just under their own middle
     mids = [V((x, y, z - 0.08)) for x, y, z, _ in pads]
-    return assemble(name + ('_far' if far else ''), [(crown, col)], bark, lambda p: min(mids, key=lambda m: (m - p).length), 0.75, 0.35, 0.12)
+    return assemble(name + LEVELS[level], [(crown, col)], bark, lambda p: min(mids, key=lambda m: (m - p).length), 0.75, 0.35, 0.12)
 
 
-# Each kind comes in two levels: `name` for the trees near the camera and `name_far` with FAR of the crown's
-# triangles (conifers: a quarter, from fewer tufts), the twigs left out and coarser limbs (forest.js switches them by
-# distance).
-FAR = 0.2
+# Each kind comes in three levels (lods.js switches them by distance): `name` for the trees near the camera, `name_far`
+# with a fifth of the crown's triangles (conifers: a quarter, from fewer tufts), the twigs left out and coarser limbs,
+# and `name_dist` for the far hills with 6% of them (conifers: 9%) on three-sided limbs, fused on a coarser grid first
+# (VOXEL) so that so few triangles still make a clean shape instead of shards.
+LEVELS = ('', '_far', '_dist')
+CROWN = (1, 0.2, 0.06)
+VOXEL = (1, 1, 2)
 KINDS = {
-    'sugi': lambda far: conifer('sugi', 1, w=0.16, base=0.12, n=70, taper=0.85, droop=0.8, size=0.55, col=(0.045, 0.085, 0.05), target=1400, far=far),
-    'hinoki': lambda far: conifer('hinoki', 2, w=0.25, base=0.08, n=60, taper=0.7, droop=0.55, size=0.6, col=(0.06, 0.11, 0.05), target=1600, far=far),
-    'konara': lambda far: broadleaf('konara', 3, cz=0.62, ex=0.44, ez=0.36, fork=0.3, n=22, size=0.14, gap=0.75, col=(0.19, 0.3, 0.06), target=3000, far=far),
-    'kashi': lambda far: broadleaf('kashi', 4, cz=0.6, ex=0.46, ez=0.38, fork=0.26, n=30, size=0.15, gap=0.55, col=(0.07, 0.13, 0.045), target=2600, far=far),
-    'cherry': lambda far: broadleaf('cherry', 5, cz=0.6, ex=0.62, ez=0.34, fork=0.22, n=55, size=0.09, gap=0.6, col=(1.0, 0.7, 0.74), target=7000,
-                                    low=0.75, n_limbs=5, mottle=((0.6, 0.3, 0.22), 0.35), flat=0.8, soft=0.7, ao_min=0.72, far=far),  # light shade: the blossom glows (forestMaterial)
-    'pine': lambda far: pine('pine', 6, col=(0.05, 0.095, 0.045), target=5000, far=far),
+    'sugi': lambda level: conifer('sugi', 1, w=0.16, base=0.12, n=70, taper=0.85, droop=0.8, size=0.55, col=(0.045, 0.085, 0.05), target=1400, level=level),
+    'hinoki': lambda level: conifer('hinoki', 2, w=0.25, base=0.08, n=60, taper=0.7, droop=0.55, size=0.6, col=(0.06, 0.11, 0.05), target=1600, level=level),
+    'konara': lambda level: broadleaf('konara', 3, cz=0.62, ex=0.44, ez=0.36, fork=0.3, n=22, size=0.14, gap=0.75, col=(0.19, 0.3, 0.06), target=3000, level=level),
+    'kashi': lambda level: broadleaf('kashi', 4, cz=0.6, ex=0.46, ez=0.38, fork=0.26, n=30, size=0.15, gap=0.55, col=(0.07, 0.13, 0.045), target=2600, level=level),
+    'cherry': lambda level: broadleaf('cherry', 5, cz=0.6, ex=0.62, ez=0.34, fork=0.22, n=55, size=0.09, gap=0.6, col=(1.0, 0.7, 0.74), target=7000,
+                                    low=0.75, n_limbs=5, mottle=((0.6, 0.3, 0.22), 0.35), flat=0.8, soft=0.7, ao_min=0.72, level=level),  # light shade: the blossom glows (forestMaterial)
+    'pine': lambda level: pine('pine', 6, col=(0.05, 0.095, 0.045), target=5000, level=level),
 }
 
 if __name__ == '__main__':
@@ -307,8 +312,8 @@ if __name__ == '__main__':
     out = args[0]
     bpy.ops.wm.read_factory_settings(use_empty=True)
     for kind in args[1:] or KINDS:
-        for far in (False, True):
-            me = KINDS[kind](far)
+        for level in range(len(LEVELS)):
+            me = KINDS[kind](level)
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=False, export_yup=True)

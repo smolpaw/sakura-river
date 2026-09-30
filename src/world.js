@@ -74,7 +74,7 @@ export function createWorld(seed = 7) {
   const NG = makeNoise(31);
   function grove(x, z) {
     const open = smoothstep(55, 75, Math.abs(x - riverX(z)) - Math.max(0, -z) * 0.05) * smoothstep(85, 105, Math.hypot(x + 10, z - 10)) * smoothstep(8, 16, templeDist(x, z));
-    return open && open * Math.max(0.003, smoothstep(0.38, 0.46, NG.fbm2(x * 0.009, z * 0.009, 3)));
+    return open && open * Math.max(0.003, smoothstep(0.24, 0.34, NG.fbm2(x * 0.009, z * 0.009, 3)));
   }
 
   function riverInfo(x, z) {
