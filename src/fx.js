@@ -1,7 +1,7 @@
 // Node materials for the custom-shaded effects: petals (flying + fallen), pollen motes, lanterns
 import * as THREE from 'three/webgpu';
 import {
-  Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod,
+  Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod, atan, abs,
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
@@ -131,12 +131,19 @@ export function makeLanterns(d, lanternGeo) {
   mat.positionNode = pose(positionGeometry).add(hang);
   mat.normalNode = transformNormalToView(pose(normalGeometry)).normalize();
   mat.colorNode = Fn(() => {
-    // pale yellow washi, red bands at top and bottom and two across the middle, thin bamboo ribs
-    const paper = vec3(0.96, 0.9, 0.62);
-    const mid = sstep(0.05, 0.035, vv.sub(0.35).abs()).add(sstep(0.05, 0.035, vv.sub(0.65).abs()));
-    const band = sstep(0.16, 0.13, vv).add(sstep(0.84, 0.87, vv)).add(mid).min(1.0);
+    // white washi on thin bamboo ribs, a narrow red band at the top and bottom, and on the front and back a red
+    // sakura crest: five notched petals round a pale centre
+    const paper = vec3(0.95, 0.92, 0.8), red = vec3(0.62, 0.04, 0.03);
+    const band = sstep(0.1, 0.08, vv).add(sstep(0.9, 0.92, vv)).min(1.0);
     const rib = sstep(0.75, 1.0, sin(vv.mul(Math.PI * 26)).abs());
-    const col = mix(paper, vec3(0.62, 0.04, 0.03), band).mul(float(1.0).sub(rib.mul(0.3)));
+    // on the paper (metres): across from the nearer of front and back, and up from the middle
+    const th = abs(atan(positionGeometry.x, positionGeometry.z)), q = min(th, float(Math.PI).sub(th));
+    const p = vec2(q.mul(length(positionGeometry.xz)), vv.sub(0.5).mul(-0.44));
+    const rho = length(p), phi = atan(p.x, p.y); // phi from straight up; one petal points up
+    const a = mod(phi.add(Math.PI / 5), (2 * Math.PI) / 5).sub(Math.PI / 5); // from the nearest petal's middle
+    const R = pow(max(cos(a.mul(2.5)), 0.0), 0.35).mul(0.075).sub(sstep(0.14, 0.0, a.abs()).mul(0.018));
+    const crest = sstep(R, R.sub(0.004), rho).mul(sstep(0.012, 0.016, rho));
+    const col = mix(paper, red, band.add(crest).min(1.0)).mul(float(1.0).sub(rib.mul(0.3)));
     return vec4(select(part.lessThan(0.5), col, vec3(0.02, 0.018, 0.016)), 1.0);
   })();
   const lamps = new THREE.Mesh(geo, mat);

@@ -16,7 +16,7 @@ const ROPE = 2.55; // rope height on the pole above ground
 const SAG = 0.32;
 const PER_SPAN = 3; // lanterns between two poles
 
-const BAMBOO = [0.36, 0.3, 0.12], NODE = [0.2, 0.16, 0.06], ROPE_C = [0.28, 0.2, 0.11];
+const BAMBOO = [0.5, 0.42, 0.2], NODE = [0.3, 0.24, 0.1], ROPE_C = [0.28, 0.2, 0.11];
 
 function paint(g, fn) {
   g.deleteAttribute('uv');
