@@ -1,4 +1,4 @@
-// Grass clumps, wildflowers, rocks & pebbles, the woods on the hills — all instanced
+// Grass clumps, wildflowers, rocks & pebbles, the gorge's rock walls, the woods on the hills — all instanced
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
 import { tessellate } from './stress.js';
@@ -355,12 +355,46 @@ export function makeRocks(d, mat) {
   return { group, rocksInWater: d.rocksInWater, blockers: d.blockers };
 }
 
+// ---------- the gorge's rock walls ----------
+// Where the river cuts through the temple's knoll its banks stand up to 11 m high: bedded rock walls line them,
+// overlapping, their feet in the water and their tops at the turf. The walls are Blender models (lods.js,
+// tools/cliffs.py): one unit tall and 1.2 wide, the face towards +z leaning back 0.24 per unit of depth.
+export const CLIFF_KINDS = ['cliff0', 'cliff1', 'cliff2'];
+
+export function cliffData(world) {
+  const rng = mulberry32(808);
+  const lists = CLIFF_KINDS.map(() => []);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), up = new V(0, 1, 0);
+  for (const side of [-1, 1]) {
+    for (let z = -100; z > -300;) {
+      const rx = world.riverX(z), hw = world.riverHW(z), [fx, fz] = world.flowDir(z);
+      const nx = fz * side, nz = -fx * side; // across the river, out of it on this side
+      // height from the foot (under the water, at the bed) to just under the turf above the bank, the lowest along the
+      // wall's width so it never stands up out of the turf
+      const top = (dz) => world.height(rx + nx * 1.35 * hw + fx * dz, z + nz * 1.35 * hw + fz * dz) + 0.9;
+      let h = top(0);
+      const w = clamp(h * 0.8, 4, 9) * (0.85 + rng() * 0.3);
+      h = Math.min(h, top(-w * 0.4), top(w * 0.4));
+      if (h > 3) {
+        // the foot in the water in front of the bank's straight slope (world.js), the depth scaled so the face leans as it does
+        const d = (0.74 + (rng() - 0.5) * 0.03) * hw - 0.4;
+        p.set(rx + nx * d, -1.2, z + nz * d);
+        q.setFromAxisAngle(up, Math.atan2(-nx, -nz) + (rng() - 0.5) * 0.16);
+        s.set(w / 1.2, h, 0.44 * hw / 0.24);
+        const t = 0.9 + rng() * 0.2;
+        lists[Math.floor(rng() * CLIFF_KINDS.length)].push({ m: m.compose(p, q, s).toArray(), c: [t, t * (0.98 + rng() * 0.04), t * (0.95 + rng() * 0.05)] });
+      }
+      z -= w * 0.7 * fz;
+    }
+  }
+  return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
+}
 
 // ---------- woods on the hills ----------
 // A Japanese hillside in spring: dark stands of sugi (cedar) and hinoki (cypress), broadleaf woods in fresh green and
 // evergreen oak with wild cherries (yamazakura) flowering pale pink among them, all in groves with meadow between.
 // Nothing grows on faces steep enough to show rock; black pines lean out from the cliff rims instead.
-// This places them; the kinds are Blender models, one unit tall (forest.js, tools/forest.py).
+// This places them; the kinds are Blender models, one unit tall (lods.js, tools/forest.py).
 // kinds: model names and height range (m)
 export const FOREST_KINDS = ['sugi', 'hinoki', 'konara', 'kashi', 'cherry', 'pine'];
 const SUGI = 0, HINOKI = 1, KONARA = 2, KASHI = 3, CHERRY = 4, PINE = 5;

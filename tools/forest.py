@@ -123,6 +123,26 @@ for i in range(32):  # cosine-weighted hemisphere about +z (Fibonacci spiral)
     DIRS.append(V((r * math.cos(a), r * math.sin(a), math.sqrt(max(0.0, 1 - r * r)))))
 
 
+def vertex_ao(bm, reach, same=lambda a, b: True):
+    """Ambient occlusion per vertex of a triangulated bmesh (normals updated, verts indexed): rays over the hemisphere
+    about each vertex's normal, then blurred twice over the neighbours that are `same` part (decimated meshes are
+    coarse, and raw per-vertex occlusion shows their facets)."""
+    bvh = BVHTree.FromBMesh(bm)
+    ao = []
+    for v in bm.verts:
+        n = v.normal
+        t = V((1, 0, 0)) if abs(n.x) < 0.9 else V((0, 1, 0))
+        b1 = n.cross(t).normalized()
+        b2 = n.cross(b1)
+        o = v.co + n * 0.002
+        hit = sum(1 for d in DIRS if bvh.ray_cast(o, (b1 * d.x + b2 * d.y + n * d.z), reach)[0] is not None)
+        ao.append(1 - hit / len(DIRS))
+    for _ in range(2):
+        ao = [(ao[v.index] + sum(ao[e.other_vert(v).index] for e in v.link_edges if same(e.other_vert(v), v)))
+              / (1 + sum(1 for e in v.link_edges if same(e.other_vert(v), v))) for v in bm.verts]
+    return ao
+
+
 def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0.4):
     """crowns: [(mesh, colour)]; bark: mesh or None; mid(p): the point a crown point bulges out from; ao_min: the
     crown's shade in full occlusion."""
@@ -138,21 +158,7 @@ def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0
     bmesh.ops.triangulate(bm, faces=bm.faces)
     bm.normal_update()
     bm.verts.index_update()
-    bvh = BVHTree.FromBMesh(bm)
-    # ambient occlusion: rays over the hemisphere about each vertex's normal, then blurred over the neighbours (the
-    # decimated crowns are coarse, and raw per-vertex occlusion shows their facets)
-    ao = []
-    for v in bm.verts:
-        n = v.normal
-        t = V((1, 0, 0)) if abs(n.x) < 0.9 else V((0, 1, 0))
-        b1 = n.cross(t).normalized()
-        b2 = n.cross(b1)
-        o = v.co + n * 0.002
-        hit = sum(1 for d in DIRS if bvh.ray_cast(o, (b1 * d.x + b2 * d.y + n * d.z), ao_reach)[0] is not None)
-        ao.append(1 - hit / len(DIRS))
-    for _ in range(2):
-        ao = [(ao[v.index] + sum(ao[e.other_vert(v).index] for e in v.link_edges if e.other_vert(v)[kind] == v[kind]))
-              / (1 + sum(1 for e in v.link_edges if e.other_vert(v)[kind] == v[kind])) for v in bm.verts]
+    ao = vertex_ao(bm, ao_reach, lambda a, b: a[kind] == b[kind])
     cols, nors = [], []
     for v in bm.verts:
         n, a, k = v.normal, ao[v.index], v[kind]

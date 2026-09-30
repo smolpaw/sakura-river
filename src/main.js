@@ -5,8 +5,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
-import { makeGrass, makeFlowers, makeRocks } from './vegetation.js';
-import { makeForest } from './forest.js';
+import { makeGrass, makeFlowers, makeRocks, FOREST_KINDS, CLIFF_KINDS } from './vegetation.js';
+import { makeLods } from './lods.js';
+import forestUrl from './models/forest.glb?url&inline';
+import cliffsUrl from './models/cliffs.glb?url&inline';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
@@ -130,6 +132,7 @@ export async function create(canvas, opts = {}) {
     grass: { name: 'grass', args: { count: Q.grass * (ST ? ST.grass : 1), tier: tierName } },
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
     forest: { name: 'forest', args: { count: Q.forest } },
+    cliffs: { name: 'cliffs' },
     fallen: { name: 'fallen', args: { count: Q.fallen } },
     rafts: { name: 'rafts', args: { count: Math.round(Q.fallen * 1.2), tier: tierName } },
   }, { mainThread: opts.workers === false });
@@ -263,9 +266,12 @@ export async function create(canvas, opts = {}) {
   const flowers = makeFlowers(G.flowers, M.flowerMaterial());
   flowers.name = 'flowers';
   scene.add(flowers);
-  const forest = await makeForest(G.forest, M.forestMaterial());
+  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), 90);
   forest.name = 'forest';
   scene.add(forest);
+  const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), 70);
+  cliffs.name = 'cliffs';
+  scene.add(cliffs);
 
   await yieldTask();
   // ---------- river ----------
@@ -616,6 +622,7 @@ export async function create(canvas, opts = {}) {
     sky.mesh.position.copy(camera.position);
     grass.userData.lod(camera.position, warming); // warm-up builds both grass levels
     forest.userData.lod(camera.position);
+    cliffs.userData.lod(camera.position);
 
     // sun light / shadow frustum anchored on the tree
     const sd = U.uSunDir.value;

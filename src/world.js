@@ -53,9 +53,10 @@ export function createWorld(seed = 7) {
     const pdx = x - temple.x, pdz = z - temple.z;
     g += 16 * Math.exp(-(pdx * pdx + pdz * pdz) / (2 * 38 * 38));
     g = Math.min(g, temple.y - 0.4 + 0.5 * Math.max(0, templeDist(x, z) - 1.5));
-    // river channel
+    // river channel; where it cuts through the temple's knoll the banks are rock walls (vegetation.js cliffData): the
+    // ground rises straight from the bed to the turf, a metre behind their faces
     const t = d / hw;
-    const bank = smoothstep(0.74, 1.22, t);
+    const bank = lerp(smoothstep(0.74, 1.22, t), clamp((t - 0.84) / 0.44, 0, 1), smoothstep(2.5, 4, g));
     const bed = -1.75 * (1 - 0.65 * t * t) + 0.28 * N.fbm2(x * 0.25, z * 0.25, 3);
     return lerp(bed, g, bank);
   }
