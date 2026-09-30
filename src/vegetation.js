@@ -1,7 +1,6 @@
 // Grass clumps, wildflowers, rocks & pebbles, the gorge's rock walls, the woods on the hills — all instanced
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
-import { tessellate } from './stress.js';
 
 const V = THREE.Vector3;
 
@@ -226,42 +225,9 @@ export function makeFlowers(d, mat) {
 }
 
 // ---------- rocks ----------
-function rockGeometry(seed, detail = 4) {
-  const nz = makeNoise(seed);
-  const g = new THREE.IcosahedronGeometry(1, detail);
-  const pos = g.attributes.position;
-  const v = new V();
-  const sx = 1 + nz.noise2(1, seed) * 0.35, sz = 1 + nz.noise2(seed, 3) * 0.3;
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i).normalize();
-    let d = 1 + 0.32 * nz.fbm3(v.x * 1.1, v.y * 1.1, v.z * 1.1, 4) + 0.05 * nz.fbm3(v.x * 5, v.y * 5, v.z * 5, 2);
-    // planar facets for a weathered look
-    d = Math.min(d, 1.08 - 0.12 * nz.noise3(v.x * 2.2 + 5, v.y * 2.2, v.z * 2.2));
-    v.multiplyScalar(d);
-    v.x *= 1.25 * sx; v.z *= 1.05 * sz; v.y *= 0.72;
-    if (v.y < -0.18) v.y = -0.18 + (v.y + 0.18) * 0.35;
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
-  g.computeVertexNormals();
-  const nrm = g.attributes.normal;
-  const col = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const n = nz.fbm3(x * 2.5, y * 2.5, z * 2.5, 3);
-    let r = 0.36 + n * 0.08, gg = 0.34 + n * 0.07, b = 0.32 + n * 0.07;
-    // lichen specks
-    const lich = smoothstep(0.35, 0.55, nz.noise3(x * 6, y * 6, z * 6));
-    r = lerp(r, 0.5, lich * 0.3); gg = lerp(gg, 0.5, lich * 0.3); b = lerp(b, 0.4, lich * 0.3);
-    // moss on top
-    const mossM = smoothstep(0.35, 0.8, nrm.getY(i) + 0.45 * nz.fbm3(x * 1.8 + 9, y * 1.8, z * 1.8, 3));
-    r = lerp(r, 0.12, mossM); gg = lerp(gg, 0.25, mossM); b = lerp(b, 0.05, mossM);
-    // darker underside
-    const ao = lerp(0.55, 1, smoothstep(-0.2, 0.3, y));
-    col[i * 3] = r * ao; col[i * 3 + 1] = gg * ao; col[i * 3 + 2] = b * ao;
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return g;
-}
+// Boulders along the banks and in the shallows, stones at the water's edge: Blender models (lods.js, tools/rocks.py),
+// a boulder about 2.5 × 2.1 × 1.4 round its origin at scale 1, the stone the same shape.
+export const ROCK_KINDS = ['rock0', 'rock1', 'rock2', 'rock3', 'rock4'];
 
 // rock/pebble placements; the returned rng continues into rocksData's instancing (same sequence as before)
 export function rockPlan(world, tier, treePos) {
@@ -272,7 +238,7 @@ export function rockPlan(world, tier, treePos) {
   const add = (x, z, sc, sink = 0.3, flatten = 1) => {
     const y = world.height(x, z);
     placements.push({ x, y: y - sc * sink, z, sc, flatten, v: Math.floor(rng() * variants), rot: rng() * Math.PI * 2 });
-    if (y < 0.15) rocksInWater.push({ x, z, r: sc * 1.1, top: y + sc * (0.65 - sink) }); // top: roughly, see rockGeometry
+    if (y < 0.15) rocksInWater.push({ x, z, r: sc * 1.1, top: y + sc * (0.65 - sink) }); // top: roughly, see tools/rocks.py
   };
   const zR = [-90, 60];
   // boulders along both banks
@@ -309,22 +275,14 @@ export function rockPlan(world, tier, treePos) {
   return { rng, placements, pebbles, rocksInWater };
 }
 
-export function rocksData(world, tier, treePos, triMul = 1) {
-  const variants = 5;
-  const geos = [];
-  for (let i = 0; i < variants; i++) geos.push(rockGeometry(500 + i * 17, tier === 'low' ? 3 : 4));
-  // pebbles (5-23 cm) share one coarse stone of 80 triangles instead of a boulder's 500, and cast no shadow
-  const pebbleGeo = rockGeometry(611, 1);
+export function rocksData(world, tier, treePos) {
   const { rng, placements, pebbles, rocksInWater } = rockPlan(world, tier, treePos);
   const isPebble = new Set(pebbles);
   const all = placements.concat(pebbles);
-  const byV = Array.from({ length: variants }, () => []);
+  const byV = ROCK_KINDS.map(() => []);
   all.forEach((p) => byV[p.v].push(p));
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), col = new THREE.Color();
-  const make = (n) => new THREE.InstancedMesh(undefined, undefined, n);
-  const meshes = byV.map((list) => make(list.filter((r) => !isPebble.has(r)).length)), pebbleMesh = make(pebbles.length);
-  const fill = meshes.map(() => 0);
-  let np = 0;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
+  const lists = ROCK_KINDS.map(() => ({ m: [], c: [] })), stones = { m: [], c: [] };
   // one pass in the old order, so the rng sequence (and every stone's pose and tint) stays as it was
   byV.forEach((list, vi) => list.forEach((r) => {
     p.set(r.x, r.y, r.z);
@@ -332,27 +290,11 @@ export function rocksData(world, tier, treePos, triMul = 1) {
     s.set(r.sc, r.sc * r.flatten * (0.8 + rng() * 0.4), r.sc);
     m.compose(p, q, s);
     const tint = 0.8 + rng() * 0.35;
-    col.setRGB(tint, tint * (0.97 + rng() * 0.05), tint * (0.93 + rng() * 0.08));
-    const [mesh, i] = isPebble.has(r) ? [pebbleMesh, np++] : [meshes[vi], fill[vi]++];
-    mesh.setMatrixAt(i, m); mesh.setColorAt(i, col);
+    const l = isPebble.has(r) ? stones : lists[vi];
+    l.m.push(...m.elements); l.c.push(tint, tint * (0.97 + rng() * 0.05), tint * (0.93 + rng() * 0.08));
   }));
-  const data = (mesh) => ({ matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: mesh.count });
-  const tess = (g) => (triMul > 1 ? tessellate(g, triMul) : g);
-  return { geos: geos.map(tess), variants: meshes.map(data), pebbleGeo: tess(pebbleGeo), pebbles: data(pebbleMesh), rocksInWater, blockers: placements };
-}
-
-export function makeRocks(d, mat) {
-  const group = new THREE.Group();
-  const add = (geo, v, shadow) => {
-    const mesh = new THREE.InstancedMesh(geo, mat, v.n);
-    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(v.matrix, 16);
-    mesh.instanceColor = new THREE.InstancedBufferAttribute(v.color, 3);
-    mesh.castShadow = shadow; mesh.receiveShadow = true;
-    group.add(mesh);
-  };
-  d.variants.forEach((v, vi) => add(d.geos[vi], v, true));
-  add(d.pebbleGeo, d.pebbles, false);
-  return { group, rocksInWater: d.rocksInWater, blockers: d.blockers };
+  const data = (l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 });
+  return { boulders: lists.map(data), pebbles: data(stones), rocksInWater, blockers: placements };
 }
 
 // ---------- the gorge's rock walls ----------

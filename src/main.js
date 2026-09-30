@@ -5,11 +5,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
-import { makeGrass, makeFlowers, makeRocks, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
+import { makeGrass, makeFlowers, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods } from './lods.js';
 import forestUrl from './models/forest.glb?url&inline';
 import cliffsUrl from './models/cliffs.glb?url&inline';
 import bambooUrl from './models/bamboo.glb?url&inline';
+import rocksUrl from './models/rocks.glb?url&inline';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
@@ -129,7 +130,7 @@ export async function create(canvas, opts = {}) {
     fuji: { name: 'fuji' },
     props: { name: 'props', args: { triMul } },
     lanterns: { name: 'lanterns', args: { tier: tierName } },
-    rocks: { name: 'rocks', args: { tier: tierName, triMul } },
+    rocks: { name: 'rocks', args: { tier: tierName } },
     grass: { name: 'grass', args: { count: Q.grass * (ST ? ST.grass : 1), tier: tierName } },
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
     forest: { name: 'forest', args: { count: Q.forest } },
@@ -259,9 +260,14 @@ export async function create(canvas, opts = {}) {
 
   await yieldTask();
   // ---------- ground cover ----------
-  const rocks = makeRocks(G.rocks, M.rockMaterial());
-  rocks.group.name = 'rocks';
-  scene.add(rocks.group);
+  // boulders near and far, cast shadows; the stones at the water's edge in one level, no shadow
+  const rockMat = M.rockMaterial();
+  const rocks = await makeLods(rocksUrl, ROCK_KINDS, G.rocks.boulders, rockMat, [45]);
+  const pebbles = await makeLods(rocksUrl, ['pebble'], [G.rocks.pebbles], rockMat, []);
+  rocks.traverse((o) => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+  pebbles.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
+  rocks.name = 'rocks'; pebbles.name = 'pebbles';
+  scene.add(rocks, pebbles);
   const grass = makeGrass(G.grass, M.grassMaterial());
   grass.name = 'grass';
   scene.add(grass);
@@ -628,6 +634,8 @@ export async function create(canvas, opts = {}) {
     grass.userData.lod(camera.position, warming); // warm-up builds both grass levels
     forest.userData.lod(camera.position);
     cliffs.userData.lod(camera.position);
+    rocks.userData.lod(camera.position);
+    pebbles.userData.lod(camera.position);
     bamboo.userData.lod(camera.position);
 
     // sun light / shadow frustum anchored on the tree
