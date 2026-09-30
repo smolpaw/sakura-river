@@ -78,16 +78,73 @@ export function lanternData(world, blockers, anchors) {
       const pts = [];
       for (let k = 0; k <= 10; k++) pts.push(at(k / 10));
       parts.push(paint(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.013, 5, false), () => ROPE_C));
-      const n = PER_SPAN;
+      const n = PER_SPAN, face = Math.atan2(a.z - b.z, b.x - a.x); // writing across the rope, to both banks
       for (let k = 0; k < n; k++) {
         const p = at((k + 1) / (n + 1));
         hang.push(p.x, p.y, p.z);
-        // phase, (unused), brightness, yaw
-        look.push(rng() * 6.28, 0, 0.85 + rng() * 0.3, rng() * 6.28);
+        // phase, what it says (LANTERN_TEXTS), brightness, yaw
+        look.push(rng() * 6.28, Math.floor(rng() * LANTERN_TEXTS.length), 0.85 + rng() * 0.3, face + (rng() - 0.5) * 0.5);
       }
     }
   }
   return { frame: mergeGeometries(parts), hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 };
+}
+
+// What the lanterns say, written down the paper on the front and back as on votive lanterns: a small red line on top
+// (奉納 "dedicated", 献燈 "lantern offered", a neighbourhood association) over the donor's name or the words in black
+// brush; or just the red sakura crest (null). The writing is painted into an ink atlas at start-up (paintLanternInk)
+// with the system's Japanese fonts, Mincho first; with none, every lantern carries the crest.
+export const LANTERN_TEXTS = [null, ['奉納', '御神燈'], ['献燈', '桜井酒造'], ['', '夜桜'], ['奉納', '山本商店'], ['', 'さくら祭'], ['奉納', '千本桜'], ['町内会', '祭']];
+export const INK = { cols: 4, rows: 2, w: 128, h: 256, span: 0.26, v0: 0.1, v1: 0.9 }; // a cell: `span` m across, paper v0..v1
+const FONT = '"Yu Mincho", YuMincho, "Hiragino Mincho ProN", "Noto Serif CJK JP", "Noto Serif JP", "MS Mincho", "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif';
+
+// the ink atlas: black ink in R, red in G, one cell per LANTERN_TEXTS entry (rows top-down, as the shader reads them)
+export function paintLanternInk() {
+  const W = INK.cols * INK.w, H = INK.rows * INK.h;
+  const ctx = (c) => c.getContext('2d', { willReadFrequently: true });
+  const black = ctx(new OffscreenCanvas(W, H)), red = ctx(new OffscreenCanvas(W, H));
+  // two different kanji drawn the same means no font has them (missing-glyph boxes)
+  const probe = ctx(new OffscreenCanvas(40, 40));
+  const px = (ch) => { probe.clearRect(0, 0, 40, 40); probe.font = `32px ${FONT}`; probe.fillText(ch, 2, 34); return probe.getImageData(0, 0, 40, 40).data.join(); };
+  const jp = px('桜') !== px('祭');
+  for (const c of [black, red]) { c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; }
+  LANTERN_TEXTS.forEach((t, i) => {
+    const x = (i % INK.cols + 0.5) * INK.w, y0 = Math.floor(i / INK.cols) * INK.h;
+    if (!t || !jp) {
+      // the crest: five notched petals round a pale centre
+      red.beginPath();
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2 - Math.PI / 2, r = INK.w * 0.3, c = Math.cos(a), sn = Math.sin(a), q = (d, s) => [x + (c * d - sn * s) * r, y0 + INK.h / 2 + (sn * d + c * s) * r];
+        red.moveTo(...q(0.12, 0));
+        red.bezierCurveTo(...q(0.3, -0.45), ...q(0.95, -0.5), ...q(1, -0.14));
+        red.lineTo(...q(0.84, 0)); red.lineTo(...q(1, 0.14));
+        red.bezierCurveTo(...q(0.95, 0.5), ...q(0.3, 0.45), ...q(0.12, 0));
+      }
+      red.fill();
+      red.globalCompositeOperation = 'destination-out';
+      red.beginPath(); red.arc(x, y0 + INK.h / 2, INK.w * 0.06, 0, Math.PI * 2); red.fill();
+      red.globalCompositeOperation = 'source-over';
+      return;
+    }
+    const [top, main] = t, chars = [...main];
+    let y = y0 + 16;
+    if (top) {
+      const s = Math.min(28, (INK.w - 30) / top.length);
+      red.font = `900 ${s}px ${FONT}`;
+      red.lineWidth = s * 0.08; red.strokeStyle = '#fff';
+      red.fillText(top, x, y + s / 2); red.strokeText(top, x, y + s / 2);
+      y += s + 14;
+    }
+    const s = Math.min(INK.w * 0.74, ((y0 + INK.h - 12 - y) / chars.length) * 0.96), step = s * 1.02;
+    // heavy strokes, thickened a little more, as a broad brush writes them
+    black.font = `900 ${s}px ${FONT}`;
+    black.lineWidth = s * 0.07; black.strokeStyle = '#fff'; black.lineJoin = 'round';
+    const yc = y + (y0 + INK.h - 12 - y - step * chars.length) / 2;
+    chars.forEach((ch, k) => { black.fillText(ch, x, yc + step * (k + 0.5)); black.strokeText(ch, x, yc + step * (k + 0.5)); });
+  });
+  const b = black.getImageData(0, 0, W, H).data, r = red.getImageData(0, 0, W, H).data, out = new Uint8Array(W * H * 4);
+  for (let i = 0; i < out.length; i += 4) { out[i] = b[i + 3]; out[i + 1] = r[i + 3]; out[i + 3] = 255; }
+  return { data: out, w: W, h: H };
 }
 
 // one chōchin, hung from the origin: cord, black lacquered rims, a ribbed paper body 0.44 m tall.

@@ -6,7 +6,7 @@ import { grassData, flowersData, rocksData, rockPlan, cliffData, forestData, bam
 import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.js';
 import { templeData } from '../temple.js';
 import { fallenData, raftData } from '../petals.js';
-import { lanternData, lanternGeometry } from '../lanterns.js';
+import { lanternData, lanternGeometry, paintLanternInk } from '../lanterns.js';
 import { tessellate } from '../stress.js';
 import { layout, rockAvoid, trunkAvoid, underTree, lawn, turf } from './layout.js';
 
@@ -51,7 +51,7 @@ export const JOBS = {
     const l = L();
     const trees = [l.tree, ...l.small.map((sp) => [sp.x, 0, sp.z])].map(([x, , z]) => ({ x, z, r: 1 }));
     const rocks = rockPlan(world(), tier, xz(l.tree)).placements.map((r) => ({ x: r.x, z: r.z, r: r.sc }));
-    return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world())), lantern: lanternGeometry() };
+    return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world())), lantern: lanternGeometry(), ink: paintLanternInk() };
   },
   fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L()), underTree(L())),
   rafts: ({ count, tier }) => raftData(world(), count, rockPlan(world(), tier, xz(L().tree)).rocksInWater),

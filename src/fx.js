@@ -1,12 +1,13 @@
 // Node materials for the custom-shaded effects: petals (flying + fallen), pollen motes, lanterns
 import * as THREE from 'three/webgpu';
 import {
-  Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod, atan, abs,
+  Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod, atan, abs, sign, floor, texture,
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
 import { U, sstep, applyFog, LitMaterial, lanternLight } from './tsl.js';
 import { mulberry32 } from './noise.js';
+import { INK } from './lanterns.js';
 
 // rotY(a) * rotX(b) * rotZ(c) * v, as the GLSL column-major mat3 products of the old petal shader
 const rotYXZ = (r, v) => {
@@ -130,20 +131,24 @@ export function makeLanterns(d, lanternGeo) {
   })());
   mat.positionNode = pose(positionGeometry).add(hang);
   mat.normalNode = transformNormalToView(pose(normalGeometry)).normalize();
+  // the ink atlas (lanterns.js paintLanternInk): black ink in R, red in G, one cell per text
+  const ink = new THREE.DataTexture(d.ink.data, d.ink.w, d.ink.h, THREE.RGBAFormat);
+  ink.generateMipmaps = true; ink.minFilter = THREE.LinearMipmapLinearFilter; ink.magFilter = THREE.LinearFilter; ink.anisotropy = 4;
+  ink.needsUpdate = true;
   mat.colorNode = Fn(() => {
-    // white washi on thin bamboo ribs, a narrow red band at the top and bottom, and on the front and back a red
-    // sakura crest: five notched petals round a pale centre
-    const paper = vec3(0.95, 0.92, 0.8), red = vec3(0.62, 0.04, 0.03);
+    // white washi on thin bamboo ribs, a narrow red band at the top and bottom, and on the front and back what the
+    // lantern says (look.y: its cell in the ink atlas), read the right way round from either side
+    const paper = vec3(0.95, 0.92, 0.8), red = vec3(0.62, 0.04, 0.03), black = vec3(0.03, 0.025, 0.025);
     const band = sstep(0.1, 0.08, vv).add(sstep(0.9, 0.92, vv)).min(1.0);
     const rib = sstep(0.75, 1.0, sin(vv.mul(Math.PI * 26)).abs());
-    // on the paper (metres): across from the nearer of front and back, and up from the middle
-    const th = abs(atan(positionGeometry.x, positionGeometry.z)), q = min(th, float(Math.PI).sub(th));
-    const p = vec2(q.mul(length(positionGeometry.xz)), vv.sub(0.5).mul(-0.44));
-    const rho = length(p), phi = atan(p.x, p.y); // phi from straight up; one petal points up
-    const a = mod(phi.add(Math.PI / 5), (2 * Math.PI) / 5).sub(Math.PI / 5); // from the nearest petal's middle
-    const R = pow(max(cos(a.mul(2.5)), 0.0), 0.35).mul(0.075).sub(sstep(0.14, 0.0, a.abs()).mul(0.018));
-    const crest = sstep(R, R.sub(0.004), rho).mul(sstep(0.012, 0.016, rho));
-    const col = mix(paper, red, band.add(crest).min(1.0)).mul(float(1.0).sub(rib.mul(0.3)));
+    // across the paper (metres) from the middle of the nearer of front and back, left to right as seen from outside
+    const th = atan(positionGeometry.x, positionGeometry.z);
+    const s = select(th.abs().lessThan(Math.PI / 2), th, sign(th).mul(th.abs().sub(Math.PI))).mul(length(positionGeometry.xz));
+    const cu = s.div(INK.span).add(0.5), cv = vv.sub(INK.v0).div(INK.v1 - INK.v0);
+    const inside = sstep(0.0, 0.01, cu).mul(sstep(1.0, 0.99, cu)).mul(sstep(0.0, 0.01, cv)).mul(sstep(1.0, 0.99, cv));
+    const cell = look.y;
+    const t = texture(ink, vec2(mod(cell, INK.cols).add(clamp(cu, 0.005, 0.995)).div(INK.cols), floor(cell.div(INK.cols)).add(clamp(cv, 0.005, 0.995)).div(INK.rows)));
+    const col = mix(mix(paper, red, max(band, t.g.mul(inside))), black, t.r.mul(inside)).mul(float(1.0).sub(rib.mul(0.3)));
     return vec4(select(part.lessThan(0.5), col, vec3(0.02, 0.018, 0.016)), 1.0);
   })();
   const lamps = new THREE.Mesh(geo, mat);

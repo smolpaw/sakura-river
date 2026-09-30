@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeNoise, mulberry32, clamp, lerp, smoothstep } from './noise.js';
+import { LANTERN_TEXTS } from './lanterns.js';
 
 const V = THREE.Vector3;
 
@@ -72,7 +73,8 @@ export function bridgeData(world, zc) {
   const N = 40;
   const rng = mulberry32(17);
   const parts = [], hang = [], look = [];
-  const lantern = (p) => { hang.push(p.x, p.y, p.z); look.push(rng() * 6.28, 0, 1.0 + rng() * 0.15, rng() * 6.28); };
+  // the bridge's lanterns face up and down the river, what they say as the riverside ones (LANTERN_TEXTS)
+  const lantern = (p) => { hang.push(p.x, p.y, p.z); look.push(rng() * 6.28, Math.floor(rng() * LANTERN_TEXTS.length), 1.0 + rng() * 0.15, Math.atan2(along.x, along.z) + (rng() - 0.5) * 0.5); };
   const giboshi = (t, s = 1) => {
     const cap = lathe([[0, 0], [0.1, 0], [0.1, 0.05], [0.07, 0.07], [0.12, 0.13], [0.13, 0.19], [0.09, 0.27], [0.03, 0.34], [0.012, 0.42], [0, 0.44]], 14, BRONZE);
     cap.scale(s, s, s).translate(t.x, t.y, t.z);
