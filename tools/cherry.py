@@ -256,6 +256,90 @@ def trunk(t, seed, res, target):
     return me
 
 
+def srgb(h):
+    return V([((int(h[i:i + 2], 16) / 255 + 0.055) / 1.055) ** 2.4 for i in (1, 3, 5)])
+
+
+# the flower the page draws near the camera in place of its painted card (tree.js paintFlowerAtlas; the same colours):
+# a Somei Yoshino flower in the card's frame (three.js: facing +z, about 0.42 across its petals' tips as on the card,
+# cupped towards +z): five broad petals notched at the tip, pink at the base, fading to white; the red cup at the
+# centre with its stamens, the anthers yellow. Vertex colours only.
+PETAL = [srgb('#e0708f'), srgb('#f8bfd1'), srgb('#ffe6ee'), srgb('#fff4f7')]
+CUP, FILAMENT, ANTHER = srgb('#b8325c'), srgb('#fae8ee'), srgb('#f2c14e')
+
+
+def flower():
+    rng = random.Random(5)
+    verts, faces, cols = [], [], []
+
+    def vert(p, c):  # p in the card's frame (three.js axes)
+        verts.append(bl(p))
+        cols.append(c)
+        return len(verts) - 1
+
+    cup = lambda r: 0.55 * r * r  # the petals curve up out of the cup
+    A = (0.0, 0.3, 0.62, 1.0)
+    for k in range(5):
+        th = k * math.tau / 5 + rng.uniform(-0.08, 0.08)
+        L, W = rng.uniform(0.34, 0.37), rng.uniform(0.15, 0.17)
+        lift = 0.004 * (k % 2)  # alternate petals sit a hair apart where they overlap
+        ids = []
+        for a in A:
+            row = []
+            for b in (-1.0, 0.0, 1.0):
+                # broad obovate outline, narrow at the claw; the notch: the middle of the tip falls short
+                w = W * (0.28 + 0.72 * smoothstep(0.0, 0.62, a)) * (1 - 0.3 * smoothstep(0.8, 1.0, a))
+                aa = a * (1 - (0.11 if b == 0 and a == 1.0 else 0.0))
+                r = 0.05 + L * aa
+                x, y = r, w * b
+                z = cup(r) + 0.04 * b * b * a + lift  # edges curl up a little
+                c, s = math.cos(th), math.sin(th)
+                t = aa
+                col = PETAL[0].lerp(PETAL[1], smoothstep(0.0, 0.3, t)).lerp(PETAL[2], smoothstep(0.25, 0.7, t)).lerp(PETAL[3], smoothstep(0.7, 1.0, t))
+                row.append(vert((x * c - y * s, x * s + y * c, z), col))
+            ids.append(row)
+        for i in range(len(A) - 1):
+            for j in range(2):
+                faces.append((ids[i][j], ids[i][j + 1], ids[i + 1][j + 1], ids[i + 1][j]))
+    # the cup: a shallow cone in the middle
+    rim = [vert((0.075 * math.cos(a), 0.075 * math.sin(a), 0.012), CUP * 0.85) for a in (i * math.tau / 6 for i in range(6))]
+    mid = vert((0, 0, -0.01), CUP * 0.6)
+    for i in range(6):
+        faces.append((mid, rim[i], rim[(i + 1) % 6]))
+    # stamens: thin blades out of the cup, each with its anther
+    for i in range(12):
+        a = i * math.tau / 12 + rng.uniform(-0.15, 0.15)
+        l = rng.uniform(0.12, 0.17)
+        d = V((math.cos(a), math.sin(a), 0))
+        root, tip = d * 0.03 + V((0, 0, 0.01)), d * l * 0.75 + V((0, 0, l * 0.62))
+        side = V((-d.y, d.x, 0)) * 0.006
+        f0, f1 = vert(tuple(root - side), FILAMENT), vert(tuple(root + side), FILAMENT)
+        t0 = vert(tuple(tip - side * 2.2), ANTHER)
+        t1 = vert(tuple(tip + side * 2.2), ANTHER)
+        faces.append((f0, f1, t1, t0))
+    me = bpy.data.meshes.new('flower')
+    me.from_pydata(verts, [], faces)
+    me.validate()
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    for f in bm.faces:
+        f.smooth = True
+    bm.normal_update()
+    # normals face the open side (+z in the card's frame, -y here) so the petals light like the cards
+    for f in bm.faces:
+        if f.normal.y > 0:
+            f.normal_flip()
+    bm.to_mesh(me)
+    bm.free()
+    ca = me.color_attributes.new('Color', 'FLOAT_COLOR', 'POINT')
+    for i, c in enumerate(cols):
+        ca.data[i].color = (*c, 1.0)
+    me.color_attributes.active_color = ca
+    link(me, 'flower')
+    return me
+
+
 if __name__ == '__main__':
     argv = sys.argv[sys.argv.index('--') + 1:]
     out, data = argv[0], json.load(open(argv[1]))
@@ -263,6 +347,8 @@ if __name__ == '__main__':
     for k, t in enumerate(data):
         me = trunk(t, 17 + k, 0.02 if not t['small'] else 0.03, 1500 if t['small'] else 18000)
         print(f"{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices")
+    me = flower()
+    print(f"{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices")
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=True, export_normals=True, export_extras=True,
                               export_yup=True)

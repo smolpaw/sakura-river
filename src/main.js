@@ -10,6 +10,7 @@ import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeGrass, makeFlowers, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods } from './lods.js';
+import { nearBlossoms } from './blossoms.js';
 import forestUrl from './models/forest.glb?url&inline';
 import cliffsUrl from './models/cliffs.glb?url&inline';
 import bambooUrl from './models/bamboo.glb?url&inline';
@@ -37,9 +38,9 @@ import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000 },
-  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000 },
-  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000 },
+  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
+  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
+  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -187,30 +188,35 @@ export async function create(canvas, opts = {}) {
   const blossomShadowMat = M.blossomShadowMaterial(atlas);
   const flowerGeo = ST ? tessellate(buildFlowerGeometry(), ST.triMul) : buildFlowerGeometry();
 
-  // the trunks and main branches, modelled in Blender (tools/cherry.py): unpacked to the twigs' layout (texture
-  // coordinates times its UV_SCALE, the wind's flexibility from the colours' alpha) and merged with them
-  const trunks = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(cherryUrl);
-  trunks.scene.updateMatrixWorld(true);
-  function withTrunk(d, k) {
-    const src = trunks.scene.getObjectByName(`trunk${k}`), g = src.geometry, n = g.attributes.position.count;
-    if (src.userData.sig !== d.sig) console.warn(`src/models/cherry.glb was built for other branches (tree ${k}): run node tools/blender.mjs cherry`);
-    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3), F = new Float32Array(n);
+  // the trunks and main branches and the flower drawn near the camera, modelled in Blender (tools/cherry.py),
+  // unpacked from the quantized glTF to plain floats in the tree's frame
+  const cherry = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(cherryUrl);
+  cherry.scene.updateMatrixWorld(true);
+  function unpacked(src) {
+    const g = src.geometry, n = g.attributes.position.count, t = new THREE.BufferGeometry();
+    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3);
     const v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(src.matrixWorld);
-    const { position, normal, uv, color } = g.attributes;
+    const { position, normal, color } = g.attributes;
     for (let i = 0; i < n; i++) {
       v.fromBufferAttribute(position, i).applyMatrix4(src.matrixWorld).toArray(P, i * 3);
       v.fromBufferAttribute(normal, i).applyMatrix3(nm).normalize().toArray(N, i * 3);
-      UV[i * 2] = uv.getX(i) * 16; UV[i * 2 + 1] = uv.getY(i) * 16;
       C[i * 3] = color.getX(i); C[i * 3 + 1] = color.getY(i); C[i * 3 + 2] = color.getZ(i);
-      F[i] = color.getW(i) * 2;
     }
-    const t = new THREE.BufferGeometry();
     t.setAttribute('position', new THREE.BufferAttribute(P, 3));
     t.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-    t.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
-    t.setAttribute('aFlex', new THREE.BufferAttribute(F, 1));
     t.setAttribute('color', new THREE.BufferAttribute(C, 3));
     t.setIndex(Array.from(g.index.array));
+    return t;
+  }
+  // a trunk merged with its tree's twigs, in their layout: texture coordinates times cherry.py's UV_SCALE, the
+  // wind's flexibility from the colours' alpha
+  function withTrunk(d, k) {
+    const src = cherry.scene.getObjectByName(`trunk${k}`), t = unpacked(src), { uv, color } = src.geometry.attributes, n = uv.count;
+    if (src.userData.sig !== d.sig) console.warn(`src/models/cherry.glb was built for other branches (tree ${k}): run node tools/blender.mjs cherry`);
+    const UV = new Float32Array(n * 2), F = new Float32Array(n);
+    for (let i = 0; i < n; i++) { UV[i * 2] = uv.getX(i) * 16; UV[i * 2 + 1] = uv.getY(i) * 16; F[i] = color.getW(i) * 2; }
+    t.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
+    t.setAttribute('aFlex', new THREE.BufferAttribute(F, 1));
     const merged = mergeGeometries([t, d.bark]);
     merged.computeBoundingSphere();
     return merged;
@@ -236,8 +242,9 @@ export async function create(canvas, opts = {}) {
     mesh.receiveShadow = castShadow;
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
+    let pre = null;
     if (blossomPrepass) {
-      const pre = new THREE.InstancedMesh(geo, blossomDepthMat, d.n);
+      pre = new THREE.InstancedMesh(geo, blossomDepthMat, d.n);
       pre.name = 'blossomDepth';
       pre.instanceMatrix = mesh.instanceMatrix;
       pre.boundingSphere = mesh.boundingSphere;
@@ -245,21 +252,26 @@ export async function create(canvas, opts = {}) {
       group.add(pre);
     }
     if (castShadow) {
-      // cast through a shadow-only proxy on layer 2 (see blossomShadowMaterial)
-      const proxy = new THREE.InstancedMesh(geo, blossomShadowMat, d.n);
-      proxy.instanceMatrix = mesh.instanceMatrix;
+      // cast through a shadow-only proxy on layer 2 (see blossomShadowMaterial), every flower: the cards' own
+      // buffers give the near ones up to the modelled flower (src/blossoms.js)
+      const pg = flowerGeo.clone(), pb = new THREE.InstancedInterleavedBuffer(d.attrs.slice(), 6);
+      pg.setAttribute('aFlex', new THREE.InterleavedBufferAttribute(pb, 1, 0));
+      pg.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(pb, 2, 1));
+      const proxy = new THREE.InstancedMesh(pg, blossomShadowMat, d.n);
+      proxy.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix.slice(), 16);
       proxy.boundingSphere = mesh.boundingSphere;
       proxy.castShadow = true;
       proxy.layers.set(2);
       group.add(proxy);
     }
-    return { group, data: d, blossoms: mesh };
+    return { group, data: d, blossoms: mesh, pre };
   }
 
   G.treeMain[0].bark = withTrunk(G.treeMain[0], 0);
   const main = buildTreeObject(G.treeMain[0], treePos, true);
   main.group.name = 'tree';
   scene.add(main.group);
+  const nearFlowers = Q.near ? nearBlossoms(main, unpacked(cherry.scene.getObjectByName('flower')), M.blossomModelMaterial(), Q.near) : null;
   const smallTrees = [];
   const smallData = [...G.treesA, ...G.treesB];
   Lay.small.forEach((sp, k) => {
@@ -672,6 +684,7 @@ export async function create(canvas, opts = {}) {
     rocks.userData.lod(camera.position);
     pebbles.userData.lod(camera.position);
     bamboo.userData.lod(camera.position);
+    if (nearFlowers) nearFlowers.update(camera.position, warming);
 
     // sun light / shadow frustum anchored on the tree
     const sd = U.uSunDir.value;

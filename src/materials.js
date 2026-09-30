@@ -49,22 +49,33 @@ export function barkMaterial(map, bumpMap) {
 
 const flowerUV = () => uv().mul(0.5).add(attribute('aAtlas', 'vec2'));
 
-export function blossomMaterial(atlas, alphaToCoverage) {
-  const canopyNormal = normalize(mix(normalize(normalLocal), attribute('aCanopyN', 'vec3'), 0.6));
+// a flower's light: the sun through the petals, and the lanterns below lighting them from underneath (and through)
+const blossomLight = (out) => Fn(() => {
+  const vdirB = normalize(wp.sub(cameraPosition));
+  const backB = pow(max(dot(vdirB, U.uSunDir), 0.0), 2.5);
+  const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
+  const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(backB.mul(1.2).add(0.1)));
+  return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1)))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(1.6));
+})();
+
+// lit as the crown: the flower's own normal bent towards the crown's outward one (aCanopyN) by `bend`
+const blossomLit = (bend, params) => {
+  const canopyNormal = normalize(mix(normalize(normalLocal), attribute('aCanopyN', 'vec3'), bend));
   return new LitMaterial({
-    colorNode: texture(atlas, flowerUV()),
-    alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.72, metalness: 0, alphaToCoverage,
+    side: THREE.DoubleSide, roughness: 0.72, metalness: 0, ...params,
     positionNode: windPosition(attribute('aFlex', 'float'), null, canopyNormal), receivedShadowPositionNode: windShadowPosition(),
     // back faces flip like any double-sided normal (the old 'noFlip' patch never matched the unexpanded chunk)
     normalNode: transformNormalToView(canopyNormal).toVarying('vCanopyNormal').normalize().mul(faceDirection),
-  }, (out) => Fn(() => {
-    const vdirB = normalize(wp.sub(cameraPosition));
-    const backB = pow(max(dot(vdirB, U.uSunDir), 0.0), 2.5);
-    const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-    const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(backB.mul(1.2).add(0.1)));
-    // the lanterns below light the petals from underneath (and through them)
-    return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1)))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(1.6));
-  })());
+  }, blossomLight);
+};
+
+export function blossomMaterial(atlas, alphaToCoverage) {
+  return blossomLit(0.6, { colorNode: texture(atlas, flowerUV()), alphaTest: 0.4, alphaToCoverage });
+}
+
+// the modelled flower drawn near the camera (src/blossoms.js): its own vertex colours, its shape in the light
+export function blossomModelMaterial() {
+  return blossomLit(0.4, { vertexColors: true });
 }
 
 // depth prepass for the flowers: the canopy has heavy overdraw, so its depth goes down first with only the

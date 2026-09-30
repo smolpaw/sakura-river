@@ -1,0 +1,1608 @@
+{
+ "date": "2026-09-30T18:22:11.206Z",
+ "workload": "hero",
+ "backend": "webgl",
+ "angle": "default",
+ "chromium": "Chrome/150.0.7871.128",
+ "flags": [
+  "--disable-frame-rate-limit",
+  "--disable-gpu-vsync",
+  "--disable-background-timer-throttling",
+  "--disable-renderer-backgrounding",
+  "--disable-backgrounding-occluded-windows",
+  "--force-device-scale-factor=2",
+  "--window-size=1280,800",
+  "--enable-webgpu-developer-features",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--disable-extensions"
+ ],
+ "env": {
+  "dpr": 2,
+  "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  "crossOriginIsolated": true,
+  "webgl": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL ES 3.2)",
+  "webglTimer": true,
+  "webgpu": {
+   "vendor": "nvidia",
+   "architecture": "turing",
+   "description": "NVIDIA GeForce RTX 2060",
+   "device": "0x1f08",
+   "features": [
+    "depth32float-stencil8",
+    "rg11b10ufloat-renderable",
+    "bgra8unorm-storage",
+    "texture-formats-tier1",
+    "texture-compression-bc",
+    "dual-source-blending",
+    "core-features-and-limits",
+    "float32-filterable",
+    "indirect-first-instance",
+    "float32-blendable",
+    "depth-clip-control",
+    "texture-compression-bc-sliced-3d",
+    "clip-distances",
+    "texture-formats-tier2",
+    "timestamp-query",
+    "primitive-index",
+    "texture-component-swizzle",
+    "subgroups"
+   ]
+  }
+ },
+ "runsPerArm": 4,
+ "frames": 300,
+ "warmup": 120,
+ "clockTolerance": 0.05,
+ "clockLock": false,
+ "clockAtStart": {
+  "gr": 705,
+  "mem": 5000,
+  "pstate": "P3",
+  "reasons": 1,
+  "temp": 71,
+  "power": 40.66,
+  "powerLimit": 170
+ },
+ "idle": {
+  "procs": [
+   "Hyprland",
+   "Xwayland",
+   "/usr/bin/walker",
+   "/usr/bin/swayosd-server",
+   "...rack-uuid=3190708988185955192",
+   "/app/bin/../bin/plex-bin",
+   "/usr/lib/zed/zed-editor",
+   "/usr/bin/ghostty",
+   "/usr/bin/nautilus"
+  ],
+  "absorbed": []
+ },
+ "arms": {
+  "A": {
+   "label": "base",
+   "build": {
+    "label": "base",
+    "ref": "HEAD",
+    "sha": "550d7409249198471ae9d0e7f1589246469e93a3",
+    "dirty": false,
+    "three": "0.186.1",
+    "builtAt": "2026-09-30T18:13:07.142Z",
+    "bytes": 2632909
+   }
+  },
+  "B": {
+   "label": "crown",
+   "build": {
+    "label": "crown",
+    "ref": "WORKTREE",
+    "sha": "550d7409249198471ae9d0e7f1589246469e93a3",
+    "dirty": true,
+    "three": "0.186.1",
+    "builtAt": "2026-09-30T18:13:07.723Z",
+    "bytes": 2632549
+   }
+  }
+ },
+ "order": [
+  "A1",
+  "B0",
+  "A3",
+  "B3",
+  "A2",
+  "B1",
+  "A0",
+  "B2"
+ ],
+ "geomeanRatio": {
+  "gpu": 1.0300102426761635,
+  "cpu": 0.9605642138659156
+ },
+ "views": {
+  "hero": {
+   "gpuRatio": {
+    "ratio": 1.0170727093151435,
+    "lo": 0.966398177656828,
+    "hi": 1.0377284102249635
+   },
+   "gpuCyclesRatio": {
+    "ratio": 1.0091188943411673,
+    "lo": 0.9549451267762732,
+    "hi": 1.0279034968335992
+   },
+   "cpuRatio": {
+    "ratio": 0.9745145630905557,
+    "lo": 0.8990077158541743,
+    "hi": 1.0767691403578876
+   },
+   "A": {
+    "gpu": {
+     "median": 12.85704,
+     "runMedians": [
+      12.664048000000001,
+      12.816160000000002,
+      12.925392000000002,
+      12.931536000000001
+     ],
+     "bimodality": 0.5051548684653487
+    },
+    "cpu": {
+     "median": 5.152499999850988,
+     "min": 2.730000000447035,
+     "runMedians": [
+      5.112500000745058,
+      5.1724999994039536,
+      5.015000002458692,
+      5.299999998882413
+     ],
+     "bimodality": 0.46970119230958035
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 13.223824,
+     "runMedians": [
+      13.080288000000007,
+      13.162575999999998,
+      12.707679999999998,
+      13.263056000000002
+     ],
+     "bimodality": 0.5200136143193403
+    },
+    "cpu": {
+     "median": 5.170000001788139,
+     "min": 2.7149999998509884,
+     "runMedians": [
+      5.092499999329448,
+      5.297500001266599,
+      4.512499999254942,
+      5.172500001266599
+     ],
+     "bimodality": 0.8829090558698757
+    }
+   },
+   "labelsA": {
+    "other": 0.0016640000000000001,
+    "grade": 1.540544,
+    "output": 0.460816,
+    "scene": 8.014607999999999,
+    "shafts": 0.491232,
+    "bloom": 0.49427200000000004,
+    "shadow": 0.360368,
+    "reflection": 1.357824
+   },
+   "labelsB": {
+    "other": 0.0016,
+    "grade": 1.553008,
+    "output": 0.464016,
+    "scene": 8.261071999999999,
+    "shafts": 0.497088,
+    "bloom": 0.5000479999999999,
+    "shadow": 0.421888,
+    "reflection": 1.445888
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 204,
+     "triangles": 6052184,
+     "passes": 19,
+     "programs": 282,
+     "rtMemMB": 813.9083251953125,
+     "bandwidthMB": 750.6270751953125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 1016064,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 12192768
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 204,
+     "triangles": 6515580,
+     "passes": 19,
+     "programs": 282,
+     "rtMemMB": 813.9083251953125,
+     "bandwidthMB": 750.6270751953125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 1016064,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 12192768
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  },
+  "cine250": {
+   "gpuRatio": {
+    "ratio": 1.0411989638171637,
+    "lo": 1.0138494200133652,
+    "hi": 1.068662342802394
+   },
+   "gpuCyclesRatio": {
+    "ratio": 1.0390013359172177,
+    "lo": 1.0098781764023597,
+    "hi": 1.0605434617875802
+   },
+   "cpuRatio": {
+    "ratio": 0.9149271846552532,
+    "lo": 0.830593750039184,
+    "hi": 0.9752541674527072
+   },
+   "A": {
+    "gpu": {
+     "median": 11.993680000000001,
+     "runMedians": [
+      11.849856000000003,
+      11.948464000000001,
+      12.015344000000002,
+      12.054336000000003
+     ],
+     "bimodality": 0.5543732383111472
+    },
+    "cpu": {
+     "median": 5.1474999990314245,
+     "min": 2.6099999994039536,
+     "runMedians": [
+      5.294999998062849,
+      5.04249999858439,
+      5.189999999478459,
+      5.072499999776483
+     ],
+     "bimodality": 0.4961952278235464
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 12.368752000000004,
+     "runMedians": [
+      12.253472000000002,
+      12.31064,
+      12.823392000000004,
+      12.452608
+     ],
+     "bimodality": 0.5126630586708102
+    },
+    "cpu": {
+     "median": 4.544999999925494,
+     "min": 2.6799999997019768,
+     "runMedians": [
+      5.030000001192093,
+      4.832499999552965,
+      4.53999999910593,
+      4.445000000298023
+     ],
+     "bimodality": 0.4478818275045726
+    }
+   },
+   "labelsA": {
+    "other": 0.001696,
+    "grade": 1.550464,
+    "output": 0.46355199999999996,
+    "scene": 7.336399999999999,
+    "shafts": 0.47105600000000003,
+    "bloom": 0.50032,
+    "shadow": 0.363904,
+    "reflection": 1.18576
+   },
+   "labelsB": {
+    "other": 0.001696,
+    "grade": 1.558128,
+    "output": 0.466064,
+    "scene": 7.749936,
+    "shafts": 0.47542399999999996,
+    "bloom": 0.5036959999999999,
+    "shadow": 0.423616,
+    "reflection": 1.277904
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 189,
+     "triangles": 5881572,
+     "passes": 19,
+     "programs": 289,
+     "rtMemMB": 813.9083251953125,
+     "bandwidthMB": 750.6270751953125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 1016064,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 12192768
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 189,
+     "triangles": 6370696,
+     "passes": 19,
+     "programs": 289,
+     "rtMemMB": 813.9083251953125,
+     "bandwidthMB": 750.6270751953125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 1016064,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 12192768
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  },
+  "cine625": {
+   "gpuRatio": {
+    "ratio": 1.031903063806806,
+    "lo": 1.0063679895727358,
+    "hi": 1.0518577789212393
+   },
+   "gpuCyclesRatio": {
+    "ratio": 1.027757195691983,
+    "lo": 1.0050768148545333,
+    "hi": 1.0427458449063327
+   },
+   "cpuRatio": {
+    "ratio": 0.9940411043760168,
+    "lo": 0.9071061970109673,
+    "hi": 1.1250245533100673
+   },
+   "A": {
+    "gpu": {
+     "median": 11.759375999999998,
+     "runMedians": [
+      11.609872,
+      11.740928,
+      11.984784000000005,
+      11.829791999999998
+     ],
+     "bimodality": 0.5026233587051941
+    },
+    "cpu": {
+     "median": 5.127499999478459,
+     "min": 2.935000002384186,
+     "runMedians": [
+      4.96000000089407,
+      5.3900000005960464,
+      4.794999999925494,
+      5.412499999627471
+     ],
+     "bimodality": 0.4762972930084982
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 12.096896000000005,
+     "runMedians": [
+      11.997359999999997,
+      12.079648000000002,
+      12.330335999999997,
+      12.262752000000003
+     ],
+     "bimodality": 0.5072724613437221
+    },
+    "cpu": {
+     "median": 5.185000002384186,
+     "min": 3.1799999997019768,
+     "runMedians": [
+      5.175000000745058,
+      5.107499999925494,
+      4.897500002756715,
+      5.255000000819564
+     ],
+     "bimodality": 0.47966822205617293
+    }
+   },
+   "labelsA": {
+    "other": 0.001664,
+    "grade": 1.557264,
+    "output": 0.46795200000000003,
+    "scene": 6.75408,
+    "shafts": 0.5907519999999999,
+    "bloom": 0.508816,
+    "shadow": 0.362464,
+    "reflection": 1.39344
+   },
+   "labelsB": {
+    "other": 0.00168,
+    "grade": 1.5682079999999998,
+    "output": 0.472688,
+    "scene": 6.978,
+    "shafts": 0.59744,
+    "bloom": 0.5118560000000001,
+    "shadow": 0.424784,
+    "reflection": 1.4810720000000002
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 202,
+     "triangles": 6024506,
+     "passes": 19,
+     "programs": 297,
+     "rtMemMB": 813.9083251953125,
+     "bandwidthMB": 750.6270751953125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 1016064,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 12192768
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 202,
+     "triangles": 6487902,
+     "passes": 19,
+     "programs": 297,
+     "rtMemMB": 813.9083251953125,
+     "bandwidthMB": 750.6270751953125,
+     "renderTargets": [
+      {
+       "px": 8294400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 99532800
+      },
+      {
+       "px": 8294400,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 464486400
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 1016064,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 12192768
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      }
+     ]
+    }
+   }
+  }
+ },
+ "runs": [
+  {
+   "arm": "A",
+   "i": 1,
+   "contended": null,
+   "createMs": 5508.009999997914,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 321,
+    "median": 1890,
+    "min": 405,
+    "p10": 630,
+    "p90": 1920,
+    "mean": 1618.271028037383,
+    "bimodality": 0.8796371757401513
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1905,
+     "n": 120,
+     "gpuMedian": 12.664048000000001,
+     "cpuMedian": 5.112500000745058,
+     "cpuTotalMedian": 11.64500000141561
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 11.849856000000003,
+     "cpuMedian": 5.294999998062849,
+     "cpuTotalMedian": 10.777500001713634
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 11.609872,
+     "cpuMedian": 4.96000000089407,
+     "cpuTotalMedian": 10.205000000074506
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 0,
+   "contended": null,
+   "createMs": 8675.900000002235,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 350,
+    "median": 1890,
+    "min": 405,
+    "p10": 600,
+    "p90": 1905,
+    "mean": 1585.7142857142858,
+    "bimodality": 0.9207821474858588
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 13.080288000000007,
+     "cpuMedian": 5.092499999329448,
+     "cpuTotalMedian": 11.995000001043081
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 12.253472000000002,
+     "cpuMedian": 5.030000001192093,
+     "cpuTotalMedian": 10.970000000670552
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 11.997359999999997,
+     "cpuMedian": 5.175000000745058,
+     "cpuTotalMedian": 10.894999999552965
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 3,
+   "contended": null,
+   "createMs": 5262.050000000745,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 325,
+    "median": 1875,
+    "min": 405,
+    "p10": 690,
+    "p90": 1905,
+    "mean": 1640.3076923076924,
+    "bimodality": 0.9250200048268384
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 12.816160000000002,
+     "cpuMedian": 5.1724999994039536,
+     "cpuTotalMedian": 11.830000000074506
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 11.948464000000001,
+     "cpuMedian": 5.04249999858439,
+     "cpuTotalMedian": 10.800000000745058
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 11.740928,
+     "cpuMedian": 5.3900000005960464,
+     "cpuTotalMedian": 10.619999999180436
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 3,
+   "contended": null,
+   "createMs": 5592.849999997765,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 329,
+    "median": 1875,
+    "min": 405,
+    "p10": 645,
+    "p90": 1905,
+    "mean": 1635.501519756839,
+    "bimodality": 0.8922849466421116
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 13.162575999999998,
+     "cpuMedian": 5.297500001266599,
+     "cpuTotalMedian": 11.992499997839332
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 12.31064,
+     "cpuMedian": 4.832499999552965,
+     "cpuTotalMedian": 11.24750000052154
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 12.079648000000002,
+     "cpuMedian": 5.107499999925494,
+     "cpuTotalMedian": 10.907500000670552
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 2,
+   "contended": null,
+   "createMs": 3539.945000000298,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 318,
+    "median": 1860,
+    "min": 495,
+    "p10": 885,
+    "p90": 1890,
+    "mean": 1682.0754716981132,
+    "bimodality": 0.9407285062656866
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 12.925392000000002,
+     "cpuMedian": 5.015000002458692,
+     "cpuTotalMedian": 12.067500000819564
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 12.015344000000002,
+     "cpuMedian": 5.189999999478459,
+     "cpuTotalMedian": 11.057499999180436
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1845,
+     "n": 120,
+     "gpuMedian": 11.984784000000005,
+     "cpuMedian": 4.794999999925494,
+     "cpuTotalMedian": 10.987499998882413
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 1,
+   "contended": null,
+   "createMs": 3467.495000001043,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 305,
+    "median": 1845,
+    "min": 405,
+    "p10": 645,
+    "p90": 1890,
+    "mean": 1661.360655737705,
+    "bimodality": 0.9390085274351823
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1845,
+     "n": 120,
+     "gpuMedian": 12.707679999999998,
+     "cpuMedian": 4.512499999254942,
+     "cpuTotalMedian": 4.2900000009685755
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1845,
+     "n": 120,
+     "gpuMedian": 12.823392000000004,
+     "cpuMedian": 4.53999999910593,
+     "cpuTotalMedian": 4.569999998435378
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1845,
+     "n": 120,
+     "gpuMedian": 12.330335999999997,
+     "cpuMedian": 4.897500002756715,
+     "cpuTotalMedian": 11.212500002235174
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 0,
+   "contended": null,
+   "createMs": 6973.509999997914,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 337,
+    "median": 1860,
+    "min": 405,
+    "p10": 510,
+    "p90": 1890,
+    "mean": 1589.5103857566767,
+    "bimodality": 0.9205526805520078
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 12.931536000000001,
+     "cpuMedian": 5.299999998882413,
+     "cpuTotalMedian": 11.83500000089407
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 12.054336000000003,
+     "cpuMedian": 5.072499999776483,
+     "cpuTotalMedian": 11.082499999552965
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1845,
+     "n": 120,
+     "gpuMedian": 11.829791999999998,
+     "cpuMedian": 5.412499999627471,
+     "cpuTotalMedian": 10.629999998956919
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 2,
+   "contended": null,
+   "createMs": 5412.760000001639,
+   "canvas": [
+    3840,
+    2160
+   ],
+   "backend": "webgl",
+   "contaminated": false,
+   "clocks": {
+    "n": 332,
+    "median": 1860,
+    "min": 405,
+    "p10": 600,
+    "p90": 1890,
+    "mean": 1601.7921686746988,
+    "bimodality": 0.9217152333003488
+   },
+   "logs": [
+    "[warn] THREE.TSL: \".toInspector()\" is only available with WebGPU. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+   ],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 13.263056000000002,
+     "cpuMedian": 5.172500001266599,
+     "cpuTotalMedian": 12.39750000089407
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 12.452608,
+     "cpuMedian": 4.445000000298023,
+     "cpuTotalMedian": 11.257500000298023
+    },
+    "cine625": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 54,
+      "noGpu": 0,
+      "noClock": 0
+     },
+     "grMedian": 1830,
+     "n": 120,
+     "gpuMedian": 12.262752000000003,
+     "cpuMedian": 5.255000000819564,
+     "cpuTotalMedian": 10.6875
+    }
+   }
+  }
+ ]
+}
