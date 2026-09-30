@@ -31,6 +31,10 @@ export function terrainMaterial() {
   })());
 }
 
+// light thrown back by the sunlit ground onto faces turned sideways or down, at full strength once the sun is a little
+// above the horizon: a wall in shade stays warm grey rather than going the blue of the sky light alone
+const groundBounce = () => U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
+
 export function barkMaterial(map, bumpMap) {
   return new LitMaterial({
     map, bumpMap, bumpScale: 0.5, vertexColors: true, roughness: 0.78, metalness: 0, color: new THREE.Color(1.9, 1.75, 1.75),
@@ -39,7 +43,7 @@ export function barkMaterial(map, bumpMap) {
     const vvB = viewDir();
     const rimB = pow(max(float(1.0).sub(max(dot(normalView, normalize(cameraViewMatrix.mul(vec4(vvB, 0.0)).xyz)), 0.0)), 0.0), 3.0);
     const o = out.add(U.uSunColor.mul(U.uSunVis).mul(rimB).mul(pow(max(dot(vvB.negate(), U.uSunDir), 0.0), 2.0)).mul(0.35).mul(diffuseColor.rgb).mul(4.0));
-    return o.add(diffuseColor.rgb.mul(U.uSkyAmb).mul(0.15)).add(diffuseColor.rgb.mul(lanternLight(wp)));
+    return o.add(diffuseColor.rgb.mul(U.uSkyAmb.mul(0.15).add(groundBounce()))).add(diffuseColor.rgb.mul(lanternLight(wp)));
   })());
 }
 
@@ -107,10 +111,6 @@ const sin01 = (x) => x.sin().mul(0.5).add(0.5);
 export function flowerMaterial() {
   return new LitMaterial({ roughness: 0.7, side: THREE.DoubleSide, positionNode: windPosition(attribute('aFlex', 'float')), receivedShadowPositionNode: windShadowPosition() });
 }
-
-// light thrown back by the sunlit ground onto faces turned sideways or down, at full strength once the sun is a little
-// above the horizon: a wall in shade stays warm grey rather than going the blue of the sky light alone
-const groundBounce = () => U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
 
 export function rockMaterial() {
   const wet = sstep(0.28, -0.05, wp.y);

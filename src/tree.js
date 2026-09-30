@@ -48,14 +48,16 @@ export function growTree(seed, cfg, groundAt = () => 0) {
   function grow(start, dir, length, radius, depth, pathLen) {
     const n = depth < 2 ? 6 : 4;
     const step = length / n;
-    const r1 = radius * (depth === D ? 0.28 : 0.62);
+    const r1 = radius * (depth === D ? 0.28 : depth === 0 ? 0.8 : 0.66);
     const wob = depth === 0 ? 0.12 : 0.2;
     const pts = [start.clone()], rad = [radius], flex = [pathLen], dirs = [dir.clone()];
     let p = start.clone();
-    const d = dir.clone();
+    const d = dir.clone(), bend = new V();
     for (let i = 1; i <= n; i++) {
       const t = i / n;
-      d.x += rr(-wob, wob); d.z += rr(-wob, wob); d.y += rr(-0.08, 0.08);
+      // the turn carries on from one step to the next: branches wind in curves rather than kinking at each step
+      bend.x = bend.x * 0.55 + rr(-wob, wob); bend.z = bend.z * 0.55 + rr(-wob, wob);
+      d.x += bend.x; d.z += bend.z; d.y += rr(-0.08, 0.08);
       d.y += depth === 0 ? 0.05 : depth <= 2 ? 0.022 : -0.05 * (depth - 2) * t; // limbs rise, twigs droop
       if (depth > 0 && p.y < cfg.minY && d.y < 0.2) d.y += 0.25; // no twig trails on the grass
       d.normalize();
@@ -97,7 +99,7 @@ export function growTree(seed, cfg, groundAt = () => 0) {
         const az = az0 + (c / kids) * TAU + rr(-0.3, 0.3), pol = rr(0.92, 1.22);
         cd = new V(Math.sin(pol) * Math.cos(az), Math.cos(pol), Math.sin(pol) * Math.sin(az));
         clen = (length - 0.5) * rr(1.1, 1.35);
-        crad = s.r * rr(0.58, 0.72);
+        crad = s.r * rr(0.66, 0.78);
       } else {
         const lead = c === 0;
         s = at(lead ? 1 : rr(0.4, 0.88));
@@ -220,7 +222,10 @@ export function buildBarkGeometry(tree, groundAt = () => 0) {
         if (br.depth <= 1 && r > 0.06) {
           r *= 1 + 0.07 * nz.noise2(ca * 1.5 + s * 0.8, sa * 1.5 + br.depth * 9) + 0.025 * Math.sin(a * 9 + s * 0.6);
         }
+        // a collar where a branch leaves its parent, and the trunk swelling where the limbs fork from it
+        if (br.depth > 0) r *= 1 + 0.45 * Math.exp(-s / (r0 * 2.5));
         if (br.depth === 0) {
+          r *= 1 + 0.22 * smoothstep(0.6, 1, i / (n - 1));
           const fl = Math.exp(-Math.max(0, hg + 0.3) * 1.9);
           r *= 1 + 0.85 * fl * (0.7 + 0.3 * Math.pow(0.5 + 0.5 * Math.sin(a * 5 + 1.3), 2));
         }
@@ -231,7 +236,7 @@ export function buildBarkGeometry(tree, groundAt = () => 0) {
         F.push(br.depth < 0 ? 0 : flexOf(flex[i]));
         // bark AO + moss near ground
         const q = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y, (p.z - center.z) / ext.z).length();
-        let ao = lerp(0.55, 1.0, smoothstep(0.2, 1.05, q));
+        let ao = lerp(0.7, 1.0, smoothstep(0.2, 1.05, q));
         ao *= lerp(0.7, 1.0, smoothstep(-0.2, 1.2, hg));
         const moss = (br.depth <= 0 ? 1 : 0) * smoothstep(1.4, 0.0, hg) * clamp(0.4 + tmpN.y * 0.4 + 0.5 * nz.noise2(a * 1.3, s * 1.5), 0, 1);
         const cr = lerp(1, 0.62, moss) * ao, cg = lerp(1, 1.05, moss) * ao, cb = lerp(1, 0.5, moss) * ao;
@@ -358,7 +363,7 @@ export function paintBark(seed = 3, size = 512) {
     const n1 = nz.noise3(Math.cos(u * 6.283) * 1.2, Math.sin(u * 6.283) * 1.2, v * 3);
     const n2 = nz.noise3(Math.cos(u * 6.283) * 5, Math.sin(u * 6.283) * 5, v * 14);
     const streak = nz.noise3(Math.cos(u * 6.283) * 9, Math.sin(u * 6.283) * 9, v * 2.0);
-    let r = 58 + 18 * n1 + 10 * n2 + 10 * streak, g = 40 + 12 * n1 + 7 * n2 + 6 * streak, b = 38 + 12 * n1 + 6 * n2 + 8 * streak;
+    let r = 74 + 18 * n1 + 10 * n2 + 10 * streak, g = 56 + 12 * n1 + 7 * n2 + 6 * streak, b = 52 + 12 * n1 + 6 * n2 + 8 * streak;
     const k = (y * size + x) * 4;
     img.data[k] = r; img.data[k + 1] = g; img.data[k + 2] = b; img.data[k + 3] = 255;
     const h = 120 + 50 * n2 + 40 * streak;
