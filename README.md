@@ -27,7 +27,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/temple.js`: the old temple compound on its terrace (generation), with its lamp and floodlight positions.
 - `src/lanterns.js`: riverside paper lanterns on ropes between bamboo poles (generation).
 - `src/water.js`: river shader and planar reflections, and the mist on the river at dawn.
-- `src/koi.js`: koi swimming under the river surface.
+- `src/koi.js`: koi of eight varieties swimming under the river surface in two loose groups, steering round the rocks and each other.
 - `src/deer.js`: the grazing deer: models loaded and lit like the scene, their grazing clip looped mostly head-down.
 - `src/models/`: models inlined in the page: the deer, built by `tools/models.mjs` (`node tools/models.mjs`) from the sources in Models, and the woods' trees, the gorge's walls, the bamboo and the boulders (`forest.glb`, `cliffs.glb`, `bamboo.glb`, `rocks.glb`), built in Blender by `tools/forest.py`, `tools/cliffs.py`, `tools/bamboo.py` and `tools/rocks.py` (`node tools/blender.mjs`).
 - `src/birds.js`: birds in flight (swallows, kites, crows): their paths by weather and time of day, wings flapped in the vertex stage.

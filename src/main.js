@@ -287,7 +287,7 @@ export async function create(canvas, opts = {}) {
   await yieldTask();
   // ---------- river ----------
   const depthMap = depthTexture(G.depth);
-  const koi = makeKoi(world, Q.koi, focus);
+  const koi = makeKoi(world, Q.koi, focus, G.rocks.rocksInWater);
   koi.mesh.name = 'koi';
   scene.add(koi.mesh);
   // reflection buffer per CSS pixel above DPR 1.4 (0.35 at DPR 2 passes against sub-pixel A/A, 0.25 does not;
@@ -788,6 +788,7 @@ export async function create(canvas, opts = {}) {
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
     backend: backendName,
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
+    koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
     info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
     dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); sound.dispose(); },
