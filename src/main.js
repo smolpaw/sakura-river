@@ -630,6 +630,7 @@ export async function create(canvas, opts = {}) {
     }
     U.uTime.value += dt;
     U.uWind.value = S.wind;
+    U.uWindRun.value += dt * S.wind;
     U.uFlow.value += dt * S.river * 1.3;
     water.uniforms.uSpeed.value = S.river;
     sky.uniforms.uCloud.value.x += dt * (0.006 + S.wind * 0.012);

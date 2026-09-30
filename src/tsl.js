@@ -11,6 +11,7 @@ import { LINE } from './lanterns.js';
 export const U = {
   uTime: uniform(0),
   uWind: uniform(0.5),
+  uWindRun: uniform(0), // wind integrated over time: drift that stays smooth while the wind changes
   uWindDir: uniform(new THREE.Vector2(0.62, 0.78).normalize()),
   uFogColor: uniform(new THREE.Color(0.7, 0.6, 0.6)),
   uFogSunColor: uniform(new THREE.Color(1.4, 0.9, 0.6)),

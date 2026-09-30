@@ -59,7 +59,7 @@ export function makeMotes(center, count) {
   const base = instancedBufferAttribute(new THREE.InstancedBufferAttribute(p, 3), 'vec3');
   const seed = instancedBufferAttribute(new THREE.InstancedBufferAttribute(s, 1), 'float');
   const t = U.uTime.mul(seed.mul(0.2).add(0.15));
-  const drift = mod(U.uTime.mul(U.uWind).mul(0.6).add(seed.mul(30.0)), 30.0);
+  const drift = mod(U.uWindRun.mul(0.6).add(seed.mul(30.0)), 30.0);
   const pos = vec3(
     base.x.add(sin(t.add(seed.mul(40.0))).mul(1.2)).add(U.uWindDir.x.mul(drift)).sub(U.uWindDir.x.mul(15.0)),
     base.y.add(sin(t.mul(1.3).add(seed.mul(9.0))).mul(0.6)),

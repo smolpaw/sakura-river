@@ -67,7 +67,7 @@ function rainMaterial() {
   const pos = Fn(() => {
     const p = seed.xyz.mul(BOX).toVar();
     p.y.subAssign(U.uTime.mul(seed.w.mul(3.0).add(9.0)));
-    const w = U.uWindDir.mul(U.uWind).mul(U.uTime).mul(2.0);
+    const w = U.uWindDir.mul(U.uWindRun).mul(2.0);
     p.assign(vec3(p.x.add(w.x), p.y, p.z.add(w.y)));
     const c = cameraPosition.sub(BOX.mul(0.5));
     p.assign(c.add(mod(p.sub(c), BOX)));
