@@ -149,6 +149,13 @@ export async function makeDeer(world, at) {
     }
     return null;
   };
+  // the Body bone's height is keyed in both clips, but the mixer only writes it when the keyed value changes: put it
+  // back where the mixer left it before each update, or the lowering piles up while a clip holds still
+  const step = (d, dt) => {
+    d.body.position.z += d.drop;
+    d.mixer.update(dt);
+    d.body.position.z -= d.drop;
+  };
   return {
     group,
     update(dt) {
@@ -169,13 +176,11 @@ export async function makeDeer(world, at) {
             d.eat.crossFadeFrom(d.walk, 0.8, false);
             d.bout = bout();
           }
-          d.mixer.update(dt);
-          d.body.position.z -= d.drop;
+          step(d, dt);
           continue;
         }
         const t0 = d.eat.time;
-        d.mixer.update(dt);
-        d.body.position.z -= d.drop; // keyed in both clips, so set afresh each update
+        step(d, dt);
         if (t0 < d.b && d.eat.time >= d.b) {
           if (d.bout > 0) { d.bout--; d.eat.time -= d.b - d.a; } // keep grazing
           else if (rng() < STROLL && (d.to = spot(d))) { d.walk.reset().play(); d.walk.crossFadeFrom(d.eat, 0.8, false); } // move on
