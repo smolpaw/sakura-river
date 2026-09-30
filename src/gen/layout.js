@@ -19,7 +19,8 @@ export function layout(world) {
 export const underTree = (L) => (x, z) => { const t = Math.min(1, Math.max(0, (Math.hypot(x - L.TX, z - L.TZ) - 3.4) / 2.8)); return t * t * (3 - 2 * t); };
 
 // the grazing ground, stretched along the bank: 0 inside .. 1 outside, over EDGE metres
-const EDGE = 3, STRETCH = 1.6;
+const EDGE = 3;
+export const STRETCH = 1.6;
 const grazed = (L) => {
   const [gx, gz] = L.graze;
   return (x, z) => { const t = Math.min(1, Math.max(0, (Math.hypot(x - gx, (z - gz) / STRETCH) - GRAZE.r) / EDGE)); return t * t * (3 - 2 * t); };

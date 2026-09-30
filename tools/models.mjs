@@ -1,7 +1,7 @@
 // Builds src/models/ from the deer models credited in README.md (Models).
 //   node tools/models.mjs
-// Sources are downloaded once into tools/.model-cache/. Each file keeps only the grazing clip; everything the other
-// clips used is pruned. The body's parts (one per material) get the sika coat as vertex colours and are joined into
+// Sources are downloaded once into tools/.model-cache/. Each file keeps only the grazing and walking clips; everything
+// the other clips used is pruned. The body's parts (one per material) get the sika coat as vertex colours and are joined into
 // one mesh, which is subdivided (a rounder shape) and simplified back to DETAIL times the source's triangles. The rest is quantized and
 // meshopt-compressed (small enough to inline in the page).
 import fs from 'node:fs';
@@ -20,7 +20,7 @@ const SRC = {
   doe: 'https://static.poly.pizza/4b6c2a41-43c7-404c-ae37-e8c4645ff93b.glb',
   stag: 'https://static.poly.pizza/a9c69fbc-bf7c-4585-9a49-a82e0be1ac6b.glb',
 };
-const KEEP = 'Eating';
+const KEEP = ['Eating', 'Walk'];
 const DETAIL = 2; // the body's triangles against the source's: subdivided four times over, then simplified back to this
 
 // sika coat (linear), by the models' material names: chestnut body, pale belly and rump, darker muzzle; the rest
@@ -148,7 +148,7 @@ for (const [name, url] of Object.entries(SRC)) {
   }
   const doc = await io.read(cached);
   for (const a of doc.getRoot().listAnimations()) {
-    if (a.getName() === KEEP) continue;
+    if (KEEP.includes(a.getName())) continue;
     for (const s of a.listSamplers()) s.dispose(); // their accessors go in prune() unless the kept clip shares them
     a.dispose();
   }

@@ -33,7 +33,7 @@ export function terrainMaterial() {
 
 // light thrown back by the sunlit ground onto faces turned sideways or down, at full strength once the sun is a little
 // above the horizon: a wall in shade stays warm grey rather than going the blue of the sky light alone
-const groundBounce = () => U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
+export const groundBounce = () => U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
 
 export function barkMaterial(map, bumpMap) {
   return new LitMaterial({
