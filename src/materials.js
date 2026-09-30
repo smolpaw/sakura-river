@@ -116,7 +116,10 @@ export function rockMaterial() {
   }, (out) => Fn(() => {
     // (as in the original: view-space normal against world-space vectors)
     const vv = viewDir();
-    return out.add(U.uSunColor.mul(U.uSunVis).mul(pow(max(dot(reflect(U.uSunDir.negate(), normalView), vv), 0.0), 24.0)).mul(wet).mul(0.25)).add(diffuseColor.rgb.mul(lanternLight(wp)));
+    // light thrown back by the sunlit meadow onto the faces turned from the sky, so a wall in shade stays warm grey
+    // rather than going the blue of the sky light alone
+    const bounce = U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
+    return out.add(U.uSunColor.mul(U.uSunVis).mul(pow(max(dot(reflect(U.uSunDir.negate(), normalView), vv), 0.0), 24.0)).mul(wet).mul(0.25)).add(diffuseColor.rgb.mul(lanternLight(wp).add(bounce)));
   })());
 }
 
