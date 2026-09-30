@@ -18,6 +18,7 @@ export const MAIN_TREE = {
   flowerSize: 1,
   minY: 2.2,
   roots: 6,
+  fused: 2, // the roots and the branches to this depth are the Blender model's (see trunkSkeleton)
 };
 
 export const SMALL_TREE = {
@@ -29,6 +30,7 @@ export const SMALL_TREE = {
   flowerSize: 1.7, // seen from afar: fewer, larger flowers
   minY: 1.8,
   roots: 0,
+  fused: 1,
 };
 
 const TAU = Math.PI * 2;
@@ -200,13 +202,15 @@ function frames(pts) {
 const flexOf = (f) => Math.pow(clamp((f - 2.2) / 14, 0, 1.4), 1.55);
 
 // ---------- geometry ----------
-export function buildBarkGeometry(tree, groundAt = () => 0) {
+// the bark of the branches past cfg.fused (the rest is the Blender model's)
+export function buildBarkGeometry(tree, cfg, groundAt = () => 0) {
   const P = [], Nn = [], UV = [], F = [], C = [], I = [];
   const nz = tree.nz;
   const { center, ext } = tree.canopy;
   let vbase = 0;
   const tmpN = new V(), tmpB = new V();
   for (const br of tree.branches) {
+    if (br.depth <= cfg.fused) continue;
     const { pts, rad, flex } = branchPath(br);
     const r0 = rad[0];
     const radial = br.depth <= 0 ? 18 : r0 > 0.2 ? 14 : r0 > 0.09 ? 10 : r0 > 0.04 ? 7 : r0 > 0.02 ? 5 : 4;
@@ -422,7 +426,7 @@ const UMBEL = { high: [3, 5], medium: [2, 5], low: [2, 3] };
 export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   const groundAt = (x, z) => world.height(x + pos.x, z + pos.z);
   const t = growTree(seed, cfg, groundAt);
-  const bark = triMul > 1 ? tessellate(buildBarkGeometry(t, groundAt), triMul) : buildBarkGeometry(t, groundAt);
+  const bark = triMul > 1 ? tessellate(buildBarkGeometry(t, cfg, groundAt), triMul) : buildBarkGeometry(t, cfg, groundAt);
   const k = cfg.scale;
 
   const rng = mulberry32(seed + 1);
@@ -466,7 +470,33 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
     }
   }
   return {
-    bark, n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * 6),
+    bark, sig: skeletonSig(t, cfg), n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * 6),
     spawn: new Float64Array(spawn),
   };
+}
+
+// ---------- the Blender model's part ----------
+// The trunk, the roots and the branches to depth cfg.fused are modelled in Blender (tools/cherry.py, one fused and
+// gnarled surface, in src/models/cherry.glb) from this: the same branches the rest of the tree grows from, as rendered
+// (smoothed, with each point's wind flexibility), the canopy the bark's shading darkens towards, and the ground
+// round the tree. The model is only right for the skeleton it was built from: skeletonSig tells if it went stale.
+const fusedOf = (t, cfg) => t.branches.filter((br) => br.depth <= cfg.fused);
+export function skeletonSig(t, cfg) {
+  let h = 0;
+  for (const br of fusedOf(t, cfg)) for (const p of br.pts) h = (h * 31 + Math.round(p.x * 997 + p.y * 1999 + p.z * 2999)) | 0;
+  return h;
+}
+export function trunkSkeleton(world, seed, cfg, pos) {
+  const groundAt = (x, z) => world.height(x + pos.x, z + pos.z);
+  const t = growTree(seed, cfg, groundAt);
+  const r3 = (v) => [v.x, v.y, v.z].map((a) => +a.toFixed(4));
+  const branches = fusedOf(t, cfg).map((br) => {
+    const { pts, rad, flex } = branchPath(br);
+    const n = pts.length - 1; // without the closing tip: the model rounds its own ends
+    return { depth: br.depth, pts: pts.slice(0, n).map(r3), rad: rad.slice(0, n).map((r) => +r.toFixed(4)), flex: flex.slice(0, n).map((f) => +flexOf(f).toFixed(4)) };
+  });
+  // ground heights round the tree, 0.5 m apart
+  const G = 24, ground = [];
+  for (let j = -G; j <= G; j++) for (let i = -G; i <= G; i++) ground.push(+groundAt(i * 0.5, j * 0.5).toFixed(3));
+  return { sig: skeletonSig(t, cfg), branches, canopy: { center: r3(t.canopy.center), ext: r3(t.canopy.ext) }, ground: { n: G, step: 0.5, h: ground } };
 }

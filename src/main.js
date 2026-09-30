@@ -1,6 +1,9 @@
 // Sakura River — cinematic procedural scene engine
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
@@ -11,6 +14,7 @@ import forestUrl from './models/forest.glb?url&inline';
 import cliffsUrl from './models/cliffs.glb?url&inline';
 import bambooUrl from './models/bamboo.glb?url&inline';
 import rocksUrl from './models/rocks.glb?url&inline';
+import cherryUrl from './models/cherry.glb?url&inline';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
@@ -29,7 +33,7 @@ import { QualityController } from './quality.js';
 import { hashScene } from './bench-hash.js';
 import { tessellate, makeStressObjects } from './stress.js';
 import { runJobs } from './gen/pool.js';
-import { layout } from './gen/layout.js';
+import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 
 const TIERS = {
@@ -116,15 +120,15 @@ export async function create(canvas, opts = {}) {
   const treePos = new THREE.Vector3(...Lay.tree);
   const focus = new THREE.Vector3(...Lay.focus);
   const triMul = ST ? ST.triMul : 1;
-  const treeSpecs = [{ seed: 11, pos: Lay.tree }, ...Lay.small.map((sp) => ({ seed: 100 + sp.k * 13, small: true, pos: [sp.x, 0, sp.z] }))];
+  const trees = treeSpecs(Lay);
   const { results: G, stats: genStats } = await runJobs({
     terrain: { name: 'terrain', args: { seg: Q.terrain } },
     heightCache: { name: 'heightCache' },
     depth: { name: 'depth', args: { tier: tierName } },
     river: { name: 'river' },
-    treeMain: { name: 'trees', args: { list: treeSpecs.slice(0, 1), tier: tierName, triMul } },
-    treesA: { name: 'trees', args: { list: treeSpecs.slice(1, 4), tier: tierName, triMul } },
-    treesB: { name: 'trees', args: { list: treeSpecs.slice(4), tier: tierName, triMul } },
+    treeMain: { name: 'trees', args: { list: trees.slice(0, 1), tier: tierName, triMul } },
+    treesA: { name: 'trees', args: { list: trees.slice(1, 4), tier: tierName, triMul } },
+    treesB: { name: 'trees', args: { list: trees.slice(4), tier: tierName, triMul } },
     atlas: { name: 'atlas', args: { size: tierName === 'high' ? 1024 : 512 } },
     bark: { name: 'bark' },
     fuji: { name: 'fuji' },
@@ -183,6 +187,35 @@ export async function create(canvas, opts = {}) {
   const blossomShadowMat = M.blossomShadowMaterial(atlas);
   const flowerGeo = ST ? tessellate(buildFlowerGeometry(), ST.triMul) : buildFlowerGeometry();
 
+  // the trunks and main branches, modelled in Blender (tools/cherry.py): unpacked to the twigs' layout (texture
+  // coordinates times its UV_SCALE, the wind's flexibility from the colours' alpha) and merged with them
+  const trunks = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(cherryUrl);
+  trunks.scene.updateMatrixWorld(true);
+  function withTrunk(d, k) {
+    const src = trunks.scene.getObjectByName(`trunk${k}`), g = src.geometry, n = g.attributes.position.count;
+    if (src.userData.sig !== d.sig) console.warn(`src/models/cherry.glb was built for other branches (tree ${k}): run node tools/blender.mjs cherry`);
+    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3), F = new Float32Array(n);
+    const v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(src.matrixWorld);
+    const { position, normal, uv, color } = g.attributes;
+    for (let i = 0; i < n; i++) {
+      v.fromBufferAttribute(position, i).applyMatrix4(src.matrixWorld).toArray(P, i * 3);
+      v.fromBufferAttribute(normal, i).applyMatrix3(nm).normalize().toArray(N, i * 3);
+      UV[i * 2] = uv.getX(i) * 16; UV[i * 2 + 1] = uv.getY(i) * 16;
+      C[i * 3] = color.getX(i); C[i * 3 + 1] = color.getY(i); C[i * 3 + 2] = color.getZ(i);
+      F[i] = color.getW(i) * 2;
+    }
+    const t = new THREE.BufferGeometry();
+    t.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    t.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+    t.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
+    t.setAttribute('aFlex', new THREE.BufferAttribute(F, 1));
+    t.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    t.setIndex(Array.from(g.index.array));
+    const merged = mergeGeometries([t, d.bark]);
+    merged.computeBoundingSphere();
+    return merged;
+  }
+
   function buildTreeObject(d, pos, castShadow = true) {
     const group = new THREE.Group();
     group.position.copy(pos);
@@ -223,12 +256,14 @@ export async function create(canvas, opts = {}) {
     return { group, data: d, blossoms: mesh };
   }
 
+  G.treeMain[0].bark = withTrunk(G.treeMain[0], 0);
   const main = buildTreeObject(G.treeMain[0], treePos, true);
   main.group.name = 'tree';
   scene.add(main.group);
   const smallTrees = [];
   const smallData = [...G.treesA, ...G.treesB];
   Lay.small.forEach((sp, k) => {
+    smallData[k].bark = withTrunk(smallData[k], k + 1);
     const o = buildTreeObject(smallData[k], new THREE.Vector3(sp.x, 0, sp.z), Math.abs(sp.z) < 45);
     o.group.scale.setScalar(sp.s);
     o.group.name = 'smallTree';

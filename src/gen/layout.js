@@ -15,6 +15,10 @@ export function layout(world) {
   return { TX, TZ, tree: [TX, 0, TZ], focus: [TX + 8, 0, TZ + 8], motes: [TX + 3, 0, TZ + 2], small, graze };
 }
 
+// the cherries: the main tree, then the small ones along the river (tree.js grows them; the Blender model of their
+// trunks, tools/cherry.py, is built from the same list)
+export const treeSpecs = (L) => [{ seed: 11, pos: L.tree }, ...L.small.map((sp) => ({ seed: 100 + sp.k * 13, small: true, pos: [sp.x, 0, sp.z] }))];
+
 // short lawn under the main tree: 0 near the trunk (short grass, kept down in the canopy's shade) .. 1 outside
 export const underTree = (L) => (x, z) => { const t = Math.min(1, Math.max(0, (Math.hypot(x - L.TX, z - L.TZ) - 3.4) / 2.8)); return t * t * (3 - 2 * t); };
 
