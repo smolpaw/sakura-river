@@ -16,7 +16,7 @@ const OCHRE = [0.62, 0.45, 0.22], PAPER = [0.86, 0.8, 0.66], FIREBOX = [0.5, 0.4
 const SHU = [0.56, 0.07, 0.03], SHU_D = [0.3, 0.05, 0.03]; // the pagoda's vermilion lacquer (the bridge's, weathered)
 
 // parts in a local frame; at() places what its callback adds (lamps too)
-function kit() {
+export function kit() {
   const parts = [], lamps = [];
   // indexed (a box is 24 vertices, not 36): one colour and glow per part
   const add = (g, c, glow = 0) => {
@@ -427,7 +427,7 @@ function compound(k, T, ground) {
 // rasterized top-down into a height map (each triangle's top over its footprint, CELL metres), then from each
 // vertex rays towards DIRS points of the sky march through it; the walls in the eaves' shade see little of it.
 const CELL = 0.3, DIRS = 20, STEPS = [0.25, 0.5, 0.8, 1.2, 1.7, 2.4, 3.3, 4.5, 6.2, 8.5];
-function skyLight(parts) {
+export function skyLight(parts) {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, top = -Infinity;
   for (const g of parts) {
     const p = g.attributes.position.array;

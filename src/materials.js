@@ -171,7 +171,10 @@ export function templeMaterial(d) {
 export function bridgeMaterial(hang) {
   const lamps = [];
   for (let i = 0; i < hang.length; i += 3) lamps.push(vec3(hang[i], hang[i + 1] - 0.36, hang[i + 2]));
-  return new LitMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.DoubleSide, colorNode: vec3(vnoise(wp.xz.mul(4.0).add(wp.y.mul(6.0))).mul(0.24).add(0.88)) }, (out) => Fn(() => {
+  // the piles darker and greener where the river wets them
+  const wet = sstep(0.45, 0.0, wp.y);
+  const colorNode = mix(vec3(vnoise(wp.xz.mul(4.0).add(wp.y.mul(6.0))).mul(0.24).add(0.88)), vec3(0.45, 0.55, 0.42), wet);
+  return new LitMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.DoubleSide, colorNode }, (out) => Fn(() => {
     const glow = float(0).toVar();
     If(U.uLights.greaterThan(0.0), () => {
       for (const c of lamps) { const d = positionWorld.sub(c); glow.addAssign(float(1.0).div(dot(d, d).mul(3.0).add(0.25))); }
