@@ -5,7 +5,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
-import { makeGrass, makeFlowers, makeRocks, makeForest } from './vegetation.js';
+import { makeGrass, makeFlowers, makeRocks } from './vegetation.js';
+import { makeForest } from './forest.js';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
@@ -262,7 +263,7 @@ export async function create(canvas, opts = {}) {
   const flowers = makeFlowers(G.flowers, M.flowerMaterial());
   flowers.name = 'flowers';
   scene.add(flowers);
-  const forest = makeForest(G.forest, M.forestMaterial());
+  const forest = await makeForest(G.forest, M.forestMaterial());
   forest.name = 'forest';
   scene.add(forest);
 
@@ -614,6 +615,7 @@ export async function create(canvas, opts = {}) {
     camera.updateMatrixWorld();
     sky.mesh.position.copy(camera.position);
     grass.userData.lod(camera.position, warming); // warm-up builds both grass levels
+    forest.userData.lod(camera.position);
 
     // sun light / shadow frustum anchored on the tree
     const sd = U.uSunDir.value;
