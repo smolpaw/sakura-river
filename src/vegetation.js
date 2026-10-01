@@ -1,6 +1,7 @@
 // The deer's turf, wildflowers, rocks & pebbles, the gorge's rock walls, the woods on the hills — all instanced
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
+import { toroSites } from './village.js';
 
 const V = THREE.Vector3;
 
@@ -385,7 +386,9 @@ export function shrubData(world, trees) {
     const g = 0.85 + rng() * 0.3;
     lists[k].push({ m: m.compose(p, q, s).toArray(), c: [g, g * (0.97 + rng() * 0.06), g * (0.94 + rng() * 0.08)] });
   };
-  // the temple's approach: clipped azaleas both sides, every few metres, magenta and white by turns in runs
+  // the temple's approach: clipped azaleas both sides, every few metres, magenta and white by turns in runs, clear
+  // of its stone lanterns
+  for (const t of toroSites(world)) placed.push([t.x, t.z, 0.5]);
   const ap = world.LANES[1];
   for (let i = 1; i < ap.length; i++) {
     const [ax, az] = ap[i - 1], [bx, bz] = ap[i], len = Math.hypot(bx - ax, bz - az);

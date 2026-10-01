@@ -61,12 +61,11 @@ export function villageData(world) {
 }
 
 // Stone lanterns in pairs either side of the temple's approach (world.js LANES[1]), from past the torii to short of
-// the temple's own at the foot of its steps, none where another lane leaves it: one geometry (color, aGlow) and the
-// fireboxes' centres
+// the temple's own at the foot of its steps, none where another lane leaves it: where they stand (vegetation.js keeps
+// the approach's azaleas off them), and one geometry (color, aGlow) with the fireboxes' centres
 const TORO = { from: 14, to: 9, every: 10.5, off: 2.1 };
-function toroData(world) {
-  const k = kit(), path = world.LANES[1];
-  const others = world.LANES.filter((l) => l !== path);
+export function toroSites(world) {
+  const path = world.LANES[1], others = world.LANES.filter((l) => l !== path);
   const onLane = (x, z) => others.some((l) => l.some(([ax, az], i) => {
     if (!i) return false;
     const [bx, bz] = l[i - 1], vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz)));
@@ -79,13 +78,19 @@ function toroData(world) {
     segs.push({ ax, az, dx: (bx - ax) / l, dz: (bz - az) / l, s0: len, l });
     len += l;
   }
+  const sites = [];
   for (let s = TORO.from; s <= len - TORO.to; s += TORO.every) {
     const g = segs.find((q) => s <= q.s0 + q.l) || segs[segs.length - 1], t = s - g.s0;
     const x = g.ax + g.dx * t, z = g.az + g.dz * t;
     for (const side of [-1, 1]) {
       const px = x - g.dz * side * TORO.off, pz = z + g.dx * side * TORO.off;
-      if (!onLane(px, pz)) toro(k, px, world.height(px, pz) - 0.05, pz, Math.atan2(g.dx, g.dz));
+      if (!onLane(px, pz)) sites.push({ x: px, z: pz, yaw: Math.atan2(g.dx, g.dz) });
     }
   }
+  return sites;
+}
+function toroData(world) {
+  const k = kit();
+  for (const t of toroSites(world)) toro(k, t.x, world.height(t.x, t.z) - 0.05, t.z, t.yaw);
   return { geo: mergeGeometries(k.parts), lamps: new Float32Array(k.lamps.flatMap((p) => p.toArray())) };
 }
