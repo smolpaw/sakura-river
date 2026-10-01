@@ -18,6 +18,7 @@ export const U = {
   uFogDensity: uniform(0.0032),
   uFogBase: uniform(0.0),
   uFogFalloff: uniform(0.03),
+  uAerial: uniform(1 / 3000), // the air's haze per metre at the valley floor (aerial perspective, fogAmount)
   uSunDir: uniform(new THREE.Vector3(-0.5, 0.2, -0.8).normalize()),
   uSunColor: uniform(new THREE.Color(1, 0.7, 0.5)),
   uSunVis: uniform(1),
@@ -118,6 +119,7 @@ export function windPosition(flexNode, extra = null, shadowNormal = normalLocal)
 }
 
 // ---------- height fog ----------
+const AERIAL_H = 600;
 export const fogAmount = Fn(([wp]) => {
   const v = wp.sub(cameraPosition).toVar();
   const d = length(v).toVar();
@@ -126,7 +128,11 @@ export const fogAmount = Fn(([wp]) => {
   const camH = max(cameraPosition.y.sub(U.uFogBase), 0.0);
   const k = dir.y.mul(b).mul(d).toVar();
   const hi = exp(b.negate().mul(camH)).mul(abs(k).greaterThan(1e-4).select(float(1.0).sub(exp(k.negate())).div(dir.y.mul(b)), d));
-  const amt = float(1.0).sub(exp(U.uFogDensity.negate().mul(d.mul(0.085).add(hi.mul(0.55)))));
+  // aerial perspective: the air itself, thinning over hundreds of metres of height (AERIAL_H), so the far hills and
+  // the mountain fade into the haze, its summit less than its foot
+  const ka = dir.y.mul(d).div(AERIAL_H).toVar();
+  const air = exp(cameraPosition.y.max(0.0).div(-AERIAL_H)).mul(abs(ka).greaterThan(1e-4).select(float(1.0).sub(exp(ka.negate())).div(ka), 1.0)).mul(d);
+  const amt = float(1.0).sub(exp(U.uFogDensity.negate().mul(d.mul(0.085).add(hi.mul(0.55))).sub(air.mul(U.uAerial))));
   return clamp(amt, 0.0, 1.0);
 });
 export const fogTint = Fn(([wp]) => {
