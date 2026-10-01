@@ -2,11 +2,11 @@
 // post-lighting hook. One source compiles to WGSL (WebGPU) and GLSL (WebGL2 fallback).
 import * as THREE from 'three/webgpu';
 import {
-  Fn, If, float, vec2, vec3, vec4, uniform, mix, sin, cos, sqrt, fract, floor, dot, exp, max, abs, clamp, normalize, length, pow,
+  Fn, If, float, vec2, vec3, vec4, uniform, mix, sin, fract, floor, dot, exp, max, abs, clamp, normalize, length, pow,
   cameraPosition, positionWorld, positionLocal, modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, normalLocal, fog, varyingProperty,
   reference, renderGroup, texture, normalView, BRDF_GGX, BRDF_Lambert, specularColorBlended, specularF90, roughness, diffuseContribution,
 } from 'three/tsl';
-import { LINE } from './lanterns.js';
+import { LIGHTMAP } from './lights.js';
 
 export const U = {
   uTime: uniform(0),
@@ -23,28 +23,30 @@ export const U = {
   uSunVis: uniform(1),
   uSkyAmb: uniform(new THREE.Color(0.4, 0.45, 0.6)),
   uFlow: uniform(0),
-  uLights: uniform(0), // riverside lanterns: 0 off .. 1 fully on (dusk)
+  uLights: uniform(0), // the lamps: 0 off .. 1 fully on (dusk)
   uLightColor: uniform(new THREE.Color(1.0, 0.6, 0.3)), // warm light through the paper
   uRain: uniform(0), // rain intensity 0..1 (streaks, ripples on the river)
   uFlash: uniform(0), // lightning flash level
   uMist: uniform(0), // river mist at dawn (kawagiri) 0..1
 };
 
-// Warm light from the lantern lines (lanterns.js) on whatever is near them: ground, grass, rocks, the tree. The
-// lines follow both banks, so the distance to them is |x - riverX(z)| against the bank offset (the river's
-// formulas from world.js), corrected for the river's slant; light falls off in 3D from the lanterns' height.
+// Warm light from the lamps (lights.js) on whatever is near them: ground, grass, rocks, the deer, falling petals. The
+// light map holds each spot's light and its lamps' height; it falls off up and down from there as from a lamp.
+// Filled in once the lamps are known (setLightMap); read at level 0, so it is safe in any branch.
+const LM = LIGHTMAP;
+const lightTex = new THREE.DataTexture(new Uint16Array(LM.nx * LM.nz * 2), LM.nx, LM.nz, THREE.RGFormat, THREE.HalfFloatType);
+lightTex.magFilter = lightTex.minFilter = THREE.LinearFilter;
+lightTex.generateMipmaps = false;
+export function setLightMap(data) {
+  lightTex.image.data.set(data);
+  lightTex.needsUpdate = true;
+}
 export const lanternLight = Fn(([wp]) => {
   const o = vec3(0.0).toVar();
   If(U.uLights.greaterThan(0.0), () => {
-    const z = wp.z;
-    const a1 = z.mul(0.021).add(0.9), a2 = z.mul(0.0072).sub(0.35), a3 = z.mul(0.047).add(2.2);
-    const rx = sin(a1).mul(8.5).add(sin(a2).mul(20.0)).add(sin(a3).mul(3.5)).sub(4.0);
-    const slope = cos(a1).mul(8.5 * 0.021).add(cos(a2).mul(20 * 0.0072)).add(cos(a3).mul(3.5 * 0.047));
-    const hw = mix(float(7.6), float(3.4), sstep(20.0, -520.0, z));
-    const d = abs(wp.x.sub(rx)).sub(hw.mul(LINE.K).add(LINE.PAD)).div(sqrt(slope.mul(slope).add(1.0)));
-    const dy = wp.y.sub(LINE.lampY);
-    const along = sstep(LINE.z0 - 3, LINE.z0 + 1, z).mul(sstep(LINE.z1 + 3, LINE.z1 - 1, z));
-    o.assign(U.uLightColor.mul(U.uLights).mul(exp(d.mul(d).add(dy.mul(dy)).mul(-1.0 / 9.0))).mul(along).mul(0.6));
+    const t = texture(lightTex, wp.xz.sub(vec2(LM.x0, LM.z0)).div(vec2(LM.nx * LM.cell, LM.nz * LM.cell))).level(0);
+    const dy = wp.y.sub(t.g.div(max(t.r, 1e-4)));
+    o.assign(U.uLightColor.mul(U.uLights).mul(t.r).mul(exp(dy.mul(dy).mul(-1.0 / 9.0))));
   });
   return o;
 });

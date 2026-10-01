@@ -291,8 +291,8 @@ function tsuri(k, x, yTop, z) {
   });
 }
 
-// stone lantern (Kasuga form) standing at (x, y, z)
-function toro(k, x, y, z, ry = 0) {
+// stone lantern (Kasuga form) standing at (x, y, z) (village.js lines the approach with them)
+export function toro(k, x, y, z, ry = 0) {
   k.at(x, y, z, ry, () => {
     k.lathe([[0, 0], [0.42, 0], [0.42, 0.12], [0.34, 0.2], [0.2, 0.26], [0, 0.26]], 6, STONE);
     k.lathe([[0, 0.26], [0.14, 0.26], [0.12, 1.02], [0, 1.02]], 8, STONE);

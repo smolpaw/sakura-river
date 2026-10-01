@@ -6,7 +6,8 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { createWorld, depthTexture } from './world.js';
-import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
+import { U, sceneFog, pcfSoftShadowFilter, setLightMap } from './tsl.js';
+import { lightMap, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods, makeMerged } from './lods.js';
@@ -309,10 +310,10 @@ export async function create(canvas, opts = {}) {
   const fuji = makeFuji(G.fuji, M.fujiMaterial());
   fuji.name = 'fuji';
   scene.add(fuji);
-  // the bridge's lanterns join the riverside ones (one instanced draw)
-  const lampSets = [G.lanterns, G.props.bridge.lamps];
+  // the bridge's lanterns and the farmhouses' door lanterns join the riverside ones (one instanced draw)
+  const lampSets = [G.lanterns, G.props.bridge.lamps, G.village.lamps];
   const cat = (k) => { const out = new Float32Array(lampSets.reduce((n, d) => n + d[k].length, 0)); let o = 0; for (const d of lampSets) { out.set(d[k], o); o += d[k].length; } return out; };
-  const lanterns = makeLanterns({ ...G.lanterns, hang: cat('hang'), look: cat('look'), n: G.lanterns.n + G.props.bridge.lamps.n }, G.lanterns.lantern);
+  const lanterns = makeLanterns({ ...G.lanterns, hang: cat('hang'), look: cat('look'), n: lampSets.reduce((n, d) => n + d.n, 0) }, G.lanterns.lantern);
   lanterns.group.name = 'lanterns';
   scene.add(lanterns.group);
   const bridge = makeBridge(G.props.bridge, M.bridgeMaterial(G.props.bridge.lamps.hang));
@@ -321,9 +322,22 @@ export async function create(canvas, opts = {}) {
   const temple = makeTemple(G.props.temple, M.templeMaterial(G.props.temple));
   temple.name = 'temple';
   scene.add(temple);
-  const templeGlows = makeGlows(G.props.temple.lamps, lanterns.uFocal);
+  // the stone lanterns up the temple's approach; their glows with the temple's
+  const toro = new THREE.Mesh(G.village.toro.geo, M.stoneLanternMaterial());
+  toro.name = 'toro';
+  scene.add(toro);
+  const fixed = new Float32Array([...G.props.temple.lamps, ...G.village.toro.lamps]);
+  const templeGlows = makeGlows(fixed, lanterns.uFocal);
   templeGlows.name = 'templeGlows';
   scene.add(templeGlows);
+  // all the lamps' light on what is near them (tsl.js lanternLight): paper lanterns (the hang point; the paper's
+  // middle 0.36 below), the stone lanterns' and the temple's fireboxes, the shoji's light on the yards
+  const pts = (a, f) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(f(a[i], a[i + 1], a[i + 2])); return out; };
+  setLightMap(lightMap([
+    ...pts(cat('hang'), (x, y, z) => lamp(x, y - 0.36, z, 0.2, 3)),
+    ...pts(fixed, (x, y, z) => lamp(x, y, z, 0.3, 2.4)),
+    ...pts(G.village.spill, (x, y, z) => lamp(x, y, z, 0.12, 3.5)),
+  ]));
 
   await yieldTask();
   // ---------- ground cover ----------

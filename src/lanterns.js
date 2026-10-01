@@ -1,14 +1,16 @@
-// Yozakura lanterns: rows of paper chōchin hung from a sagging rope between bamboo poles along both river banks.
-// Generation only (runs in a worker); fx.js draws them and tsl.js lights the ground around the lines.
+// Yozakura lanterns: rows of paper chōchin hung from a sagging rope between bamboo poles along the river from the
+// bridge: down the west bank past the cherry tree beside the footpath, and down the east bank as far as the small
+// cherry there. Generation only (runs in a worker); fx.js draws them and the light map (lights.js) lights what is
+// near them.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32, lerp } from './noise.js';
 
 const V = THREE.Vector3;
 
-// the lines follow each bank just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD), from the bridge to z1
-// (z0: where their light on the ground starts, near the bridge's corner posts)
-export const LINE = { z0: -59, z1: 38, K: 1.38, PAD: 0.4, lampY: 3.2 };
+// the lines follow the banks just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD), from the bridge to z1
+// (west, east)
+export const LINE = { z1: { [-1]: 38, [1]: -28 }, K: 1.38, PAD: 0.4 };
 export const bankX = (world, z, side) => world.riverX(z) + side * (world.riverHW(z) * LINE.K + LINE.PAD);
 
 const SPAN = 6.4; // pole spacing (m)
@@ -55,7 +57,7 @@ export function lanternData(world, blockers, anchors) {
     const poles = [new V(a.x, a.y, a.z)];
     let z = a.z + 1;
     while (Math.hypot(bankX(world, z, side) - a.x, z - a.z) < SPAN) z += 0.1;
-    while (z <= LINE.z1) {
+    while (z <= LINE.z1[side]) {
       let zz = z;
       for (let t = 0; t < 12 && !clear(bankX(world, zz, side), zz); t++) zz += 0.3;
       const x = bankX(world, zz, side), g = world.height(x, zz);

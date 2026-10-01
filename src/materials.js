@@ -262,15 +262,38 @@ export function templeMaterial(d) {
 }
 
 // the village's buildings (village.js): vertex colours with how much each part glows after dusk in their alpha (the
-// shoji, lit from inside); not every room is lit, and the light flickers a little as a lamp's would
+// shoji, lit from inside); not every room is lit, and the light flickers a little as a lamp's would. The door
+// lanterns light the walls near them.
 export function villageMaterial() {
   const col = attribute('color', 'vec4');
   return new LitMaterial({ roughness: 0.85, metalness: 0, colorNode: col.rgb }, (out) => Fn(() => {
     const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
     If(U.uLights.greaterThan(0.0), () => {
-      const room = sstep(0.3, 0.45, vnoise(wp.xz.mul(0.45).add(wp.y.mul(0.3))));
+      const room = sstep(0.22, 0.36, vnoise(wp.xz.mul(0.45).add(wp.y.mul(0.3))));
       const flicker = sin(U.uTime.mul(7.0).add(wp.x.mul(1.3))).mul(0.05).add(0.95);
-      o.addAssign(vec3(1.0, 0.64, 0.32).mul(col.a).mul(room).mul(flicker).mul(U.uLights).mul(0.9));
+      o.addAssign(vec3(1.0, 0.64, 0.32).mul(col.a).mul(room.mul(0.8).add(0.2)).mul(flicker).mul(U.uLights).mul(0.85));
+      o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
+    });
+    return o;
+  })());
+}
+
+// the stone lanterns up the temple's approach (village.js): the temple's weathered stone, its paper fireboxes
+// glowing after dusk (aGlow) and lighting the stone round them
+export function stoneLanternMaterial() {
+  const glow = attribute('aGlow', 'float');
+  const colorNode = Fn(() => {
+    const c = attribute('color', 'vec3').mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(5.0))).mul(0.3).add(0.85)).toVar();
+    const moss = sstep(0.45, 0.8, vnoise(wp.xz.mul(2.1).add(wp.y)).mul(0.7).add(normalWorld.y.mul(0.3)));
+    c.assign(mix(c, vec3(0.16, 0.2, 0.09), moss.mul(0.5)));
+    return c;
+  })();
+  return new LitMaterial({ roughness: 0.8, metalness: 0, colorNode }, (out) => Fn(() => {
+    const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
+    If(U.uLights.greaterThan(0.0), () => {
+      const flicker = sin(U.uTime.mul(9.0).add(wp.x.mul(3.7))).mul(0.08).add(0.92);
+      o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
+      o.addAssign(vec3(1.0, 0.62, 0.3).mul(glow).mul(U.uLights).mul(flicker));
     });
     return o;
   })());
