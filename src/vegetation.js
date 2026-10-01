@@ -352,6 +352,90 @@ export function bambooData(world) {
   return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
 }
 
+// ---------- shrubs ----------
+// Blender models (lods.js, tools/shrubs.py), one unit tall: azaleas in bloom (magenta, white) clipped into rounded
+// mounds along the temple's approach and round the farmhouses, kerria and dwarf bamboo (sasa) along the woods'
+// edges and the lanes, a thicket now and then out in the meadow; none in the water, on the farmland, lanes, pads or temple, on
+// rock, or near the cherry trees.
+export const SHRUB_KINDS = ['azalea', 'azalea_w', 'kerria', 'sasa'];
+const AZ = 0, AZW = 1, KER = 2, SASA = 3;
+
+export function shrubData(world, trees) {
+  const rng = mulberry32(737), nz = makeNoise(53);
+  const lists = SHRUB_KINDS.map(() => []), placed = [];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), up = new V(0, 1, 0);
+  const flat = (x, z, e = 2) => {
+    const gx = (world.height(x + e, z) - world.height(x - e, z)) / (2 * e), gz = (world.height(x, z + e) - world.height(x, z - e)) / (2 * e);
+    return 1 / Math.hypot(gx, gz, 1);
+  };
+  const free = (x, z, r) => {
+    const ri = world.riverInfo(x, z);
+    if (ri.t < 1.7 || world.zoneAt(x, z) || world.laneDist(x, z) < 1.6 + r || world.padAt(x, z) || world.templeDist(x, z) < 1 + r) return false;
+    if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < t.r)) return false;
+    return !placed.some(([px, pz, pr]) => Math.hypot(px - x, pz - z) < (pr + r) * 0.85);
+  };
+  const put = (k, x, z, h, r, sink = 0.12) => {
+    placed.push([x, z, r]);
+    p.set(x, world.height(x, z) - sink * h, z);
+    q.setFromAxisAngle(up, rng() * Math.PI * 2);
+    s.set(h * (0.9 + rng() * 0.25), h, h * (0.9 + rng() * 0.25));
+    const g = 0.85 + rng() * 0.3;
+    lists[k].push({ m: m.compose(p, q, s).toArray(), c: [g, g * (0.97 + rng() * 0.06), g * (0.94 + rng() * 0.08)] });
+  };
+  // the temple's approach: clipped azaleas both sides, every few metres, magenta and white by turns in runs
+  const ap = world.LANES[1];
+  for (let i = 1; i < ap.length; i++) {
+    const [ax, az] = ap[i - 1], [bx, bz] = ap[i], len = Math.hypot(bx - ax, bz - az);
+    for (let t = 0; t < len; t += 3.2) {
+      const x0 = ax + (bx - ax) * t / len, z0 = az + (bz - az) * t / len, nx = -(bz - az) / len, nzz = (bx - ax) / len;
+      for (const side of [-1, 1]) {
+        const x = x0 + nx * side * 2.7, z = z0 + nzz * side * 2.7;
+        if (world.zoneAt(x, z) || world.templeDist(x, z) < 2 || world.riverInfo(x, z).t < 1.7 || flat(x, z) < 0.8) continue;
+        if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 1.6)) continue;
+        put(nz.noise2(x * 0.05, z * 0.05) > 0 ? AZ : AZW, x, z, 0.75 + rng() * 0.2, 1.1);
+      }
+    }
+  }
+  // round the farmhouses: a few azaleas at the yard's edge, kerria by the sheds
+  for (const b of world.BUILDINGS) {
+    for (let t = 0, n = 0; t < 40 && n < 4; t++) {
+      const a = rng() * Math.PI * 2, d = Math.max(b.hw, b.hd) + 2.5 + rng() * 4;
+      const x = b.x + Math.cos(a) * d, z = b.z + Math.sin(a) * d;
+      if (!free(x, z, 0.9) || flat(x, z) < 0.85) continue;
+      put(b.kind === 'koya' ? KER : rng() < 0.6 ? AZ : AZW, x, z, 0.8 + rng() * 0.5, 0.9);
+      n++;
+    }
+  }
+  // the woods' edges and the lanes' verges: dwarf bamboo and kerria, the odd azalea, in clumps
+  for (let t = 0; t < 60000 && placed.length < 1100; t++) {
+    const x = lerp(-220, 220, rng()), z = lerp(-330, 220, rng());
+    const y = world.height(x, z);
+    if (y < 0.5 || y > 130) continue;
+    const gr = world.grove(x, z), ld = world.laneDist(x, z);
+    const edge = smoothstep(0.02, 0.12, gr) * smoothstep(0.6, 0.3, gr), verge = smoothstep(6, 3, ld);
+    const clump = smoothstep(0.15, 0.5, nz.fbm2(x * 0.03, z * 0.03, 2) + 0.2);
+    if (rng() > Math.max(edge * 0.9, verge * 0.3) * clump) continue;
+    const k = edge > verge ? (rng() < 0.6 ? SASA : rng() < 0.75 ? KER : AZ) : rng() < 0.6 ? KER : SASA;
+    const h = k === SASA ? 0.7 + rng() * 0.5 : k === KER ? 1.2 + rng() * 0.6 : 0.8 + rng() * 0.6;
+    const r = h * (k === SASA ? 1.1 : 0.75);
+    if (!free(x, z, r) || flat(x, z) < 0.78) continue;
+    put(k, x, z, h, r);
+  }
+  // out in the meadow, now and then a thicket of a few
+  for (let t = 0, n = 0; t < 4000 && n < 40; t++) {
+    const x = lerp(-200, 200, rng()), z = lerp(-300, 200, rng());
+    if (world.grove(x, z) > 0.02 || !free(x, z, 3) || flat(x, z) < 0.85 || world.height(x, z) > 110) continue;
+    n++;
+    const k = rng() < 0.5 ? KER : rng() < 0.5 ? SASA : AZ;
+    for (let i = 0, m = 3 + Math.floor(rng() * 4); i < m; i++) {
+      const a = rng() * Math.PI * 2, d = rng() * 2.2, xx = x + Math.cos(a) * d, zz = z + Math.sin(a) * d;
+      const h = (k === SASA ? 0.7 : 1.0) + rng() * 0.5;
+      if (free(xx, zz, h * 0.5)) put(i === 0 || rng() < 0.7 ? k : KER, xx, zz, h, h * 0.6);
+    }
+  }
+  return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
+}
+
 // ---------- woods on the hills ----------
 // A Japanese hillside in spring: dark stands of sugi (cedar) and hinoki (cypress), broadleaf woods in fresh green and
 // evergreen oak with wild cherries (yamazakura) flowering pale pink among them, all in groves with meadow between.

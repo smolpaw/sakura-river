@@ -2,7 +2,7 @@
 // onBeforeCompile patch it replaces (see git history of src/shaders.js).
 import * as THREE from 'three/webgpu';
 import {
-  Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty,
+  Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection,
 } from 'three/tsl';
@@ -196,6 +196,36 @@ export function forestMaterial() {
     const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
     return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom));
+  })());
+}
+
+// the shrubs (tools/shrubs.py): leaves in the vertex colours, and how much is in flower and which flower in their
+// alpha ((kind + share) / 4: 1 azalea magenta, 2 white, 3 kerria yellow). Close by the flowers are small spots (two
+// octaves of noise over the shrub), further off the leaves' and flowers' average, before the spots would shimmer;
+// lit through like the blossom (forestMaterial).
+export function shrubMaterial() {
+  const col = attribute('color', 'vec4');
+  const colorNode = Fn(() => {
+    const code = col.a.mul(4.0), kind = floor(code.add(0.03)), share = clamp(code.sub(kind), 0.0, 1.0);
+    const leaf = col.rgb.toVar();
+    If(kind.greaterThan(0.5), () => {
+      const fc = select(kind.lessThan(1.5), vec3(0.62, 0.07, 0.26), select(kind.lessThan(2.5), vec3(0.74, 0.73, 0.67), vec3(0.75, 0.5, 0.03)));
+      const flower = fc.mul(clamp(dot(col.rgb, vec3(0.3, 0.6, 0.1)).mul(10.0), 0.3, 1.0));
+      const q = vec2(wp.x.add(wp.y.mul(0.7)), wp.z.sub(wp.y.mul(0.6)));
+      const n = vnoise(q.mul(9.0)).mul(0.6).add(vnoise(q.mul(23.0).add(7.0)).mul(0.4));
+      // the noise sits round 0.5: the cut moves down as the share rises
+      const cut = mix(0.7, 0.3, share);
+      const spot = sstep(cut.sub(0.07), cut.add(0.07), n);
+      const f = mix(spot, share.mul(0.8), sstep(10.0, 30.0, wp.sub(cameraPosition).length()));
+      leaf.assign(mix(leaf, flower, f));
+    });
+    return leaf;
+  })();
+  return new LitMaterial({ roughness: 1, colorNode }, (out) => Fn(() => {
+    const bloom = sstep(0.45, 0.7, diffuseColor.r);
+    const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
+    const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
+    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom).mul(0.6));
   })());
 }
 

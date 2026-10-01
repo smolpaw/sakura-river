@@ -184,9 +184,13 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
     If(grow.greaterThan(0), () => {
       // tufts: neighbours share length and lean (low-frequency noise), each blade its own share of that
       const tuft = vnoise(root.mul(1.7)).toVar(), patch = grassPatch(root);
-      const len = g.z.mul(mix(0.55, 1.0, tuft)).mul(h2.x.mul(0.5).add(0.75)).mul(1.05).mul(grow);
+      // spring flowers: a few blades in drifts are a stem with a head (dandelion, clover, violet, renge), where the
+      // grass grows thick and long enough to hold them; which kind by a broad noise, so each drift is mostly one
+      const drift = sstep(0.5, 0.8, vnoise(root.mul(0.11).add(17.0))).mul(sstep(0.3, 0.6, g.y)).mul(sstep(0.3, 0.5, g.z));
+      const flower = h2.w.mul(37.0).fract().lessThan(drift.mul(0.2).add(0.006)).and(g.w.lessThan(0.75)).toVar();
+      const len = g.z.mul(mix(0.55, 1.0, tuft)).mul(h2.x.mul(0.5).add(0.75)).mul(select(flower, 1.12, 1.05)).mul(grow);
       const widen = min(pow(max(d.div(D0), 1), 0.85), 6.0);
-      const width = h2.y.mul(0.012).add(0.017).mul(T.wide).mul(widen).mul(grow.mul(0.5).add(0.5));
+      const width = h2.y.mul(0.012).add(0.017).mul(T.wide).mul(widen).mul(grow.mul(0.5).add(0.5)).toVar();
       // facing: random near, turning to face the camera with distance
       const yaw = h.w.mul(6.2832).add(tuft.mul(2.0));
       const side0 = vec2(yaw.cos(), yaw.sin());
@@ -195,7 +199,8 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
       const fwd = vec2(side.y, side.x.negate());
       const t = positionGeometry.y;
       const lean = h2.z.mul(0.35).add(0.12).add(tuft.mul(0.15));
-      const w = width.mul(float(1).sub(pow(t, 1.4))).add(0.002).mul(positionGeometry.x);
+      const profile = select(flower, mix(float(0.2), float(2.4), sstep(0.8, 0.9, t)).mul(sstep(1.0, 0.94, t).mul(0.6).add(0.4)), float(1).sub(pow(t, 1.4)));
+      const w = width.mul(profile).add(0.002).mul(positionGeometry.x);
       const rest = vec3(root.x.add(side.x.mul(w)).add(fwd.x.mul(lean).mul(t).mul(t).mul(len)), y0.sub(0.03).add(t.mul(len)), root.y.add(side.y.mul(w)).add(fwd.y.mul(lean).mul(t).mul(t).mul(len))).toVar();
       // the face seen, tilted up; far blades (turned to the camera) lit as the ground is, or looking towards the sun
       // they would all show their shaded side
@@ -214,6 +219,11 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
       const shade = mix(mix(0.3, 0.7, sstep(D0, D0.mul(2.5), d)), 1.0, pow(t, 0.8));
       const tint = clamp(g.w.add(h2.w.sub(0.5).mul(0.3)).add(patch.mul(0.12)), 0, 1);
       vColor.assign(grassColor(tint, fract(h.z.mul(7.31)).mul(0.45).add(0.7).mul(patch.mul(0.12).add(1.0))).mul(shade));
+      If(flower, () => {
+        const kind = vnoise(root.mul(0.05).add(41.0)).add(h.x.mul(0.25));
+        const head = select(kind.lessThan(0.42), vec3(0.85, 0.62, 0.04), select(kind.lessThan(0.6), vec3(0.82, 0.82, 0.74), select(kind.lessThan(0.78), vec3(0.32, 0.2, 0.62), vec3(0.78, 0.3, 0.55))));
+        vColor.assign(mix(vColor, head, sstep(0.78, 0.88, t)));
+      });
       out.assign(p);
     });
     return out;

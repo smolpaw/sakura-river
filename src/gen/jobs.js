@@ -2,7 +2,7 @@
 // data: typed arrays, packed geometries and small JSON. Every job owns its seeds, so jobs run in any order.
 import { createWorld } from '../world.js';
 import { paintFlowerAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
-import { turfData, grassMask, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData } from '../vegetation.js';
+import { turfData, grassMask, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData, shrubData } from '../vegetation.js';
 import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.js';
 import { templeData } from '../temple.js';
 import { fallenData, raftData } from '../petals.js';
@@ -58,6 +58,8 @@ export const JOBS = {
   forest: ({ count }) => forestData(world(), count),
   cliffs: () => cliffData(world()),
   bamboo: () => bambooData(world()),
+  // clear of the cherries: the main tree's lawn and crown, the small trees' clearings
+  shrubs: () => { const l = L(); return shrubData(world(), [{ x: l.TX, z: l.TZ, r: 22 }, ...l.small.map((sp) => ({ x: sp.x, z: sp.z, r: 8 }))]); },
   lanterns: ({ tier }) => {
     const l = L();
     const trees = [l.tree, ...l.small.map((sp) => [sp.x, 0, sp.z])].map(([x, , z]) => ({ x, z, r: 1 }));
@@ -69,4 +71,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 5, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 5, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };

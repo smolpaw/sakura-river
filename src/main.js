@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
-import { makeTurf, makeFlowers, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
+import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods, makeMerged } from './lods.js';
 import { makeGrass } from './grass.js';
 import { nearBlossoms } from './blossoms.js';
@@ -18,6 +18,7 @@ import bambooUrl from './models/bamboo.glb?url&inline';
 import rocksUrl from './models/rocks.glb?url&inline';
 import cherryUrl from './models/cherry.glb?url&inline';
 import villageUrl from './models/village.glb?url&inline';
+import shrubsUrl from './models/shrubs.glb?url&inline';
 import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
@@ -135,6 +136,7 @@ export async function create(canvas, opts = {}) {
     // the farmland and village mesh in three jobs that run at once, its zones shared out by area
     ...Object.fromEntries(fieldJobs.map((zones, k) => [`fields${k}`, { name: 'fields', args: { zones } }])),
     village: { name: 'village' },
+    shrubs: { name: 'shrubs' },
     heightCache: { name: 'heightCache' },
     depth: { name: 'depth', args: { tier: tierName } },
     river: { name: 'river' },
@@ -356,6 +358,9 @@ export async function create(canvas, opts = {}) {
   const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial(), [60, 160]);
   bamboo.name = 'bamboo';
   scene.add(bamboo);
+  const shrubs = await makeLods(shrubsUrl, SHRUB_KINDS, G.shrubs, M.shrubMaterial(), [35, 110]);
+  shrubs.name = 'shrubs';
+  scene.add(shrubs);
   const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village, M.villageMaterial(), [90]);
   village.name = 'village';
   scene.add(village);
@@ -716,6 +721,7 @@ export async function create(canvas, opts = {}) {
     walls.userData.lod(camera.position);
     bamboo.userData.lod(camera.position);
     village.userData.lod(camera.position);
+    shrubs.userData.lod(camera.position);
     if (nearFlowers) nearFlowers.update(camera.position, warming);
 
     // sun light / shadow frustum anchored on the tree

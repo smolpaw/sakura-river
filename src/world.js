@@ -651,7 +651,7 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = HC.data, k = j * HC.nx + i;
     return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + HC.nx] * (1 - u) + d[k + HC.nx + 1] * u) * v;
   }
-  return { N, height, heightField, zoneAt, padAt, padDist, BUILDINGS, ground, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove };
+  return { N, height, heightField, zoneAt, padAt, padDist, BUILDINGS, ground, LANES, CLEAR, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove };
 }
 
 // water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map (G = rock foam)
