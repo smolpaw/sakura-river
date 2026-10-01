@@ -8,8 +8,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
-import { makeGrass, makeFlowers, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
+import { makeTurf, makeFlowers, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods } from './lods.js';
+import { makeGrass } from './grass.js';
 import { nearBlossoms } from './blossoms.js';
 import forestUrl from './models/forest.glb?url&inline';
 import cliffsUrl from './models/cliffs.glb?url&inline';
@@ -38,9 +39,9 @@ import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], grass: 32000, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
-  medium: { pr: 1.5, terrain: [300, 320], grass: 22000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
-  low: { pr: 1.25, terrain: [210, 230], grass: 9000, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
+  high: { pr: 2.0, terrain: [420, 440], turf: 2900, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
+  medium: { pr: 1.5, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
+  low: { pr: 1.25, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -136,7 +137,8 @@ export async function create(canvas, opts = {}) {
     props: { name: 'props', args: { triMul } },
     lanterns: { name: 'lanterns', args: { tier: tierName } },
     rocks: { name: 'rocks', args: { tier: tierName } },
-    grass: { name: 'grass', args: { count: Q.grass * (ST ? ST.grass : 1), tier: tierName } },
+    grassMask: { name: 'grassMask', args: { tier: tierName } },
+    turf: { name: 'turf', args: { count: Q.turf * (ST ? ST.grass : 1) } },
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
     forest: { name: 'forest', args: { count: Q.forest } },
     cliffs: { name: 'cliffs' },
@@ -148,7 +150,7 @@ export async function create(canvas, opts = {}) {
   mark('generated');
 
   // ---------- terrain ----------
-  const terrainGeo = G.terrain;
+  const terrainGeo = G.terrain.geo;
   const terrainMat = M.terrainMaterial();
   const terrain = new THREE.Mesh(terrainGeo, terrainMat);
   terrain.receiveShadow = true;
@@ -315,9 +317,12 @@ export async function create(canvas, opts = {}) {
   pebbles.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
   rocks.name = 'rocks'; pebbles.name = 'pebbles';
   scene.add(rocks, pebbles);
-  const grass = makeGrass(G.grass, M.grassMaterial());
+  const grass = makeGrass({ ...G.terrain, mask: G.grassMask }, tierName);
   grass.name = 'grass';
   scene.add(grass);
+  const turf = makeTurf(G.turf, M.grassMaterial());
+  turf.name = 'turf';
+  scene.add(turf);
   const flowers = makeFlowers(G.flowers, M.flowerMaterial());
   flowers.name = 'flowers';
   scene.add(flowers);
@@ -679,7 +684,7 @@ export async function create(canvas, opts = {}) {
     }
     camera.updateMatrixWorld();
     sky.mesh.position.copy(camera.position);
-    grass.userData.lod(camera.position, warming); // warm-up builds both grass levels
+    grass.userData.update(camera, warming); // warm-up draws every tile
     forest.userData.lod(camera.position);
     cliffs.userData.lod(camera.position);
     rocks.userData.lod(camera.position);
@@ -839,7 +844,7 @@ export async function create(canvas, opts = {}) {
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
-    info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.total, verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
+    info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.levels.map((l) => l.range), verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
     dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); sound.dispose(); },
   };
 }

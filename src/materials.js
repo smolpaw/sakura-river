@@ -7,13 +7,29 @@ import {
   transformNormalToView, faceDirection,
 } from 'three/tsl';
 import { U, vnoise, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
+import { grassColor, grassWave, patchFrom } from './grass.js';
 
 const wp = positionWorld;
 const viewDir = () => normalize(cameraPosition.sub(wp));
 
 export function terrainMaterial() {
-  const dn = vnoise(wp.xz.mul(0.9)).mul(0.5).add(vnoise(wp.xz.mul(3.7)).mul(0.3)).add(vnoise(wp.xz.mul(0.12)).mul(0.45));
-  return new LitMaterial({ vertexColors: true, roughness: 0.96, metalness: 0, colorNode: vec3(dn.mul(0.42).add(0.7)) }, (out) => Fn(() => {
+  const n09 = vnoise(wp.xz.mul(0.9)), n012 = vnoise(wp.xz.mul(0.12));
+  const dn = n09.mul(0.5).add(vnoise(wp.xz.mul(3.7)).mul(0.3)).add(n012.mul(0.45));
+  // where grass grows (aGround: density, length, tint, as grass.js reads them) the ground takes the grass's colour:
+  // the shade at the blades' roots close by, the sward's average further out, where the blades thin to nothing
+  const gr = attribute('aGround', 'vec3');
+  const dist = wp.sub(cameraPosition).length();
+  const far = sstep(12.0, 40.0, dist);
+  const cover = clamp(gr.x.mul(1.4), 0.0, 1.0).mul(sstep(0.02, 0.12, gr.y));
+  const colorNode = Fn(() => {
+    // the blades' own patches; blade-scale streaks close by, faded out before they would shimmer
+    const patch = patchFrom(n012, n09);
+    const streak = float(0).toVar();
+    If(dist.lessThan(40.0), () => { streak.assign(vnoise(wp.xz.mul(vec2(9.0, 6.0))).sub(0.5).mul(sstep(40.0, 12.0, dist)).mul(0.45)); });
+    const carpet = grassColor(clamp(gr.z.add(patch.mul(0.12)), 0.0, 1.0), mix(0.5, 0.74, far).mul(patch.mul(0.12).add(1.0)).mul(streak.add(1.0)));
+    return mix(attribute('color', 'vec3').mul(dn.mul(0.42).add(0.7)), carpet, cover);
+  })();
+  return new LitMaterial({ roughness: 0.96, metalness: 0, colorNode }, (out) => Fn(() => {
     // river-bed caustics and darkening under water: both are exactly zero / one above y = 0.03, so skip them there
     const y = wp.y;
     const o = out.toVar();
@@ -26,6 +42,11 @@ export function terrainMaterial() {
       o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(cc).mul(cw).mul(2.2));
       o.mulAssign(mix(1.0, 0.75, sstep(0.0, -1.5, y)));
     });
+    // far grass as the blades are lit: the sun through their tips, and the wind's waves running over it
+    const grassy = cover.mul(far);
+    const back = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 3.0);
+    o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(back.mul(1.6).add(0.15)).mul(grassy).mul(0.5));
+    o.mulAssign(float(1.0).add(grassWave(wp.xz).mul(U.uWind).mul(grassy).mul(0.3)));
     o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
     return o;
   })());

@@ -2,6 +2,11 @@
 import * as THREE from 'three';
 import { makeNoise, smoothstep, clamp, lerp } from './noise.js';
 
+// the terrain mesh's grid: x = kx * sinh(cx * s) + ox for s in -1..1, z = z0 + kz * sinh(cz * s) for s in -1..sMaxZ
+// (grass.js inverts this on the GPU to find the triangle under a blade)
+export const TERRAIN_GRID = { kx: 16, cx: 5.86, ox: -2, kz: 18, cz: 6.2, z0: 4, zMax: 260 };
+export const terrainSMaxZ = () => Math.asinh((TERRAIN_GRID.zMax - TERRAIN_GRID.z0) / TERRAIN_GRID.kz) / TERRAIN_GRID.cz;
+
 export function createWorld(seed = 7) {
   const N = makeNoise(seed);
   const N2 = makeNoise(seed * 3 + 11);
@@ -91,14 +96,18 @@ export function createWorld(seed = 7) {
   }
 
   // ---------- terrain mesh (non uniform grid: dense near the scene, sparse far) ----------
-  function buildTerrain(segX, segZ) {
-    const kx = 16, cx = 5.86; // x = kx*sinh(cx*s)
-    const kz = 18, cz = 6.2, z0 = 4;
-    const sMaxZ = Math.asinh(260 / kz) / cz;
+  // Besides the mesh, `grid` holds per vertex (row-major, x fastest): height, and the grass grown there (grass.js
+  // reads it to stand its blades on this very surface): density 0..1, length 0..1, dryness 0..1. The mesh carries
+  // the grass values too (aGround), so the ground under the blades takes their colour. `mask(x, z)` -> [density,
+  // length] multipliers from the scene's layout (lawns, the deer's turf, trunks).
+  function buildTerrain(segX, segZ, mask = null) {
+    const { kx, cx, ox, kz, cz, z0 } = TERRAIN_GRID;
+    const sMaxZ = terrainSMaxZ();
     const xs = new Float32Array(segX + 1), zs = new Float32Array(segZ + 1);
-    for (let i = 0; i <= segX; i++) { const s = -1 + (2 * i) / segX; xs[i] = kx * Math.sinh(cx * s) - 2; }
+    for (let i = 0; i <= segX; i++) { const s = -1 + (2 * i) / segX; xs[i] = kx * Math.sinh(cx * s) + ox; }
     for (let j = 0; j <= segZ; j++) { const s = -1 + ((sMaxZ + 1) * j) / segZ; zs[j] = z0 + kz * Math.sinh(cz * s); }
     const nv = (segX + 1) * (segZ + 1);
+    const grid = new Float32Array(nv * 4), ground = new Float32Array(nv * 3);
     const pos = new Float32Array(nv * 3);
     let k = 0;
     for (let j = 0; j <= segZ; j++) for (let i = 0; i <= segX; i++) {
@@ -170,10 +179,23 @@ export function createWorld(seed = 7) {
         c.lerp(snow, clamp(s + smoothstep(480, 600, y) * 0.8, 0, 1));
       }
       col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
+      // the grass: none in the water, on rock, on the temple's gravel or high up; thin and short on the woods' floor;
+      // in patches, longer by the river (reeds) and in the valley than out on the hills; tint 0 lush .. 1 straw
+      const woods = grove(x, z, gn) * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y);
+      let dens = smoothstep(0.08, 0.3, y) * smoothstep(0.7, 0.86, ny) * (1 - 0.8 * woods) * smoothstep(170, 110, y) * smoothstep(0.3, 1.5, templeDist(x, z));
+      dens *= clamp(0.82 + 0.6 * n1, 0.4, 1);
+      const nearBank = smoothstep(1.4, 1.0, ri.t);
+      let len = clamp(0.55 + 0.45 * N2.fbm2(x * 0.08, z * 0.08, 3), 0.25, 1) * lerp(1, 0.55, out) * (1 - 0.6 * woods) + nearBank * 0.35;
+      let gTint = clamp(0.35 + clamp(dry * 0.6 - 0.05, 0, 0.45) * 0.6 - 0.25 * bankT, 0, 1);
+      if (out > 0) gTint = clamp(gTint + out * (smoothstep(0.0, 0.35, dry) * 0.4 - 0.3 * Math.max(smoothstep(0.06, 0.24, gn), smoothstep(-0.1, -0.45, N2.noise2(x * 0.07, z * 0.07)))), 0, 1);
+      if (mask) { const m = mask(x, z); dens *= m[0]; len *= m[1]; }
+      grid[v * 4] = y; grid[v * 4 + 1] = dens; grid[v * 4 + 2] = len; grid[v * 4 + 3] = gTint;
+      ground[v * 3] = dens; ground[v * 3 + 1] = len; ground[v * 3 + 2] = gTint;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aGround', new THREE.BufferAttribute(ground, 3));
     geo.computeBoundingSphere();
-    return geo;
+    return { geo, grid, segX, segZ };
   }
 
   // ---------- river ribbon: follows the meandering centreline ----------

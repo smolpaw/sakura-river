@@ -2,12 +2,13 @@
 // data: typed arrays, packed geometries and small JSON. Every job owns its seeds, so jobs run in any order.
 import { createWorld } from '../world.js';
 import { paintFlowerAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
-import { grassData, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData } from '../vegetation.js';
+import { turfData, grassMask, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData } from '../vegetation.js';
 import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.js';
 import { templeData } from '../temple.js';
 import { fallenData, raftData } from '../petals.js';
 import { lanternData, lanternGeometry, paintLanternInk } from '../lanterns.js';
 import { tessellate } from '../stress.js';
+import { lerp } from '../noise.js';
 import { layout, rockAvoid, trunkAvoid, underTree, lawn, turf } from './layout.js';
 
 let W = null;
@@ -17,7 +18,11 @@ const xz = (p) => ({ x: p[0], y: p[1], z: p[2] });
 const tess = (g, m) => (m > 1 ? tessellate(g, m) : g);
 
 export const JOBS = {
-  terrain: ({ seg }) => world().buildTerrain(seg[0], seg[1]),
+  // the meadow's grass grows into the terrain grid: short on the lawn under the tree, thinned where the deer's turf is
+  terrain: ({ seg }) => {
+    const l = L(), lw = lawn(l), tf = turf(l, 0);
+    return world().buildTerrain(seg[0], seg[1], (x, z) => [1 - 0.85 * tf.density(x, z), lerp(0.13, 1, lw(x, z))]);
+  },
   heightCache: () => world().computeHeightCache(),
   depth: ({ tier }) => world().buildDepthMap(rockPlan(world(), tier, xz(L().tree)).rocksInWater),
   river: () => world().buildRiver(),
@@ -34,11 +39,14 @@ export const JOBS = {
     return { bridge: b, temple: t };
   },
   rocks: ({ tier }) => rocksData(world(), tier, xz(L().tree)),
-  grass: ({ count, tier }) => {
+  // no grass in the boulders or round the cherries' trunks
+  grassMask: ({ tier }) => {
     const l = L();
-    const avoid = rockAvoid(l, rockPlan(world(), tier, xz(l.tree)).placements);
-    return grassData(world(), count, { focus: xz(l.focus), radius: 62, avoid, lawn: lawn(l), turf: turf(l, Math.round(count * 0.09)) });
+    const rocks = rockPlan(world(), tier, xz(l.tree)).placements.filter((r) => r.sc > 0.3).map((r) => ({ x: r.x, z: r.z, r: r.sc * 0.95 }));
+    const trunks = [{ x: l.TX, z: l.TZ, r: 0.95 }, ...l.small.map((sp) => ({ x: sp.x, z: sp.z, r: 0.45 * sp.s }))];
+    return grassMask(rocks, trunks);
   },
+  turf: ({ count }) => turfData(world(), turf(L(), count)),
   flowers: ({ count, tier }) => {
     const l = L();
     const avoid = rockAvoid(l, rockPlan(world(), tier, xz(l.tree)).placements);
@@ -58,4 +66,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 330, depth: 220, grass: 150, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 5, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 330, depth: 220, grassMask: 5, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 5, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, flowers: 10, fallen: 7, rafts: 8, river: 3 };

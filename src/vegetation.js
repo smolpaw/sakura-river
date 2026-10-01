@@ -1,24 +1,22 @@
-// Grass clumps, wildflowers, rocks & pebbles, the gorge's rock walls, the woods on the hills — all instanced
+// The deer's turf, wildflowers, rocks & pebbles, the gorge's rock walls, the woods on the hills — all instanced
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
 
 const V = THREE.Vector3;
 
 // ---------- grass ----------
-// blade height, base half-width and lean: [min, spread]; spread: clump radius
-const TALL = { blades: 5, segs: 4, spread: 0.13, h: [0.65, 0.45], w: [0.038, 0.022], lean: [0.12, 0.35] };
-// the deer's cropped turf: many thin, short, upright blades
+// the deer's cropped turf: many thin, short, upright blades (height, base half-width and lean: [min, spread];
+// spread: clump radius)
 const TURF = { blades: 6, segs: 2, spread: 0.09, h: [0.1, 0.12], w: [0.008, 0.006], lean: [0.04, 0.16] };
 
-// `wScale` widens every blade (the one-segment far version: its straight taper is ~15% thinner than the curved one)
-function grassClumpGeometry(rng, { blades, segs, spread, h: H, w: W, lean: L } = TALL, wScale = 1) {
+function grassClumpGeometry(rng, { blades, segs, spread, h: H, w: W, lean: L }) {
   const P = [], Nn = [], F = [], C = [], I = [];
   let base = 0;
   for (let b = 0; b < blades; b++) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * spread;
     const ox = Math.cos(a) * r, oz = Math.sin(a) * r;
     const yaw = rng() * Math.PI * 2;
-    const h = H[0] + rng() * H[1], w = (W[0] + rng() * W[1]) * wScale;
+    const h = H[0] + rng() * H[1], w = W[0] + rng() * W[1];
     const lean = L[0] + rng() * L[1];
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     for (let s = 0; s <= segs; s++) {
@@ -54,68 +52,11 @@ function grassClumpGeometry(rng, { blades, segs, spread, h: H, w: W, lean: L } =
   return g;
 }
 
-// placement + per-tile instance data (worker-safe)
-export function grassData(world, count, opts) {
-  const rng = mulberry32(42);
-  const nz = makeNoise(77);
-  const geo = grassClumpGeometry(rng);
-  // far level of detail: the same blades (same rng draws) in one segment each, a quarter of the triangles
-  const farGeo = grassClumpGeometry(mulberry32(42), { ...TALL, segs: 1 }, 1.17);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
-  const col = new THREE.Color();
-  const cA = new THREE.Color(0.09, 0.26, 0.05), cB = new THREE.Color(0.24, 0.42, 0.08), cC = new THREE.Color(0.42, 0.42, 0.14), reed = new THREE.Color(0.2, 0.28, 0.08);
-  const focus = opts.focus;
-  const items = [];
-  let tries = 0;
-  while (items.length < count && tries < count * 40) {
-    tries++;
-    const r = Math.pow(rng(), 0.8) * opts.radius;
-    const a = rng() * Math.PI * 2;
-    const x = focus.x + Math.cos(a) * r * 1.2, z = focus.z + Math.sin(a) * r;
-    const y = world.height(x, z);
-    if (y < 0.12) continue;
-    const ri = world.riverInfo(x, z);
-    if (opts.avoid && opts.avoid(x, z)) continue;
-    if (opts.turf && opts.turf.density(x, z) > nz.noise2(x * 2.1, z * 2.1) * 0.5 + 0.5) continue; // cropped: turf instead
-    const patchN = nz.fbm2(x * 0.08, z * 0.08, 3);
-    const lush = clamp(0.6 + patchN * 0.9, 0.15, 1.2);
-    if (rng() > 0.35 + lush * 0.6) continue;
-    const nearBank = smoothstep(1.35, 1.0, ri.t);
-    const hs = lerp(0.35, 0.8, lush) * (1 + nearBank * 0.9 * rng()) * (opts.lawn ? lerp(0.13, 1, opts.lawn(x, z)) : 1);
-    p.set(x, y - 0.03, z);
-    q.setFromAxisAngle(new V(0, 1, 0), rng() * Math.PI * 2);
-    const ws = 0.9 + rng() * 0.6;
-    s.set(ws, hs, ws);
-    const mm = new THREE.Matrix4().compose(p, q, s);
-    const c = cA.clone().lerp(cB, clamp(0.5 + patchN + (rng() - 0.5) * 0.4, 0, 1)).lerp(cC, clamp(nz.noise2(x * 0.03, z * 0.03) * 0.5, 0, 0.5)).lerp(reed, nearBank * 0.6);
-    // distance rank: nearer clumps kept first when quality scales grass down
-    items.push({ x, z, mm, c, rank: Math.hypot(x - focus.x, z - focus.z) + rng() * 25 });
-  }
-  // spatial chunks -> real frustum culling
-  const T = opts.tile || 14;
-  const tiles = new Map();
-  for (const it of items) {
-    const key = Math.floor(it.x / T) + ',' + Math.floor(it.z / T);
-    if (!tiles.has(key)) tiles.set(key, []);
-    tiles.get(key).push(it);
-  }
-  const out = [];
-  let total = 0;
-  for (const list of tiles.values()) {
-    list.sort((a, b) => a.rank - b.rank);
-    const mesh = new THREE.InstancedMesh(geo, undefined, list.length);
-    list.forEach((it, i) => { mesh.setMatrixAt(i, it.mm); mesh.setColorAt(i, it.c); });
-    mesh.computeBoundingSphere();
-    const bs = mesh.boundingSphere;
-    out.push({ matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, n: list.length, bs: [bs.center.x, bs.center.y, bs.center.z, bs.radius + 1.5] });
-    total += list.length;
-  }
-  return { geo, farGeo, tiles: out, total, turf: opts.turf ? turfData(world, opts.turf, nz, cA, cB) : null };
-}
-
-// the turf: one instanced draw over the grazing ground's box, as dense as turf.density(x, z) (0..1)
-function turfData(world, turf, nz, cA, cB) {
-  const rng = mulberry32(43);
+// the deer's turf: one instanced draw over the grazing ground's box, as dense as turf.density(x, z) (0..1). The
+// meadow's tall grass is grass.js; here only these short, thin, upright blades.
+export function turfData(world, turf) {
+  const rng = mulberry32(43), nz = makeNoise(77);
+  const cA = new THREE.Color(0.09, 0.26, 0.05), cB = new THREE.Color(0.24, 0.42, 0.08);
   const geo = grassClumpGeometry(rng, TURF);
   const [x0, z0, x1, z1] = turf.box;
   const mesh = new THREE.InstancedMesh(geo, undefined, turf.count);
@@ -137,41 +78,33 @@ function turfData(world, turf, nz, cA, cB) {
   return { geo, matrix: mesh.instanceMatrix.array.slice(0, n * 16), color: mesh.instanceColor.array.slice(0, n * 3), n, bs: [bs.center.x, bs.center.y, bs.center.z, bs.radius + 0.5] };
 }
 
-// Each tile is drawn with the full clumps near the camera and with the one-segment ones (farGeo) from FAR metres
-// out, where a blade's curve is a few pixels; both meshes share the tile's instance data.
-const FAR = 32;
-export function makeGrass(data, mat) {
-  const group = new THREE.Group();
-  const lods = [];
-  const add = (geo, t, inst) => {
-    const mesh = new THREE.InstancedMesh(geo, mat, t.n);
-    mesh.instanceMatrix = inst ? inst.instanceMatrix : new THREE.InstancedBufferAttribute(t.matrix, 16);
-    mesh.instanceColor = inst ? inst.instanceColor : new THREE.InstancedBufferAttribute(t.color, 3);
-    mesh.boundingSphere = new THREE.Sphere(new V(t.bs[0], t.bs[1], t.bs[2]), t.bs[3]);
-    mesh.receiveShadow = true; mesh.castShadow = false;
-    mesh.layers.set(1);
-    mesh.userData.max = t.n;
-    group.add(mesh);
-    return mesh;
-  };
-  for (const t of data.tiles) {
-    const near = add(data.geo, t), far = add(data.farGeo, t, near);
-    far.visible = false;
-    lods.push({ near, far, c: near.boundingSphere.center, r: near.boundingSphere.radius, isFar: false });
-  }
-  if (data.turf) add(data.turf.geo, data.turf); // short turf: two segments already
-  group.userData.total = data.total;
-  group.userData.setFraction = (f) => { group.children.forEach((m) => (m.count = Math.max(0, Math.round(m.userData.max * f)))); };
-  // pick each tile's level by its nearest point to the camera (2 m of hysteresis); `both` shows both (warm-up)
-  group.userData.lod = (cam, both = false) => {
-    for (const l of lods) {
-      const d = l.c.distanceTo(cam) - l.r;
-      l.isFar = l.isFar ? d > FAR - 2 : d > FAR + 2;
-      l.near.visible = both || !l.isFar;
-      l.far.visible = both || l.isFar;
+export function makeTurf(t, mat) {
+  const mesh = new THREE.InstancedMesh(t.geo, mat, t.n);
+  mesh.instanceMatrix = new THREE.InstancedBufferAttribute(t.matrix, 16);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(t.color, 3);
+  mesh.boundingSphere = new THREE.Sphere(new V(t.bs[0], t.bs[1], t.bs[2]), t.bs[3]);
+  mesh.receiveShadow = true;
+  mesh.layers.set(1);
+  return mesh;
+}
+
+// grass.js's fine mask: no grass in the boulders' footprints or round the cherries' trunks (the terrain grid is too
+// coarse out along the river for these). bounds: [x0, z0, 1 / width, 1 / depth]
+export function grassMask(blockers, trunks, S = 0.2) {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const b of blockers.concat(trunks)) { x0 = Math.min(x0, b.x - b.r - 1); x1 = Math.max(x1, b.x + b.r + 1); z0 = Math.min(z0, b.z - b.r - 1); z1 = Math.max(z1, b.z + b.r + 1); }
+  const W = Math.ceil((x1 - x0) / S), H = Math.ceil((z1 - z0) / S);
+  const data = new Uint8Array(W * H).fill(255);
+  for (const b of blockers.concat(trunks)) {
+    const i0 = Math.max(0, Math.floor((b.x - b.r - 0.5 - x0) / S)), i1 = Math.min(W - 1, Math.ceil((b.x + b.r + 0.5 - x0) / S));
+    const j0 = Math.max(0, Math.floor((b.z - b.r - 0.5 - z0) / S)), j1 = Math.min(H - 1, Math.ceil((b.z + b.r + 0.5 - z0) / S));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const d = Math.hypot(x0 + (i + 0.5) * S - b.x, z0 + (j + 0.5) * S - b.z) - b.r;
+      const k = j * W + i;
+      data[k] = Math.min(data[k], Math.round(255 * Math.min(1, Math.max(0, d / 0.35))));
     }
-  };
-  return group;
+  }
+  return { data, W, H, bounds: [x0, z0, 1 / (W * S), 1 / (H * S)] };
 }
 
 // ---------- wildflowers (tiny heads riding above the grass) ----------

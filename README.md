@@ -19,10 +19,11 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/ui.js`: wires the page controls to the engine.
 - `src/style.css`: page styles.
 - `src/main.js`: engine entry point: renderer, scene assembly, camera and controls, post-processing chain, adaptive quality, and the public API.
-- `src/world.js`: height field, river path, terrain mesh, river ribbon, water-depth map and the finer map of rocks in the water (with the white water where the current breaks on them).
+- `src/world.js`: height field, river path, terrain mesh (with the grass grown at each vertex), river ribbon, water-depth map and the finer map of rocks in the water (with the white water where the current breaks on them).
 - `src/tree.js`: procedural cherry tree (Somei Yoshino form) in full bloom, single-flower blossoms, bark and flower textures; its trunk and main limbs are a Blender model grown from the same skeleton (`trunkSkeleton`).
 - `src/blossoms.js`: the main tree's flowers near the camera drawn as a modelled flower instead of the painted card.
-- `src/vegetation.js`: instanced grass (split into tiles for frustum culling), wildflowers, rocks, the rock walls lining the gorge where the river cuts through the temple's knoll, the bamboo groves behind the temple, and where the woods on the hills grow: groves of cedar, cypress, oak and wild cherry, and black pines on the cliff rims.
+- `src/grass.js`: the meadow's grass, placed on the GPU around the camera out to 240 m: blades on world-fixed cells in levels of coarser cells and thinner density with distance, standing on the terrain mesh's own grid (heights and the grass grown there, from `world.js`), the ground under them coloured to match.
+- `src/vegetation.js`: the deer's turf, wildflowers, rocks, the rock walls lining the gorge where the river cuts through the temple's knoll, the bamboo groves behind the temple, and where the woods on the hills grow: groves of cedar, cypress, oak and wild cherry, and black pines on the cliff rims.
 - `src/lods.js`: the Blender-built models (the woods' trees, the gorge's walls, the bamboo, the river's boulders), instanced, a full model and lighter ones for each kind switched by distance.
 - `src/props.js`: Fuji-style volcano and arched bridge (with its lanterns' hanging points).
 - `src/temple.js`: the old temple compound on its terrace (generation), with its lamp and floodlight positions.
