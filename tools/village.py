@@ -3,7 +3,8 @@
 # Each kind is one mesh in metres standing on its origin, its front (the veranda, the door) towards -y (Blender: z up;
 # glTF: y up, so the front faces +z in the page), named as in KINDS, with a lighter `<kind>_far` model. Old farmhouses
 # (minka) under thick thatch (kayabuki): the big one hip-and-gable (irimoya), the small one hipped (yosemune);
-# a white storehouse (kura) under tile; a board shed with firewood stacked along it; a torii for the temple's approach.
+# a white storehouse (kura) under tile; a board shed with firewood stacked along it; a torii for the temple's approach;
+# a waterwheel (mizuguruma) and its mill hut (the wheel a model of its own, which the page turns).
 # Shading in the vertex colours (ambient occlusion by ray casting, weathering); alpha: how much a part glows after
 # dusk (the shoji's paper, lit from inside).
 import bpy, bmesh, math, os, random, sys
@@ -443,7 +444,61 @@ def torii(name, *, far):
     return finish(k, name + ('_far' if far else ''), 0.6)
 
 
-KINDS = ['minka0', 'minka1', 'kura', 'koya', 'torii']
+def suisha_wheel(name, *, far):
+    """the waterwheel's wheel: two rims of short straight segments, spokes from an octagonal hub, boards (paddles)
+    between the rims; 2.1 m in radius, turning about the x axis through the origin"""
+    k = Kit()
+    R, w, n = 2.1, 0.7, 16 if not far else 10
+    seg = 16 if not far else 10
+    for side in (-1, 1):
+        x = side * w / 2
+        pts = [V((x, R * math.cos(2 * math.pi * i / seg), R * math.sin(2 * math.pi * i / seg))) for i in range(seg)]
+        for i in range(seg):
+            k.beam(WOOD, pts[i], pts[(i + 1) % seg], 0.1, 0.16, up=V((1, 0, 0)))
+        if not far:
+            inner = [p * 0.82 for p in pts]
+            for i in range(seg):
+                k.beam(WOOD_D, V((x, inner[i].y, inner[i].z)), V((x, inner[(i + 1) % seg].y, inner[(i + 1) % seg].z)), 0.08, 0.1, up=V((1, 0, 0)))
+        for i in range(0, seg, 2):
+            a = 2 * math.pi * i / seg
+            k.beam(WOOD, V((x, 0.25 * math.cos(a), 0.25 * math.sin(a))), V((x, R * 0.97 * math.cos(a), R * 0.97 * math.sin(a))), 0.09, 0.09, up=V((1, 0, 0)))
+    for i in range(n):
+        a = 2 * math.pi * (i + 0.5) / n
+        c, s_ = math.cos(a), math.sin(a)
+        # a board across the rims, set radially
+        p0, p1 = V((0, R * 0.8 * c, R * 0.8 * s_)), V((0, R * 1.08 * c, R * 1.08 * s_))
+        k.beam(WOOD_L, (p0 + p1) / 2 - V((w / 2 + 0.04, 0, 0)), (p0 + p1) / 2 + V((w / 2 + 0.04, 0, 0)), 0.04, (p1 - p0).length, up=V((0, -s_, c)))
+    k.cyl(WOOD_D, V((-w / 2 - 0.15, 0, 0)), V((w / 2 + 0.15, 0, 0)), 0.3, seg=8)
+    return finish(k, name + ('_far' if far else ''), 0.8)
+
+
+def suisha(name, *, far):
+    """the waterwheel's mill: a small board hut with a thatched roof on the bank, the axle out of its side on a
+    trestle (the wheel itself is suisha_wheel, turned by the page)"""
+    k = Kit()
+    L, D = 3.4, 3.0
+    k.box(STONE * 0.8, (L + 0.3, D + 0.3, 0.3), V((0, 0, 0.15)))
+    k.box(WOOD_L * 0.75, (L, D, 2.2), V((0, 0, 0.3 + 1.1)))
+    if not far:
+        for i in range(int(L / 0.25)):
+            x = -L / 2 + 0.12 + i * 0.25
+            for sy in (-1, 1):
+                k.box(WOOD_D, (0.03, 0.04, 2.15), V((x, sy * (D / 2 + 0.01), 1.4)))
+    k.box(BLACK, (0.9, 0.06, 1.7), V((-0.6, -D / 2 - 0.02, 1.15)))
+    me, xg, rz, hg = thatch(L / 2 + 0.7, D / 2 + 0.7, 2.35, 48, irimoya=False, T=0.5, voxel=0.08 if not far else 0.14,
+                            target=1800 if not far else 400, seed=21)
+    k.add_mesh(me, thatch_colour(2.35, rz, 21))
+    ridge(k, -xg, xg, rz - 0.05, 0.2, 0 if far else 3)
+    # the axle out of the hut's river side (+x) to the wheel at (2.9, 0, 1.6), on trestles either side of the wheel
+    k.cyl(WOOD_D, V((L / 2 - 0.2, 0, 1.6)), V((2.55, 0, 1.6)), 0.12, seg=8)
+    for x in (2.25, 3.55):
+        for sy in (-1, 1):
+            k.beam(WOOD, V((x, sy * 0.55, -1.2)), V((x, sy * 0.2, 1.75)), 0.15, 0.15)
+        k.box(WOOD, (0.18, 0.7, 0.16), V((x, 0, 1.72)))
+    return finish(k, name + ('_far' if far else ''), 0.8)
+
+
+KINDS = ['minka0', 'minka1', 'kura', 'koya', 'torii', 'suisha']
 
 if __name__ == '__main__':
     out = sys.argv[sys.argv.index('--') + 1]
@@ -455,6 +510,8 @@ if __name__ == '__main__':
             kura('kura', far=far),
             koya('koya', far=far),
             torii('torii', far=far),
+            suisha('suisha', far=far),
+            suisha_wheel('suisha_wheel', far=far),
         ):
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',

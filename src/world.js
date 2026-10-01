@@ -120,6 +120,15 @@ export function createWorld(seed = 7) {
   // yaw), and the levelled pad each stands on (half-sizes hw, hd round it; its yard reaching `yard` metres out in
   // front). Farmhouses strung along the lane at the foot of the western slope, a pair above the eastern terraces.
   const B = (kind, x, z, yaw, hw, hd, yard) => ({ kind, x, z, yaw, hw, hd, yard, c: Math.cos(yaw), s: Math.sin(yaw), y: 0 });
+  // the waterwheel's mill on the west bank at z, its axle (local +x) across the river to the wheel 2.9 m out (village.js
+  // turns it), the wheel in the water at 0.85 of the river's half-width; its pad low by the water (cut into the bank)
+  const mill = (z) => {
+    const [fx, fz] = flowDir(z), ax = fz, az = -fx; // across, towards the east bank
+    const wx = riverX(z) - riverHW(z) * 0.85 * ax, wz = z - riverHW(z) * 0.85 * az;
+    const b = B('suisha', wx - ax * 2.9, wz - az * 2.9, Math.atan2(-az, ax), 2.0, 1.8, 0);
+    b.level = 0.25;
+    return b;
+  };
   const E = Math.PI / 2, Wd = -Math.PI / 2;
   const BUILDINGS = [
     B('minka0', -103, -104, E, 7.6, 5.2, 4), B('kura', -100, -121, E + 0.1, 3.2, 2.7, 2), B('minka1', -79, -130, Wd, 5.8, 4.4, 3.5),
@@ -129,6 +138,7 @@ export function createWorld(seed = 7) {
     // the hamlet downstream: a farmhouse, its storehouse and shed among the eastern terraces, one across the river
     B('minka0', 52, 90, -Math.PI / 2 - 0.2, 7.6, 5.2, 4), B('kura', 56, 108, -Math.PI / 2, 3.2, 2.7, 2), B('koya', 50, 78, -Math.PI / 2 - 0.2, 2.6, 2.3, 1),
     B('minka1', -56, 96, Math.PI / 2 + 0.25, 5.8, 4.4, 3.5),
+    mill(-108),
   ];
   // signed distance outside a building's pad (its yard included), in its own frame
   const padDist = (b, x, z) => {
@@ -310,7 +320,7 @@ export function createWorld(seed = 7) {
   }
 
   temple.y = height(temple.x, temple.z) + 1.6;
-  for (const b of BUILDINGS) b.y = ground(b.x, b.z) - meadowFine(b.x, b.z); // the pad's level: the ground under the house, half cut, half built up
+  for (const b of BUILDINGS) b.y = b.level ?? ground(b.x, b.z) - meadowFine(b.x, b.z); // the pad's level: the ground under the house, half cut, half built up
   // distance outside the temple's terrace (0 on it)
   function templeDist(x, z) {
     const dx = x - temple.x, dz = z - temple.z;

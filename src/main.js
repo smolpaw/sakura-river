@@ -361,9 +361,28 @@ export async function create(canvas, opts = {}) {
   const shrubs = await makeLods(shrubsUrl, SHRUB_KINDS, G.shrubs, M.shrubMaterial(), [35, 110]);
   shrubs.name = 'shrubs';
   scene.add(shrubs);
-  const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village, M.villageMaterial(), [90]);
+  const villageMat = M.villageMaterial();
+  const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village.lists, villageMat, [90]);
   village.name = 'village';
   scene.add(village);
+  // the waterwheel, turned by the river (a full and a far model, switched as the village's)
+  const wheel = new THREE.Group();
+  if (G.village.wheel) {
+    const gl = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(villageUrl);
+    gl.scene.updateMatrixWorld(true);
+    for (const n of ['suisha_wheel', 'suisha_wheel_far']) {
+      const src = gl.scene.getObjectByName(n), m = new THREE.Mesh(src.geometry, villageMat);
+      m.applyMatrix4(src.matrixWorld);
+      const spin = new THREE.Group();
+      spin.add(m);
+      spin.name = n;
+      wheel.add(spin);
+    }
+    wheel.position.set(...G.village.wheel.pos);
+    wheel.rotation.y = G.village.wheel.yaw;
+    wheel.name = 'waterwheel';
+    scene.add(wheel);
+  }
 
   await yieldTask();
   // ---------- river ----------
@@ -721,6 +740,12 @@ export async function create(canvas, opts = {}) {
     walls.userData.lod(camera.position);
     bamboo.userData.lod(camera.position);
     village.userData.lod(camera.position);
+    if (wheel.children.length) {
+      // a turn every ~9 s at the river's usual speed; the far model beyond 90 m
+      const far = camera.position.distanceTo(wheel.position) > 90;
+      wheel.children[0].visible = warming || !far; wheel.children[1].visible = warming || far;
+      for (const sp of wheel.children) sp.rotation.x -= dt * 0.7 * (0.3 + S.river / 2.2);
+    }
     shrubs.userData.lod(camera.position);
     if (nearFlowers) nearFlowers.update(camera.position, warming);
 
