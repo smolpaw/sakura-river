@@ -32,6 +32,8 @@ export const U = {
   uFlash: uniform(0), // lightning flash level
   uMist: uniform(0), // river mist at dawn (kawagiri) 0..1
 };
+// the scene's uniforms are the same for every object: one shared buffer per render instead of one per object
+for (const u of Object.values(U)) u.setGroup(renderGroup);
 
 // Warm light from the lamps (lights.js) on whatever is near them: ground, grass, rocks, the cherries' bark and
 // blossoms, the deer, falling petals. The light map holds each spot's light and its lamps' height; it falls off up
@@ -41,6 +43,7 @@ const LM = LIGHTMAP;
 const lightTex = new THREE.DataTexture(new Uint16Array(LM.nx * LM.nz * 2), LM.nx, LM.nz, THREE.RGFormat, THREE.HalfFloatType);
 lightTex.magFilter = lightTex.minFilter = THREE.LinearFilter;
 lightTex.generateMipmaps = false;
+lightTex.matrixAutoUpdate = false; // no uv transform to recompute per object and frame
 export function setLightMap(data) {
   lightTex.image.data.set(data);
   lightTex.needsUpdate = true;
