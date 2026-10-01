@@ -13,6 +13,7 @@ import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tr
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods, makeMerged } from './lods.js';
 import { makeGrass } from './grass.js';
+import { bakeImpostors, makeImpostors } from './impostors.js';
 import { nearBlossoms } from './blossoms.js';
 import forestUrl from './models/forest.glb?url&inline';
 import cliffsUrl from './models/cliffs.glb?url&inline';
@@ -46,9 +47,9 @@ import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], turf: 2900, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, far: 4096, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
-  medium: { pr: 1.5, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, far: 2048, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
-  low: { pr: 1.25, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, far: 1024, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
+  high: { pr: 2.0, terrain: [420, 440], turf: 2900, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, far: 4096, impostorCell: 128, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
+  medium: { pr: 1.5, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, far: 2048, impostorCell: 96, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
+  low: { pr: 1.25, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, far: 1024, impostorCell: 64, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -72,6 +73,7 @@ function detectTier(renderer) {
   return 'high';
 }
 
+const IMPOSTOR_FROM = 140; // the woods' full models (and leaf cards) to here, impostors beyond
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export async function create(canvas, opts = {}) {
@@ -390,8 +392,18 @@ export async function create(canvas, opts = {}) {
   const leafAtlas = atlasTexture(G.leafAtlas);
   leafAtlas.colorSpace = THREE.NoColorSpace; // painted near white as a shade, not a colour
   leafAtlas.anisotropy = Math.min(8, maxAniso);
-  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [90, 200], M.forestMaterial({ leaves: leafAtlas, alphaToCoverage: a2c }));
+  // beyond IMPOSTOR_FROM metres the woods' trees are impostors (impostors.js), baked from their full models now
+  const impostor = {
+    from: 1,
+    make: (gltf) => {
+      const part = (name, leaf) => { const o = gltf.scene.getObjectByName(name); return { geometry: o.geometry, matrix: o.matrixWorld, leaf }; };
+      const bake = bakeImpostors(renderer, FOREST_KINDS.map((k) => [part(k, false), part(k + '_leaves', true)]), leafAtlas, Q.impostorCell);
+      return makeImpostors(bake, G.forest.reduce((n, l) => n + l.n, 0), { alphaToCoverage: a2c });
+    },
+  };
+  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [opts.impostorFrom ?? IMPOSTOR_FROM, 260], M.forestMaterial({ leaves: leafAtlas, alphaToCoverage: a2c }), impostor);
   forest.name = 'forest';
+  if (opts.debug) window.__sakuraDebug = { ...window.__sakuraDebug, renderer, impostors: forest.userData.impostors };
   scene.add(forest);
   const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), [70]);
   cliffs.name = 'cliffs';
@@ -490,6 +502,8 @@ export async function create(canvas, opts = {}) {
   for (const o of [terrain, fields, forest, bamboo, cliffs, village, wheel, temple, toro, bridge.mesh, rocks, walls, ...cherries]) {
     o.traverse((c) => { if (c.isMesh) c.layers.enable(FAR_LAYER); });
   }
+  // (not the woods' impostors: cards turned to the camera; their trees' lighter models cast for them, lods.js)
+  if (forest.userData.impostors) forest.userData.impostors.mesh.layers.disable(FAR_LAYER);
 
   for (const n of opts.hide || []) scene.getObjectsByProperty('name', n).forEach((o) => { o.visible = false; }); // bench: isolate objects
   mark('assembled');

@@ -36,10 +36,10 @@ export const CLOUDS = {
 // 1 in sunlight, 0 in the valley's shadow: one bilinear compare (a 2x2 texel filter; at its scale, a fraction of a
 // metre, that is soft enough). The receiver is pushed out along its normal by a texel and a half, and the depth back a
 // little, so surfaces that are casters too (the terrain, the buildings) do not shadow themselves.
-const farShadow = Fn(() => {
+const farShadow = Fn(([pos, nrm]) => {
   const s = float(1.0).toVar();
   If(uOn.greaterThan(0.0), () => {
-    const p = uMat.mul(vec4(positionWorld.add(normalWorld.mul(uTexel.y.mul(1.5))), 1.0)).toVar();
+    const p = uMat.mul(vec4(pos.add(nrm.mul(uTexel.y.mul(1.5))), 1.0)).toVar();
     const uv = vec2(p.x, float(1.0).sub(p.y)).toVar();
     const inside = uv.x.greaterThan(0.0).and(uv.x.lessThan(1.0)).and(uv.y.greaterThan(0.0)).and(uv.y.lessThan(1.0)).and(p.z.lessThan(1.0));
     If(inside, () => { s.assign(nodeObject(new MapLookup(rt.depthTexture, uv)).compare(p.z.sub(0.0004))); });
@@ -51,12 +51,12 @@ const farShadow = Fn(() => {
 // by the cover as the sky's are; where the sun's ray through the point meets it, 70% of the sun is held back. Under
 // a full overcast the sun is already dim and even (weather.js), so the patches fade out there.
 const CLOUD_H = 900;
-const cloudShadow = Fn(() => {
+const cloudShadow = Fn(([pos]) => {
   const s = float(1.0).toVar();
   const k = sstep(0.15, 0.3, CLOUDS.uCover).mul(sstep(0.95, 0.8, CLOUDS.uCover)).toVar();
   If(k.greaterThan(0.0), () => {
     const L = CLOUDS.uSun;
-    const q = positionWorld.xz.add(L.xz.mul(float(CLOUD_H).sub(positionWorld.y).div(max(L.y, 0.12))));
+    const q = pos.xz.add(L.xz.mul(float(CLOUD_H).sub(pos.y).div(max(L.y, 0.12))));
     const c = q.div(150.0).add(CLOUDS.uPos.mul(3.2)).toVar();
     // (interfering waves, not noise: hashed noise in every lit material cost ~1 s of pipeline compilation at start-up)
     const w = c.add(vec2(sin(c.y.mul(0.83).add(1.7)), sin(c.x.mul(0.71).sub(0.4))).mul(0.9));
@@ -67,9 +67,12 @@ const cloudShadow = Fn(() => {
   return s;
 });
 
+// The sun's shadow at a point (pushed out along `nrm` against self-shadowing), for a material that looks it up
+// elsewhere than its own surface (the woods' impostors, impostors.js: their flat cards stand inside their trees)
+export const sunShadowAt = (pos, nrm) => farShadow(pos, nrm).mul(cloudShadow(pos));
 // One node shared by every material, so a material that uses it twice (the lighting and its own sun terms) samples
 // it once.
-export const sunShadow = farShadow().mul(cloudShadow());
+export const sunShadow = sunShadowAt(positionWorld, normalWorld);
 
 const bias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 

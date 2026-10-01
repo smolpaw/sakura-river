@@ -11,8 +11,10 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const HYST = 5, STEP = 4, SUFFIX = ['', '_far', '_dist'];
 
 // lists[k]: the instances of kinds[k] ({ matrix, color, n }). With `leavesMat`, a kind's `<kind>_leaves` model (the
-// woods' leaf cards) is drawn with its full model's instances.
-export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null) {
+// woods' leaf cards) is drawn with its full model's instances. With `impostor` ({ from, make(gltf) -> impostors.js
+// makeImpostors' handle }), trees from level `from` on are drawn as impostors, and those levels' models only cast
+// into the valley's shadow map (layer `castLayer`).
+export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null, impostor = null, castLayer = 3) {
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url);
   gltf.scene.updateMatrixWorld(true);
   const group = new THREE.Group(), m = new THREE.Matrix4();
@@ -38,11 +40,18 @@ export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null)
     group.add(mesh);
     set.leaves = { mesh, node: src.matrixWorld };
   }
+  const imp = impostor && impostor.make(gltf);
+  if (imp) {
+    group.add(imp.mesh);
+    for (const set of sets) set.lod.forEach((L, v) => { if (v >= impostor.from) L.mesh.layers.set(castLayer); });
+  }
+  group.userData.impostors = imp;
   const last = new THREE.Vector3(Infinity, 0, 0);
   group.userData.lod = (cam) => {
     if (cam.distanceToSquared(last) < STEP * STEP) return;
     last.copy(cam);
-    for (const { l, level, lod, leaves } of sets) {
+    if (imp) imp.reset();
+    for (const [k, { l, level, lod, leaves }] of sets.entries()) {
       const count = lod.map(() => 0);
       for (let i = 0; i < l.n; i++) {
         const o = i * 16, d = Math.hypot(l.matrix[o + 12] - cam.x, l.matrix[o + 13] - cam.y, l.matrix[o + 14] - cam.z);
@@ -53,6 +62,7 @@ export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null)
         const L = lod[v], j = count[v]++;
         m.fromArray(l.matrix, o).multiply(L.node).toArray(L.mesh.instanceMatrix.array, j * 16);
         L.mesh.instanceColor.array.set(l.color.subarray(i * 3, i * 3 + 3), j * 3);
+        if (imp && v >= impostor.from) imp.add(k, l.matrix, o, l.color.subarray(i * 3, i * 3 + 3));
         if (leaves && v === 0) {
           m.fromArray(l.matrix, o).multiply(leaves.node).toArray(leaves.mesh.instanceMatrix.array, j * 16);
           leaves.mesh.instanceColor.array.set(l.color.subarray(i * 3, i * 3 + 3), j * 3);
@@ -67,6 +77,7 @@ export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null)
         leaves.mesh.instanceMatrix.needsUpdate = leaves.mesh.instanceColor.needsUpdate = true;
       }
     }
+    if (imp) imp.commit();
   };
   return group;
 }

@@ -159,9 +159,13 @@ export const windShadowPosition = () => restShadowPos;
 // three r170's physical lighting (the baseline look). r181+ darkens direct diffuse by (1 - Fresnel), adds a
 // multi-scatter factor to direct specular and scales hemisphere diffuse by (1 - scattering); r170 did none of that.
 class R170LightingModel extends THREE.PhysicalLightingModel {
+  constructor(shadow) {
+    super();
+    this.shadow = shadow;
+  }
   direct({ lightDirection, lightColor, reflectedLight }) {
     // (the one direct light is the sun: the valley's shadow map, sunshadow.js, on top of its own)
-    const irradiance = normalView.dot(lightDirection).clamp().mul(lightColor).mul(sunShadow);
+    const irradiance = normalView.dot(lightDirection).clamp().mul(lightColor).mul(this.shadow);
     reflectedLight.directSpecular.addAssign(irradiance.mul(BRDF_GGX({ lightDirection, f0: specularColorBlended, f90: specularF90, roughness })));
     reflectedLight.directDiffuse.addAssign(irradiance.mul(BRDF_Lambert({ diffuseColor: diffuseContribution })));
   }
@@ -178,7 +182,7 @@ export class LitMaterial extends THREE.MeshStandardNodeMaterial {
     if (!this.receivedShadowPositionNode) this.receivedShadowPositionNode = receiverShadowPosition();
   }
   setupLightingModel() {
-    return new R170LightingModel();
+    return new R170LightingModel(this.sunShadowNode || sunShadow);
   }
   // rain soaks the scene: darker and glossier, most on what faces up, nothing out at the mountain
   setupVariants(builder) {
