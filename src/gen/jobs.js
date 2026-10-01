@@ -2,7 +2,7 @@
 // data: typed arrays, packed geometries and small JSON. Every job owns its seeds, so jobs run in any order.
 import { createWorld } from '../world.js';
 import { paintFlowerAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
-import { turfData, grassMask, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData, shrubData } from '../vegetation.js';
+import { turfData, grassMask, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData, shrubData, paintLeafAtlas } from '../vegetation.js';
 import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.js';
 import { templeData } from '../temple.js';
 import { fallenData, raftData } from '../petals.js';
@@ -29,6 +29,7 @@ export const JOBS = {
   river: () => world().buildRiver(),
   trees: ({ list, tier, triMul }) => list.map((t) => treeData(world(), t.seed, t.small ? SMALL_TREE : MAIN_TREE, xz(t.pos), tier, triMul)),
   atlas: ({ size }) => paintFlowerAtlas(5, size),
+  leafAtlas: ({ size }) => paintLeafAtlas(11, size),
   bark: () => paintBark(3),
   fuji: () => { const w = world(); return fujiGeometry(w.peak.x, w.peak.z, w.peak.R, 820, 30); },
   props: ({ triMul }) => {
@@ -71,4 +72,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };

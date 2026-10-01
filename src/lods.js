@@ -10,8 +10,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const HYST = 5, STEP = 4, SUFFIX = ['', '_far', '_dist'];
 
-// lists[k]: the instances of kinds[k] ({ matrix, color, n })
-export async function makeLods(url, kinds, lists, mat, ranges) {
+// lists[k]: the instances of kinds[k] ({ matrix, color, n }). With `leavesMat`, a kind's `<kind>_leaves` model (the
+// woods' leaf cards) is drawn with its full model's instances.
+export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null) {
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url);
   gltf.scene.updateMatrixWorld(true);
   const group = new THREE.Group(), m = new THREE.Matrix4();
@@ -28,11 +29,20 @@ export async function makeLods(url, kinds, lists, mat, ranges) {
       return { mesh, node: src.matrixWorld };
     }),
   }));
+  for (const [k, set] of sets.entries()) {
+    const src = leavesMat && gltf.scene.getObjectByName(kinds[k] + '_leaves');
+    if (!src) continue;
+    const mesh = new THREE.InstancedMesh(src.geometry, leavesMat, Math.max(1, set.l.n));
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, set.l.n) * 3), 3);
+    mesh.frustumCulled = false;
+    group.add(mesh);
+    set.leaves = { mesh, node: src.matrixWorld };
+  }
   const last = new THREE.Vector3(Infinity, 0, 0);
   group.userData.lod = (cam) => {
     if (cam.distanceToSquared(last) < STEP * STEP) return;
     last.copy(cam);
-    for (const { l, level, lod } of sets) {
+    for (const { l, level, lod, leaves } of sets) {
       const count = lod.map(() => 0);
       for (let i = 0; i < l.n; i++) {
         const o = i * 16, d = Math.hypot(l.matrix[o + 12] - cam.x, l.matrix[o + 13] - cam.y, l.matrix[o + 14] - cam.z);
@@ -43,11 +53,19 @@ export async function makeLods(url, kinds, lists, mat, ranges) {
         const L = lod[v], j = count[v]++;
         m.fromArray(l.matrix, o).multiply(L.node).toArray(L.mesh.instanceMatrix.array, j * 16);
         L.mesh.instanceColor.array.set(l.color.subarray(i * 3, i * 3 + 3), j * 3);
+        if (leaves && v === 0) {
+          m.fromArray(l.matrix, o).multiply(leaves.node).toArray(leaves.mesh.instanceMatrix.array, j * 16);
+          leaves.mesh.instanceColor.array.set(l.color.subarray(i * 3, i * 3 + 3), j * 3);
+        }
       }
       lod.forEach(({ mesh }, f) => {
         mesh.count = count[f];
         mesh.instanceMatrix.needsUpdate = mesh.instanceColor.needsUpdate = true;
       });
+      if (leaves) {
+        leaves.mesh.count = count[0];
+        leaves.mesh.instanceMatrix.needsUpdate = leaves.mesh.instanceColor.needsUpdate = true;
+      }
     }
   };
   return group;

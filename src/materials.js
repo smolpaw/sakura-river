@@ -200,8 +200,18 @@ export function rockMaterial() {
   })());
 }
 
-export function forestMaterial() {
-  return new LitMaterial({ vertexColors: true, roughness: 1, colorNode: vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8)) }, (out) => Fn(() => {
+// the woods' trees (tools/forest.py, the bamboo too). With `leaves` (the leaf atlas, vegetation.js paintLeafAtlas) it
+// draws the near trees' leaf cards: cut out of the atlas, lit by the crown's normal on both faces (the cards are
+// tilted every way; their own would light them in patches), worn away between 78 and 90 m, where the trees turn to
+// their lighter models (lods.js, at 90 m)
+export function forestMaterial({ leaves = null, alphaToCoverage = false } = {}) {
+  const tone = vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8));
+  const params = !leaves ? { colorNode: tone } : {
+    colorNode: texture(leaves, uv()).mul(vec4(tone, 1.0)), side: THREE.DoubleSide, alphaToCoverage,
+    alphaTestNode: sstep(78.0, 90.0, wp.sub(cameraPosition).length()).mul(0.55).add(0.45),
+    normalNode: transformNormalToView(normalLocal).normalize(),
+  };
+  return new LitMaterial({ vertexColors: true, roughness: 1, ...params }, (out) => Fn(() => {
     // wild cherries in flower (the only crowns this red) glow like the main tree's blossoms, so their shaded side
     // stays pink instead of turning lilac under the blue sky light
     const bloom = sstep(0.45, 0.7, diffuseColor.r);

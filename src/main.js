@@ -148,6 +148,7 @@ export async function create(canvas, opts = {}) {
     treesA: { name: 'trees', args: { list: trees.slice(1, 4), tier: tierName, triMul } },
     treesB: { name: 'trees', args: { list: trees.slice(4), tier: tierName, triMul } },
     atlas: { name: 'atlas', args: { size: tierName === 'high' ? 1024 : 512 } },
+    leafAtlas: { name: 'leafAtlas', args: { size: tierName === 'high' ? 1024 : 512 } },
     bark: { name: 'bark' },
     fuji: { name: 'fuji' },
     props: { name: 'props', args: { triMul } },
@@ -380,7 +381,10 @@ export async function create(canvas, opts = {}) {
   const flowers = makeFlowers(G.flowers, M.flowerMaterial());
   flowers.name = 'flowers';
   scene.add(flowers);
-  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [90, 200]);
+  const leafAtlas = atlasTexture(G.leafAtlas);
+  leafAtlas.colorSpace = THREE.NoColorSpace; // painted near white as a shade, not a colour
+  leafAtlas.anisotropy = Math.min(8, maxAniso);
+  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [90, 200], M.forestMaterial({ leaves: leafAtlas, alphaToCoverage: a2c }));
   forest.name = 'forest';
   scene.add(forest);
   const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), [70]);

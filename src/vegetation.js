@@ -525,3 +525,96 @@ export function forestData(world, count) {
   });
   return out;
 }
+
+// The woods' leaf cards' atlas (tools/forest.py leaf_cards), 2x2 cells painted near white (the trees' vertex colours
+// give the hue): 0 a broadleaf spray (konara, kashi), 1 sugi/hinoki fronds of scale-leaf shoots, 2 pine needles in
+// tufts, 3 wild cherry blossom with a few young bronze leaves. Each spray fills its cell's middle and thins to its edge.
+export function paintLeafAtlas(seed = 11, size = 1024) {
+  const rng = mulberry32(seed);
+  const cv = new OffscreenCanvas(size, size);
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const cell = size / 2, R = cell * 0.46;
+  const grey = (v, a = 1) => `rgba(${Math.round(255 * v)},${Math.round(255 * v)},${Math.round(255 * v)},${a})`;
+  // a point in the spray's disc, denser towards its middle
+  const inDisc = (k = 1) => { const a = rng() * Math.PI * 2, r = R * Math.pow(rng(), 0.7) * k; return [Math.cos(a) * r, Math.sin(a) * r]; };
+  const leaf = (x, y, len, wid, rot, v) => {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+    ctx.fillStyle = grey(v);
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(wid, len * 0.25, wid * 0.8, len * 0.8, 0, len);
+    ctx.bezierCurveTo(-wid * 0.8, len * 0.8, -wid, len * 0.25, 0, 0);
+    ctx.fill();
+    ctx.strokeStyle = grey(v * 0.7, 0.6); ctx.lineWidth = Math.max(1, wid * 0.08);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, len * 0.9); ctx.stroke();
+    ctx.restore();
+  };
+  const cells = [
+    () => { // broadleaf: twigs from the middle, leaves along them, the far side darker
+      for (let t = 0; t < 7; t++) {
+        const a = rng() * Math.PI * 2, L = R * (0.6 + rng() * 0.4);
+        ctx.strokeStyle = grey(0.3); ctx.lineWidth = cell * 0.008;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * L, Math.sin(a) * L); ctx.stroke();
+      }
+      for (let i = 0; i < 110; i++) {
+        const [x, y] = inDisc(0.92), len = cell * (0.1 + rng() * 0.06);
+        leaf(x, y, len, len * 0.38, Math.atan2(y, x) - Math.PI / 2 + (rng() - 0.5) * 1.6, 0.55 + 0.45 * rng());
+      }
+    },
+    () => { // sugi / hinoki: overlapping fronds, each a drooping stem thick with short scale-leaf shoots
+      for (let f = 0; f < 11; f++) {
+        const y0 = (rng() - 0.5) * R * 1.3, x0 = -R * (0.75 + rng() * 0.2), L = R * (1.3 + rng() * 0.4), droop = R * (0.15 + rng() * 0.25);
+        const v0 = 0.5 + 0.5 * rng();
+        for (let s = 0; s < 40; s++) {
+          const t = s / 40, x = x0 + L * t, y = y0 + droop * t * t, along = Math.atan2(2 * droop * t, L);
+          const half = cell * 0.075 * Math.sin(Math.PI * Math.min(1, t * 1.15)) + cell * 0.01;
+          if (x * x + y * y > R * R) continue;
+          for (const side of [-1, 1]) {
+            const a = along + side * (1.0 + rng() * 0.25);
+            ctx.strokeStyle = grey(v0 * (0.8 + 0.2 * rng())); ctx.lineWidth = cell * 0.014; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * half, y + Math.sin(a) * half); ctx.stroke();
+          }
+        }
+      }
+    },
+    () => { // pine: tufts of long needles from short twigs
+      for (let i = 0; i < 26; i++) {
+        const [x, y] = inDisc(0.7), base = Math.atan2(y, x), v = 0.5 + 0.5 * rng();
+        for (let k = 0; k < 22; k++) {
+          const a = base + (rng() - 0.5) * 2.2, l = cell * (0.08 + rng() * 0.07);
+          ctx.strokeStyle = grey(v * (0.8 + 0.2 * rng())); ctx.lineWidth = cell * 0.007;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.stroke();
+        }
+      }
+    },
+    () => { // blossom: small five-petalled flowers in bunches, a few young bronze leaves
+      for (let i = 0; i < 6; i++) {
+        const [x, y] = inDisc(0.9), len = cell * 0.09;
+        leaf(x, y, len, len * 0.4, rng() * Math.PI * 2, 0.62);
+      }
+      for (let i = 0; i < 95; i++) {
+        const [x, y] = inDisc(0.95), r = cell * (0.035 + rng() * 0.015), v = 0.86 + 0.14 * rng(), rot = rng() * 6.28;
+        ctx.fillStyle = grey(v);
+        for (let k = 0; k < 5; k++) {
+          const a = rot + (k / 5) * Math.PI * 2;
+          ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55, r * 0.55, r * 0.4, a, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(228,190,198,1)';
+        ctx.beginPath(); ctx.arc(x, y, r * 0.2, 0, Math.PI * 2); ctx.fill();
+      }
+    },
+  ];
+  cells.forEach((paint, c) => {
+    ctx.save();
+    ctx.beginPath(); ctx.rect((c % 2) * cell + 1, Math.floor(c / 2) * cell + 1, cell - 2, cell - 2); ctx.clip();
+    ctx.translate((c % 2) * cell + cell / 2, Math.floor(c / 2) * cell + cell / 2);
+    paint();
+    ctx.restore();
+  });
+  // un-premultiplied, the transparent texels filled grey: no dark fringes in the mips
+  const d = ctx.getImageData(0, 0, size, size).data;
+  for (let i = 0; i < d.length; i += 4) {
+    const a = d[i + 3] / 255;
+    for (let j = 0; j < 3; j++) d[i + j] = Math.round(d[i + j] * a + 175 * (1 - a));
+  }
+  return { data: new Uint8Array(d.buffer.slice(0)), size };
+}
