@@ -30,11 +30,14 @@ export function villageData(world) {
     l.c.push(t, t * (0.97 + rng() * 0.05), t * (0.94 + rng() * 0.06));
   };
   // door lanterns (hang, look as lanterns.js) and the shoji's light on the yard (lights.js lamp: x, y, z, s, r)
-  const hang = [], look = [], spill = [];
+  const hang = [], look = [], spill = [], smoke = [];
   // in each model's frame (tools/village.py, y up, its front +z): beside the door under the eave, the eave's
   // underside; the shoji's middle, the front wall's half-length
   const DOOR = { minka0: [6.7, 2.0, 2.9], minka1: [4.85, 1.85, 2.2], suisha: [-1.45, 1.8, 1.95] };
   const SHOJI = { minka0: [3.6, 6.2], minka1: [2.9, 4.4] };
+  // where the hearth's smoke leaves the thatch: the irimoya's smoke gable at one end of its ridge, the hipped roof's
+  // ridge (fx.js makeSmoke)
+  const SMOKE = { minka0: [4.1, 8.3, 0], minka1: [0.6, 7.2, 0] };
   for (const b of world.BUILDINGS) {
     const sc = b.kind.startsWith('minka') ? 0.95 + rng() * 0.1 : 1;
     put(b.kind, b.x, b.y - 0.05, b.z, b.yaw, sc);
@@ -44,6 +47,7 @@ export function villageData(world) {
       // phase, the family crest (LANTERN_TEXTS 0), brightness, yaw: its face to the yard
       look.push(rng() * 6.28, 0, 0.8 + rng() * 0.2, b.yaw);
     }
+    if (SMOKE[b.kind]) smoke.push(...at(SMOKE[b.kind]));
     if (SHOJI[b.kind]) {
       const [d, half] = SHOJI[b.kind];
       for (const u of [-0.5, 0.5]) spill.push(at([u * half, 1.5, d + 1.4]));
@@ -55,7 +59,7 @@ export function villageData(world) {
   const wheel = w && { pos: [w.x + 2.9 * w.c, w.y - 0.05 + 1.6, w.z - 2.9 * w.s], yaw: w.yaw };
   return {
     lists: lists.map((l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 })), wheel,
-    lamps: { hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 }, spill: new Float32Array(spill.flat()),
+    lamps: { hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 }, spill: new Float32Array(spill.flat()), smoke: new Float32Array(smoke),
     toro: toroData(world),
   };
 }

@@ -27,7 +27,7 @@ import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
-import { petalMaterial, makeMotes, makeLanterns, makeGlows, makeFires } from './fx.js';
+import { petalMaterial, makeMotes, makeLanterns, makeGlows, makeFires, makeSmoke, makeSparks } from './fx.js';
 import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
 import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
@@ -342,6 +342,12 @@ export async function create(canvas, opts = {}) {
   const fires = makeFires(G.lanterns.fires);
   fires.name = 'fires';
   scene.add(fires);
+  const sparks = makeSparks(G.lanterns.fires);
+  sparks.name = 'sparks';
+  scene.add(sparks);
+  const smoke = makeSmoke(G.village.smoke);
+  smoke.mesh.name = 'smoke';
+  scene.add(smoke.mesh);
   const fireAt = (i) => new THREE.Vector3(...G.lanterns.fires.subarray(i * 3, i * 3 + 3)).add(new THREE.Vector3(0, 0.5, 0));
   U.uFireA.value.copy(fireAt(0)); U.uFireB.value.copy(fireAt(1));
   const fireGlows = makeGlows(new Float32Array([...fireAt(0).toArray(), ...fireAt(1).toArray()]), lanterns.uFocal, 4.5, 0.22);
@@ -752,7 +758,10 @@ export async function create(canvas, opts = {}) {
     deer.update(dt);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
-    lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = warming || U.uLights.value > 0.001;
+    lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = sparks.visible = warming || U.uLights.value > 0.001;
+    // the hearths' smoke: thickest when the rice is on, morning and evening; thinned by rain
+    const cook = Math.exp(-(((clockH - 6.8) / 1.3) ** 2)) + Math.exp(-(((clockH - 17.8) / 1.4) ** 2));
+    smoke.uAmount.value = (0.3 + 0.7 * Math.min(1, cook)) * (1 - 0.6 * S.rain);
     birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 

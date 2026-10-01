@@ -1,7 +1,7 @@
 // Node materials for the custom-shaded effects: petals (flying + fallen), pollen motes, lanterns
 import * as THREE from 'three/webgpu';
 import {
-  Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod, atan, abs, sign, floor, texture,
+  Fn, float, vec2, vec3, vec4, uniform, attribute, instancedBufferAttribute, mix, max, min, pow, dot, normalize, clamp, length, sin, cos, mod, atan, abs, sign, floor, texture, exp,
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
@@ -256,6 +256,97 @@ export function makeFires(fires) {
     const col = mix(mix(vec3(0.6, 0.07, 0.01), vec3(1.0, 0.36, 0.05), sstep(0.1, 0.5, heat)), vec3(1.0, 0.72, 0.32), sstep(0.65, 1.0, heat));
     const flicker = sin(t.mul(13.0).add(seed)).mul(0.08).add(0.92);
     return vec4(col.mul(heat).mul(flicker).mul(U.uLights).mul(0.9), 1.0);
+  })();
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 2;
+  return mesh;
+}
+
+// Billboards that rise from fixed sources and loop: `per` quads per source, each a puff (or a spark) at its own phase
+// of a `life`-second rise. Positions are worked out in the vertex stage from the clock; one draw.
+function risers(sources, per, life) {
+  const n = sources.length / 3, pos = [], src = [], corner = [], idx = [];
+  const rng = mulberry32(17);
+  for (let s = 0; s < n; s++) for (let i = 0; i < per; i++) {
+    const b = pos.length / 3, phase = (i + rng() * 0.6) / per, r = rng();
+    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pos.push(sources[s * 3], sources[s * 3 + 1], sources[s * 3 + 2]);
+      src.push(sources[s * 3], sources[s * 3 + 1], sources[s * 3 + 2]);
+      corner.push(u, v, phase, r);
+    }
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('aSrc', new THREE.Float32BufferAttribute(src, 3));
+  geo.setAttribute('aCorner', new THREE.Float32BufferAttribute(corner, 4));
+  geo.setIndex(idx);
+  const k = attribute('aCorner', 'vec4');
+  const age = U.uTime.div(life).add(k.z).fract();
+  return { geo, src: attribute('aSrc', 'vec3'), k, age, seed: k.w };
+}
+const billboard = (centre, k, size) => {
+  const d = normalize(centre.sub(cameraPosition));
+  const right = normalize(vec3(d.z, 0.0, d.x.negate()));
+  const up = normalize(right.cross(d)).negate();
+  return centre.add(right.mul(k.x.mul(size))).add(up.mul(k.y.mul(size)));
+};
+
+// Smoke from the farmhouses' hearths (irori), seeping out of the thatch's smoke gables: thin blue-grey wisps that rise,
+// widen and lean away with the wind. `uAmount` (0..1): more at the cooking hours, less in rain (main.js).
+export function makeSmoke(sources) {
+  const LIFE = 16;
+  const { geo, src, k, age, seed } = risers(sources, 26, LIFE);
+  const uAmount = uniform(0.5);
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const wind = vec3(U.uWindDir.x, 0.0, U.uWindDir.y);
+  const wobble = vec3(sin(age.mul(5.0).add(seed.mul(20.0))), 0.0, cos(age.mul(4.0).add(seed.mul(13.0)))).mul(age.mul(1.4));
+  const centre = src.add(vec3(0.0, age.mul(float(11.0).sub(U.uWind.mul(4.0))), 0.0)).add(wind.mul(age.mul(age).mul(U.uWind.mul(16.0).add(3.0)))).add(wobble).toVar();
+  m.positionNode = billboard(centre, k, age.mul(2.6).add(0.45));
+  const vk = vec4(k.xy, age, seed).toVarying('vSmoke'), vp = centre.toVarying('vSmokeAt');
+  m.colorNode = Fn(() => {
+    const r2 = dot(vk.xy, vk.xy);
+    const n = vnoise(vk.xy.mul(1.7).add(vk.w.mul(31.0)).add(vec2(0.0, vk.z.mul(3.0))));
+    const fade = sstep(0.0, 0.08, vk.z).mul(float(1.0).sub(vk.z)).mul(float(1.0).sub(vk.z));
+    const a = exp(r2.mul(-2.6)).mul(n.mul(0.7).add(0.3)).mul(fade).mul(uAmount).mul(0.32);
+    // lit by the sky, and by the sun through it (brighter towards the sun); the lamps colour it at night
+    const toward = pow(max(dot(normalize(vp.sub(cameraPosition)), U.uSunDir), 0.0), 4.0);
+    const col = vec3(0.62, 0.64, 0.68).mul(U.uSkyAmb.mul(1.1).add(U.uSunColor.mul(U.uSunVis).mul(toward.mul(0.8).add(0.35)))).add(lanternLight(vp).mul(0.25));
+    return vec4(applyFog(col, vp), a);
+  })();
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 3;
+  return { mesh, uAmount };
+}
+
+// Sparks over the fire baskets: specks flung up off the flames, cooling from yellow to red as they rise and drift.
+export function makeSparks(fires) {
+  const LIFE = 1.6;
+  const { geo, src, k, age: age0, seed } = risers(fires, 26, LIFE);
+  const m = new THREE.MeshBasicNodeMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
+  });
+  // each spark its own flight: a cycle's phase picks a fresh direction and speed
+  const cyc = floor(U.uTime.div(LIFE).add(k.z));
+  const h = vec2(sin(cyc.mul(12.9898).add(seed.mul(78.233))).mul(43758.5).fract(), sin(cyc.mul(39.346).add(seed.mul(11.135))).mul(24634.6).fract());
+  // (each flight its own length: some die young; the speed varies, so they never climb as beads on a string)
+  const age = age0.div(h.y.mul(0.5).add(0.5)).toVar();
+  const a = h.x.mul(6.2832), spread = h.y.mul(0.9).add(0.3);
+  const wind = vec3(U.uWindDir.x, 0.0, U.uWindDir.y).mul(U.uWind.mul(1.8).add(0.2));
+  const centre = src.add(vec3(0.0, 0.7, 0.0)).add(vec3(cos(a), 0.0, sin(a)).mul(spread.mul(age))).add(vec3(0.0, age.mul(h.x.mul(1.6).add(1.0)).mul(float(1.6).sub(age.mul(0.6))), 0.0))
+    .add(wind.mul(age.mul(age))).add(vec3(sin(age.mul(17.0).add(a)), 0.0, cos(age.mul(13.0).add(a))).mul(0.12).mul(age));
+  m.positionNode = billboard(centre, k, float(0.025));
+  const vk = vec4(k.xy, age.min(1.0), h.y).toVarying('vSpark');
+  m.colorNode = Fn(() => {
+    const glow = exp(dot(vk.xy, vk.xy).mul(-3.0));
+    const cool = vk.z;
+    const col = mix(vec3(1.0, 0.75, 0.3), vec3(0.9, 0.18, 0.03), sstep(0.2, 0.9, cool)).mul(float(1.0).sub(cool)).mul(sstep(0.0, 0.05, cool));
+    const twinkle = sin(U.uTime.mul(31.0).add(vk.w.mul(50.0))).mul(0.3).add(0.7);
+    return vec4(col.mul(glow).mul(twinkle).mul(U.uLights).mul(3.0), 1.0);
   })();
   const mesh = new THREE.Mesh(geo, m);
   mesh.frustumCulled = false;
