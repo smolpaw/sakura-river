@@ -715,7 +715,9 @@ export async function create(canvas, opts = {}) {
       if (tt.t >= 1) timeTween = null;
     } else if (clockRunning) clockH = (clockH + dt / 60) % 24;
     const tod = hourToT(clockH);
-    if (Math.abs(tod - lastTime) > 0.0004 || Math.abs(S.clouds - lastCover) > 0.002) skyNow = applyTimeOfDay(tod);
+    // every frame the clock or the cloud cover has moved: in steps (it had waited for 0.0004 of the day, ~20 frames at a
+    // minute a second) the sun's direction and colours jumped three times a second, most visibly on faces lit edge-on
+    if (tod !== lastTime || Math.abs(S.clouds - lastCover) > 1e-5) skyNow = applyTimeOfDay(tod);
     // the moon moves every frame: a sharp disc would step with the sky's palette updates
     sky.uniforms.uMoonVis.value = moonState(clockH, skyNow.elev, sky.uniforms.uMoonDir.value);
     // weather

@@ -4,7 +4,7 @@
 // multiplies the sun by `sunShadow` (tsl.js R170LightingModel), and the hand-made sun terms (backlit grass and
 // blossom, petals, water glints) follow.
 import * as THREE from 'three/webgpu';
-import { Fn, If, float, vec2, vec4, uniform, texture, normalWorld, positionWorld, renderGroup, max, clamp, sin } from 'three/tsl';
+import { Fn, If, float, vec2, vec4, uniform, nodeObject, normalWorld, positionWorld, renderGroup, max, clamp, sin } from 'three/tsl';
 import { sstep } from './tsl.js'; // (used only when the node is built, after tsl.js has loaded)
 
 export const FAR_LAYER = 3;
@@ -16,11 +16,14 @@ rt.depthTexture = new THREE.DepthTexture(1, 1);
 rt.depthTexture.compareFunction = THREE.LessEqualCompare;
 rt.depthTexture.minFilter = rt.depthTexture.magFilter = THREE.LinearFilter;
 rt.texture.name = rt.depthTexture.name = 'FarShadow';
-// no uv transform: three would otherwise recompute it for every object that samples the map, every frame
-rt.depthTexture.matrixAutoUpdate = false;
 
 // (shared by every material: one buffer per render, not one per object)
 const uMat = uniform(new THREE.Matrix4()).setGroup(renderGroup); // world -> (u, v, depth) in the map
+// A depth-map lookup at uv as given, flipped here on WebGL (three's own texture node does it through a uniform it
+// updates for every object that samples the map, every frame: ~5% of the CPU's frame here)
+class MapLookup extends THREE.TextureNode {
+  setupUV(builder, uv) { return builder.isFlipY() ? vec2(uv.x, float(1.0).sub(uv.y)) : uv; }
+}
 const uTexel = uniform(new THREE.Vector2(1, 1)).setGroup(renderGroup); // one texel: in uv, and in metres (normal offset)
 const uOn = uniform(0).setGroup(renderGroup);
 // the clouds: their drift (the sky's cloud offset, sky.js) and cover (0..1), and the sun's direction
@@ -31,16 +34,15 @@ export const CLOUDS = {
 };
 
 // 1 in sunlight, 0 in the valley's shadow: one bilinear compare (a 2x2 texel filter; at its scale, a fraction of a
-// metre, that is soft enough, and on WebGL three updates every texture lookup per object and frame). The receiver is
-// pushed out along its normal by a texel and a half, and the depth back a little, so surfaces that are casters too
-// (the terrain, the buildings) do not shadow themselves.
+// metre, that is soft enough). The receiver is pushed out along its normal by a texel and a half, and the depth back a
+// little, so surfaces that are casters too (the terrain, the buildings) do not shadow themselves.
 const farShadow = Fn(() => {
   const s = float(1.0).toVar();
   If(uOn.greaterThan(0.0), () => {
     const p = uMat.mul(vec4(positionWorld.add(normalWorld.mul(uTexel.y.mul(1.5))), 1.0)).toVar();
     const uv = vec2(p.x, float(1.0).sub(p.y)).toVar();
     const inside = uv.x.greaterThan(0.0).and(uv.x.lessThan(1.0)).and(uv.y.greaterThan(0.0)).and(uv.y.lessThan(1.0)).and(p.z.lessThan(1.0));
-    If(inside, () => { s.assign(texture(rt.depthTexture, uv).compare(p.z.sub(0.0004))); });
+    If(inside, () => { s.assign(nodeObject(new MapLookup(rt.depthTexture, uv)).compare(p.z.sub(0.0004))); });
   });
   return s;
 });
@@ -119,9 +121,9 @@ export function makeFarShadow(renderer, size) {
   }
 
   return {
-    // toSun: towards the sun. Redrawn once the sun has moved by more than ~0.04 degrees, at most every
-    // `every` frames (the clock moves it a quarter of a degree a second); `force` redraws now. A redraw costs
-    // ~1.5 ms of GPU time at 4096 (RTX 2060), so not every frame.
+    // toSun: towards the sun. Redrawn once the sun has moved by more than ~0.04 degrees, at most every `every` frames
+    // (the clock moves it a quarter of a degree a second); `force` redraws now. A redraw costs ~1.5 ms of GPU time
+    // at 4096 (RTX 2060), so not every frame.
     update(scene, toSun, { every = 8, force = false } = {}) {
       wait--;
       if (!uOn.value || toSun.y < -0.05) return false;
@@ -131,6 +133,5 @@ export function makeFarShadow(renderer, size) {
       render(scene, toSun);
       return true;
     },
-    target: rt,
   };
 }
