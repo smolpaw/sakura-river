@@ -259,9 +259,11 @@ export function createWorld(seed = 7) {
     const wet = cell < Z.wet;
     const base = (wet ? 0.1 : 0.05) * smoothstep(0, lev * 0.5, f);
     const y = s * k + Math.max(s * smoothstep(1 - fr, 1, f), base, 0.26 * levee);
-    // in the paddy (not its levees or riser): flooded or not
+    // in the paddy (not its levees or riser): flooded or not; q: how far in (m; < 0 outside), from the lip, the
+    // riser and the cross levee (where it drops under 0.35)
     const inside = f > lev && f < 1 - fr && levee < 0.35;
-    return { y, m, zone: i, wet, inside, levee, riser: f >= 1 - fr ? s : 0, cell };
+    const q = Math.min((f - lev) * w, (1 - fr - f) * w, Math.min(cf, 1 - cf) * Z.len - 0.44);
+    return { y, m, zone: i, wet, inside, q, levee, riser: f >= 1 - fr ? s : 0, cell };
   }
   // The valley floor: rows of paddies `row` metres long across the floor, each row split into fields 11-19 m wide,
   // each field flat at the floor's height at its middle (cached) a hand under its levees; levees between fields
@@ -313,7 +315,7 @@ export function createWorld(seed = 7) {
     const ko = keepOut(x, z);
     const wet = c.cell < Z.wet;
     const water = c.level + (wet ? 0.1 : 0.05);
-    let y, m, levee;
+    let y, m, levee, q;
     if (ko < e[0] || !nb || !nb.on) {
       // a levee, then a bank down or up to the natural ground at the field's own edge (beyond: a lane, a clearing,
       // the zone's edge), so the ground runs on without a step
@@ -321,13 +323,16 @@ export function createWorld(seed = 7) {
       levee = smoothstep(1.9, 1.3, d);
       y = lerp(lerp(water, c.level + 0.25, levee), g, smoothstep(0.9, 0.0, d));
       m = smoothstep(0.0, 0.9, d);
+      q = d - 1.83;
     } else {
       // a levee shared with the next field, as high as the higher of the two
       levee = smoothstep(0.75, 0.2, e[0]);
       y = lerp(water, Math.max(c.level, nb.level) + 0.25, levee);
       m = 1;
+      q = e[0] - 0.72;
     }
-    return { y, m, zone: i, wet, inside: levee < 0.05, levee, riser: 0, cell: c.cell };
+    // q: how far into the paddy (m; < 0 on its levee), where the levee drops under 0.05
+    return { y, m, zone: i, wet, inside: levee < 0.05, q, levee, riser: 0, cell: c.cell };
   }
 
   temple.y = height(temple.x, temple.z) + 1.6;
@@ -494,7 +499,7 @@ export function createWorld(seed = 7) {
   // a few jobs at once). color: the ground's colour (levees grassy,
   // risers grassy earth banks, dry paddies soil, stubble or renge in flower); aGround: as on the terrain
   // (the grass's colour on levees and the zone's fringe); aWater: over 0.5 in a flooded paddy (materials.js terrainMaterial
-  // draws the water there; its value varies the water's shade from paddy to paddy). grids: per zone, its grid's
+  // draws the water there), 0.5 at its edge. grids: per zone, its grid's
   // height and grass (density, length) and where the mesh is, for grass.js to stand blades on.
   function buildFields(step = 0.5, zones = ZONES.map((_, i) => i)) {
     const P = [], I = [], grids = [], verts = [];
@@ -565,7 +570,8 @@ export function createWorld(seed = 7) {
         c = c.map((q) => q * n);
         // the zone's fringe: the ground beyond
         c = lerpC(c, [g.r, g.g, g.b], fringe); dens = lerp(dens, g.dens, fringe); len = lerp(len, g.len, fringe);
-        Wt[v] = F.inside && F.wet ? 0.6 + 0.4 * F.cell / ZONES[F.zone].wet : 0; // > 0.5: water, its shade by the paddy
+        // over 0.5: water; from how far into the paddy, so its edge falls where the levee rises, not along the mesh
+        Wt[v] = F.wet ? clamp(0.5 + F.q / 0.5, 0, 1) : 0;
       }
       C.set(c, v * 3);
       Gr.set([dens, len, g.tint], v * 3);
