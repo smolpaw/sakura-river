@@ -10,7 +10,7 @@ const { server, url } = await startServer();
 const { browser } = await launch({ scale: 1, profile: 'look' });
 const page = await openHarness(browser, url);
 try {
-  const s = await page.evaluate((p) => H.setup(p), { engine: `./builds/${build}/engine.js`, cssW: 1280, cssH: 720, quality: 'high', backend: process.env.LOOK_BACKEND, settings: V.defaults });
+  const s = await page.evaluate((p) => H.setup(p), { engine: `./builds/${build}/engine.js`, cssW: 1280, cssH: 720, quality: process.env.QUALITY || 'high', backend: process.env.LOOK_BACKEND, settings: V.defaults });
   console.log('setup', JSON.stringify({ createMs: Math.round(s.createMs), backend: s.backend, info: s.info }));
   for (const t of times.split(',')) for (const vid of views.length ? views : ['hero']) {
     const v = vid.includes(':') ? { pos: vid.split(':')[0].split(',').map(Number), target: vid.split(':')[1].split(',').map(Number) } : V.views.find((x) => x.id === vid);
