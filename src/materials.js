@@ -13,9 +13,9 @@ import { sunShadow } from './sunshadow.js';
 const wp = positionWorld;
 const viewDir = () => normalize(cameraPosition.sub(wp));
 
-// The ground. With `sky` (its uniforms) it draws the farmland's and the village's mesh (world.js buildFields), where
-// flooded paddies (aWater) are still water mirroring the sky.
-export function terrainMaterial({ sky = null } = {}) {
+// The ground, with puddles on the bare earth in the rain (mirroring `sky`, its uniforms). With `paddies` it draws the
+// farmland's and the village's mesh (world.js buildFields), where flooded paddies (aWater) are still water too.
+export function terrainMaterial({ sky, paddies = false }) {
   const n09 = vnoise(wp.xz.mul(0.9)), n012 = vnoise(wp.xz.mul(0.12));
   const dn = n09.mul(0.5).add(vnoise(wp.xz.mul(3.7)).mul(0.3)).add(n012.mul(0.45));
   // where grass grows (aGround: density, length, tint, as grass.js reads them) the ground takes the grass's colour:
@@ -54,7 +54,14 @@ export function terrainMaterial({ sky = null } = {}) {
     o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(sunShadow).mul(back.mul(1.6).add(0.15)).mul(grassy).mul(0.5));
     o.mulAssign(float(1.0).add(grassWave(wp.xz).mul(U.uWind).mul(grassy).mul(0.3)));
     o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
-    if (sky) {
+    // puddles on the lanes and yards once the rain has soaked the ground: in the hollows first, wider as it goes on
+    If(U.uWet.greaterThan(0.3), () => {
+      const n = vnoise(wp.xz.mul(0.55)).mul(0.6).add(vnoise(wp.xz.mul(1.9).add(4.0)).mul(0.4));
+      const cut = mix(0.78, 0.63, sstep(0.3, 1.0, U.uWet));
+      const puddle = sstep(cut, cut.add(0.03), n).mul(float(1.0).sub(cover)).mul(sstep(0.96, 0.99, normalWorld.y)).mul(sstep(0.2, 0.4, wp.y)).toVar();
+      If(puddle.greaterThan(0.0), () => { o.assign(mix(o, paddyWater(sky), puddle)); });
+    });
+    if (paddies) {
       // (only where there is water: the levees, banks and dry paddies skip it)
       const wet = sstep(0.35, 0.65, attribute('aWater', 'float'));
       If(wet.greaterThan(0.0), () => { o.assign(mix(o, paddyWater(sky), wet)); });

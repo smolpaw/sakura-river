@@ -165,18 +165,17 @@ export async function create(canvas, opts = {}) {
   world.setHeightCache(G.heightCache);
   mark('generated');
 
-  // ---------- terrain ----------
+  // ---------- sky + terrain ----------
+  const sky = makeSky();
+  sky.mesh.name = 'sky';
+  scene.add(sky.mesh);
   const terrainGeo = G.terrain.geo;
-  const terrainMat = M.terrainMaterial();
-  const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+  const terrain = new THREE.Mesh(terrainGeo, M.terrainMaterial({ sky }));
   terrain.receiveShadow = true;
   terrain.name = 'terrain';
   scene.add(terrain);
 
-  // ---------- sky + lights ----------
-  const sky = makeSky();
-  sky.mesh.name = 'sky';
-  scene.add(sky.mesh);
+  // ---------- lights ----------
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
   sun.shadow.mapSize.set(Q.shadow, Q.shadow);
@@ -191,7 +190,7 @@ export async function create(canvas, opts = {}) {
   scene.add(hemi);
   // the village's farmland: rice paddies, flooded or dry, terraced up the slopes (world.js buildFields)
   const fieldParts = fieldJobs.map((_, k) => G[`fields${k}`]);
-  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky }));
+  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky, paddies: true }));
   fields.receiveShadow = true;
   fields.name = 'fields';
   scene.add(fields);
@@ -711,6 +710,9 @@ export async function create(canvas, opts = {}) {
     sky.uniforms.uMoonVis.value = moonState(clockH, skyNow.elev, sky.uniforms.uMoonDir.value);
     // weather
     U.uRain.value = S.rain;
+    // the ground soaks in a minute or so of rain and dries over several
+    const wetTo = S.rain > 0.02 ? Math.min(1, 0.4 + S.rain) : 0;
+    U.uWet.value += (wetTo - U.uWet.value) * (1 - Math.exp(-dt / (wetTo > U.uWet.value ? 40 : 240)));
     rain.geometry.instanceCount = warming ? 1 : Math.round(Q.rain * S.rain); // warm-up builds its pipeline
     rain.visible = rain.geometry.instanceCount > 0;
     const flash = lightning.update(dt, S.lightning, camera);
@@ -869,7 +871,7 @@ export async function create(canvas, opts = {}) {
       if (name === 'time') { timeTween = null; clockH = tToHour(clamp(+v, -0.08, 1.08)); } // 04:50 .. 20:10
       else { weatherTween = null; setParam(name, v); }
     },
-    setImmediate(name, v) { this.set(name, v); for (const k in P) S[k] = P[k]; },
+    setImmediate(name, v) { this.set(name, v); for (const k in P) S[k] = P[k]; U.uWet.value = S.rain > 0.02 ? Math.min(1, 0.4 + S.rain) : 0; },
     // weather preset by id, blended in over `seconds`
     setWeather(id, seconds = 6) {
       const w = WEATHERS.find((x) => x.id === id);

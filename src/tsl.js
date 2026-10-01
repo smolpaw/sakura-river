@@ -3,7 +3,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, uniform, mix, sin, fract, floor, dot, exp, max, abs, clamp, normalize, length, pow,
-  cameraPosition, positionWorld, positionLocal, modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, normalLocal, fog, varyingProperty,
+  cameraPosition, positionWorld, positionLocal, normalWorld, modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, normalLocal, fog, varyingProperty,
   reference, renderGroup, texture, normalView, BRDF_GGX, BRDF_Lambert, specularColorBlended, specularF90, roughness, diffuseContribution,
 } from 'three/tsl';
 import { LIGHTMAP } from './lights.js';
@@ -32,6 +32,7 @@ export const U = {
   uRain: uniform(0), // rain intensity 0..1 (streaks, ripples on the river)
   uFlash: uniform(0), // lightning flash level
   uMist: uniform(0), // river mist at dawn (kawagiri) 0..1
+  uWet: uniform(0), // how wet the ground is 0..1: soaks in through the rain, dries slowly after it
 };
 // the scene's uniforms are the same for every object: one shared buffer per render instead of one per object
 for (const u of Object.values(U)) u.setGroup(renderGroup);
@@ -178,6 +179,15 @@ export class LitMaterial extends THREE.MeshStandardNodeMaterial {
   }
   setupLightingModel() {
     return new R170LightingModel();
+  }
+  // rain soaks the scene: darker and glossier, most on what faces up, nothing out at the mountain
+  setupVariants(builder) {
+    super.setupVariants(builder);
+    If(U.uWet.greaterThan(0.0), () => {
+      const w = U.uWet.mul(clamp(normalWorld.y.mul(0.5).add(0.5), 0.0, 1.0)).mul(sstep(900.0, 400.0, length(positionWorld.sub(cameraPosition))));
+      diffuseContribution.mulAssign(float(1.0).sub(w.mul(0.38)));
+      roughness.assign(mix(roughness, roughness.mul(0.45), w));
+    });
   }
   setupLighting(builder) {
     const out = super.setupLighting(builder);
