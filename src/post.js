@@ -104,7 +104,7 @@ export function lightShafts(color, samples, scale = 0.5) {
 }
 
 export function grade(input) {
-  const u = { res: uniform(new THREE.Vector2(1, 1)), time: uniform(0), vig: uniform(0.36), clarity: uniform(0.32), sharp: uniform(0.35) };
+  const u = { res: uniform(new THREE.Vector2(1, 1)), time: uniform(0), vig: uniform(0.36), clarity: uniform(0.2), sharp: uniform(0.35) };
   const node = Fn(() => {
     const vUv = uv();
     const px = vec2(1.0).div(u.res);
@@ -134,7 +134,7 @@ export function grade(input) {
     l.assign(luma(c));
     // vibrance: lift muted colours more than saturated ones
     const mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
-    c.assign(mix(vec3(l), c, float(1.0).add(float(1.0).sub(mx.sub(mn)).mul(0.32))));
+    c.assign(mix(vec3(l), c, float(1.0).add(float(1.0).sub(mx.sub(mn)).mul(0.12))));
     // split tone: indigo shadows, warm apricot highlights
     c.assign(mix(c, c.mul(vec3(0.9, 0.95, 1.12)).add(vec3(0.005, 0.008, 0.028)), float(1.0).sub(sstep(0.0, 0.5, l))));
     c.assign(mix(c, c.mul(vec3(1.05, 0.99, 0.93)), sstep(0.55, 1.0, l)));

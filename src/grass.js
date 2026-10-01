@@ -70,7 +70,7 @@ function bladeGeometry(segs) {
 
 // the grass's colours by tint (0 lush .. 1 straw), shared with the terrain under it
 export const grassColor = Fn(([tint, v]) => {
-  const lush = vec3(0.06, 0.17, 0.035), fresh = vec3(0.17, 0.33, 0.06), straw = vec3(0.42, 0.4, 0.15);
+  const lush = vec3(0.055, 0.14, 0.035), fresh = vec3(0.16, 0.28, 0.07), straw = vec3(0.42, 0.38, 0.16);
   const c = mix(lush, fresh, sstep(0.0, 0.4, tint)).toVar();
   c.assign(mix(c, straw, sstep(0.45, 1.0, tint)));
   return c.mul(v);
