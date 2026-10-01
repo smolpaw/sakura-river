@@ -8,7 +8,7 @@ import {
 } from 'three/tsl';
 import { U, vnoise, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
-import { farShadow } from './farshadow.js';
+import { sunShadow } from './sunshadow.js';
 
 const wp = positionWorld;
 const viewDir = () => normalize(cameraPosition.sub(wp));
@@ -48,7 +48,7 @@ export function terrainMaterial({ sky = null } = {}) {
     // far grass as the blades are lit: the sun through their tips, and the wind's waves running over it
     const grassy = cover.mul(far);
     const back = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 3.0);
-    o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(farShadow).mul(back.mul(1.6).add(0.15)).mul(grassy).mul(0.5));
+    o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(sunShadow).mul(back.mul(1.6).add(0.15)).mul(grassy).mul(0.5));
     o.mulAssign(float(1.0).add(grassWave(wp.xz).mul(U.uWind).mul(grassy).mul(0.3)));
     o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
     if (sky) {
@@ -108,7 +108,7 @@ const blossomLight = (out) => Fn(() => {
   const vdirB = normalize(wp.sub(cameraPosition));
   const backB = pow(max(dot(vdirB, U.uSunDir), 0.0), 2.5);
   const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-  const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(farShadow).mul(backB.mul(1.2).add(0.1)));
+  const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)));
   return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1)))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(1.6));
 })();
 
@@ -166,7 +166,7 @@ export function grassMaterial() {
     const vdir = normalize(wp.sub(cameraPosition));
     const back = pow(max(dot(vdir, U.uSunDir), 0.0), 3.0);
     const tip = aFlex; // fragment-stage attribute becomes a varying
-    const o = out.add(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(farShadow).mul(back.mul(1.6).add(0.15)).mul(clamp(tip.mul(2.2), 0.0, 1.0)));
+    const o = out.add(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(sunShadow).mul(back.mul(1.6).add(0.15)).mul(clamp(tip.mul(2.2), 0.0, 1.0)));
     // lantern light at half strength: at full, the lawn under the lines read as floodlit
     return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(0.5));
   })());
@@ -196,7 +196,7 @@ export function forestMaterial() {
     const bloom = sstep(0.45, 0.7, diffuseColor.r);
     const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(farShadow).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom));
+    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom));
   })());
 }
 
@@ -226,7 +226,7 @@ export function shrubMaterial() {
     const bloom = sstep(0.45, 0.7, diffuseColor.r);
     const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(farShadow).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom).mul(0.6));
+    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom).mul(0.6));
   })());
 }
 

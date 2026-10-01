@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter, setLightMap } from './tsl.js';
-import { makeFarShadow, FAR_LAYER } from './farshadow.js';
+import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
 import { lightMap, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
@@ -473,7 +473,7 @@ export async function create(canvas, opts = {}) {
     scene.add(makeRain(ST.particles));
   }
 
-  // the valley's shadow map (farshadow.js): the ground, the woods and the buildings cast into it
+  // the valley's shadow map (sunshadow.js): the ground, the woods and the buildings cast into it
   const farShadow = makeFarShadow(renderer, Q.far);
   // (the cherries by their trunks and their flowers' shadow proxies, layer 2: a low sun throws their shadows far
   // beyond the sharp map's square)
@@ -729,6 +729,8 @@ export async function create(canvas, opts = {}) {
     water.uniforms.uSpeed.value = S.river;
     sky.uniforms.uCloud.value.x += dt * (0.006 + S.wind * 0.012);
     sky.uniforms.uCloud.value.y -= dt * (0.003 + S.wind * 0.005);
+    // the clouds' shadows drift with the sky's clouds (sunshadow.js)
+    CLOUDS.uPos.value.copy(sky.uniforms.uCloud.value); CLOUDS.uCover.value = S.clouds; CLOUDS.uSun.value.copy(U.uSunDir.value);
     U.uFogDensity.value = 0.0006 + Math.pow(S.fog, 1.5) * 0.013;
     U.uFogFalloff.value = 0.028;
     U.uAerial.value = (0.7 + 1.2 * S.fog) / 2400; // hazier air with the weather's haze

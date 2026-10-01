@@ -14,7 +14,7 @@ import {
   transformNormalToView, positionWorld, select, length,
 } from 'three/tsl';
 import { U, vnoise, sstep, LitMaterial, windOffset, lanternLight, SHADOW_NORMAL_BIAS } from './tsl.js';
-import { farShadow } from './farshadow.js';
+import { sunShadow } from './sunshadow.js';
 import { TERRAIN_GRID, terrainSMaxZ } from './world.js';
 
 // c0: finest cell (m), d0: full density out to here (m), wide: blade width (fewer blades, wider), segs: blade
@@ -245,7 +245,7 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
     const vdir = normalize(positionWorld.sub(cameraPosition));
     const back = pow(max(dot(vdir, U.uSunDir), 0.0), 3.0);
     const tip = vTip;
-    const o = out.add(vColor.mul(U.uSunColor).mul(U.uSunVis).mul(farShadow).mul(back.mul(1.6).add(0.15)).mul(clamp(tip.mul(2.2), 0.0, 1.0)));
+    const o = out.add(vColor.mul(U.uSunColor).mul(U.uSunVis).mul(sunShadow).mul(back.mul(1.6).add(0.15)).mul(clamp(tip.mul(2.2), 0.0, 1.0)));
     // lantern light at half strength: at full, the lawn under the lines read as floodlit
     return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35))).add(vColor.mul(lanternLight(positionWorld)).mul(0.5));
   })());

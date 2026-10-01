@@ -5,7 +5,7 @@ import {
   positionWorld, cameraPosition, reflector, If, select, exp,
 } from 'three/tsl';
 import { U, vnoise, hash12, sstep, applyFog, fogTint } from './tsl.js';
-import { farShadow } from './farshadow.js';
+import { sunShadow } from './sunshadow.js';
 
 export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null } = {}) {
   const uniforms = { uHasRefl: uniform(0), uSpeed: uniform(1) };
@@ -106,11 +106,11 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const deep = vec3(0.012, 0.045, 0.05).mul(light).add(U.uSkyAmb.mul(0.02));
     const body = mix(shallow, deep, sstep(0.1, 2.0, depth)).toVar();
     // subsurface glow when looking toward the sun
-    body.addAssign(U.uSunColor.mul(U.uSunVis).mul(farShadow).mul(pow(max(dot(V.negate(), U.uSunDir), 0.0), 4.0)).mul(0.08).mul(float(1.0).sub(sstep(0.0, 1.5, depth))));
+    body.addAssign(U.uSunColor.mul(U.uSunVis).mul(sunShadow).mul(pow(max(dot(V.negate(), U.uSunDir), 0.0), 4.0)).mul(0.08).mul(float(1.0).sub(sstep(0.0, 1.5, depth))));
     const col = mix(body, reflCol, clamp(fres.mul(1.1), 0.0, 1.0)).toVar();
     // sun glints
     const sd = max(dot(R, U.uSunDir), 0.0);
-    col.addAssign(U.uSunColor.mul(U.uSunVis).mul(farShadow).mul(pow(sd, 900.0).mul(7.0).add(pow(sd, 90.0).mul(0.35))));
+    col.addAssign(U.uSunColor.mul(U.uSunVis).mul(sunShadow).mul(pow(sd, 900.0).mul(7.0).add(pow(sd, 90.0).mul(0.35))));
     // shore & rock foam
     const foamN = vnoise(vec2(p.x.mul(2.2), p.y.sub(U.uFlow.mul(1.1)).mul(1.6))).mul(0.6).add(vnoise(vec2(p.x.mul(7.0), p.y.sub(U.uFlow.mul(1.2)).mul(5.0))).mul(0.4));
     // a band along the shore; at rocks, white water streaked along the current (none on the rock itself)

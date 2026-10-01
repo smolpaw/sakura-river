@@ -1,9 +1,11 @@
-// The valley's shadows: a second sun shadow map over the whole valley (the hills, the woods, the village, the
-// temple, the bridge), beyond the sharp one round the cherry tree (main.js). The sun moves slowly, so it is redrawn
-// only when the sun has moved, never on a fixed beat; its casters are on layer 3. Every lit material multiplies the
-// sun by it (tsl.js R170LightingModel), and the hand-made sun terms (backlit grass and blossom) follow.
+// The sun's shadows beyond the sharp ones round the cherry tree (main.js): a second shadow map over the whole valley
+// (the hills, the woods, the village, the temple, the bridge), and the clouds' shadows drifting over the land. The sun
+// moves slowly, so the map is redrawn only when the sun has moved; its casters are on layer 3. Every lit material
+// multiplies the sun by `sunShadow` (tsl.js R170LightingModel), and the hand-made sun terms (backlit grass and
+// blossom, petals, water glints) follow.
 import * as THREE from 'three/webgpu';
-import { Fn, If, float, vec2, vec4, uniform, texture, normalWorld, positionWorld, renderGroup } from 'three/tsl';
+import { Fn, If, float, vec2, vec4, uniform, texture, normalWorld, positionWorld, renderGroup, max, clamp } from 'three/tsl';
+import { vnoise, sstep } from './tsl.js'; // (used only when the node is built, after tsl.js has loaded)
 
 export const FAR_LAYER = 3;
 // the valley's box: everything the camera can come near, and the hills round it
@@ -21,13 +23,18 @@ rt.depthTexture.matrixAutoUpdate = false;
 const uMat = uniform(new THREE.Matrix4()).setGroup(renderGroup); // world -> (u, v, depth) in the map
 const uTexel = uniform(new THREE.Vector2(1, 1)).setGroup(renderGroup); // one texel: in uv, and in metres (normal offset)
 const uOn = uniform(0).setGroup(renderGroup);
+// the clouds: their drift (the sky's cloud offset, sky.js) and cover (0..1), and the sun's direction
+export const CLOUDS = {
+  uPos: uniform(new THREE.Vector2()).setGroup(renderGroup),
+  uCover: uniform(0.35).setGroup(renderGroup),
+  uSun: uniform(new THREE.Vector3(0, 1, 0)).setGroup(renderGroup),
+};
 
 // 1 in sunlight, 0 in the valley's shadow: one bilinear compare (a 2x2 texel filter; at its scale, a fraction of a
 // metre, that is soft enough, and on WebGL three updates every texture lookup per object and frame). The receiver is
 // pushed out along its normal by a texel and a half, and the depth back a little, so surfaces that are casters too
-// (the terrain, the buildings) do not shadow themselves. One node shared by every material, so a material that uses
-// it twice (the lighting and its own sun terms) samples it once.
-export const farShadow = Fn(() => {
+// (the terrain, the buildings) do not shadow themselves.
+const farShadow = Fn(() => {
   const s = float(1.0).toVar();
   If(uOn.greaterThan(0.0), () => {
     const p = uMat.mul(vec4(positionWorld.add(normalWorld.mul(uTexel.y.mul(1.5))), 1.0)).toVar();
@@ -36,7 +43,29 @@ export const farShadow = Fn(() => {
     If(inside, () => { s.assign(texture(rt.depthTexture, uv).compare(p.z.sub(0.0004))); });
   });
   return s;
-})();
+});
+
+// The clouds' shadows: a cloud layer CLOUD_H up, three octaves of noise drifting with the sky's clouds, thresholded
+// by the cover as the sky's are; where the sun's ray through the point meets it, 70% of the sun is held back. Under
+// a full overcast the sun is already dim and even (weather.js), so the patches fade out there.
+const CLOUD_H = 900;
+const cloudShadow = Fn(() => {
+  const s = float(1.0).toVar();
+  const k = sstep(0.15, 0.3, CLOUDS.uCover).mul(sstep(0.95, 0.8, CLOUDS.uCover)).toVar();
+  If(k.greaterThan(0.0), () => {
+    const L = CLOUDS.uSun;
+    const q = positionWorld.xz.add(L.xz.mul(float(CLOUD_H).sub(positionWorld.y).div(max(L.y, 0.12))));
+    const c = q.div(320.0).add(CLOUDS.uPos.mul(2.0)).toVar();
+    const n = vnoise(c).mul(0.55).add(vnoise(c.mul(2.3).add(7.1)).mul(0.3)).add(vnoise(c.mul(5.4).sub(3.7)).mul(0.15));
+    const t = float(0.66).sub(CLOUDS.uCover.sub(0.35).mul(0.5));
+    s.assign(float(1.0).sub(sstep(t.sub(0.08), t.add(0.1), n).mul(clamp(k, 0.0, 1.0)).mul(0.7)));
+  });
+  return s;
+});
+
+// One node shared by every material, so a material that uses it twice (the lighting and its own sun terms) samples
+// it once.
+export const sunShadow = farShadow().mul(cloudShadow());
 
 const bias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 
