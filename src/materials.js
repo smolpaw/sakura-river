@@ -80,7 +80,8 @@ const paddyWater = (sky) => Fn(() => {
   const fres = float(0.07).add(pow(max(float(1.0).sub(max(dot(N, V), 0.0)), 0.0), 5.0).mul(0.93));
   const skyC = mix(uZenith, uHorizon, pow(float(1.0).sub(clamp(R.y, 0.0, 1.0)), 4.0)).toVar();
   skyC.assign(mix(skyC, mix(U.uSkyAmb.mul(0.35), U.uFogColor, 0.35), sstep(0.16, 0.03, R.y)));
-  const light = U.uSunVis.mul(0.65).add(0.35);
+  // (the light floor follows the sky's: dark at night, not a pale slab)
+  const light = U.uSunVis.mul(0.65).add(dot(U.uSkyAmb, vec3(0.3, 0.6, 0.1)).mul(0.8));
   const body = vec3(0.12, 0.11, 0.075).mul(light).add(U.uSkyAmb.mul(0.05));
   const col = mix(body, skyC, clamp(fres.mul(1.1), 0.0, 1.0)).toVar();
   const sd = max(dot(R, U.uSunDir), 0.0);
@@ -199,9 +200,13 @@ export function forestMaterial() {
     const bloom = sstep(0.45, 0.7, diffuseColor.r);
     const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom));
+    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(skyGlow())).mul(bloom));
   })());
 }
+
+// the blossoms' own glow on the woods' wild cherries and the shrubs: as bright as the sky's light (0.16 by day), so at
+// night, away from the lamps, they go dark with the rest of the woods
+const skyGlow = () => vec3(dot(U.uSkyAmb, vec3(0.3, 0.6, 0.1)).mul(0.36)).add(U.uSkyAmb.mul(0.1));
 
 // the shrubs (tools/shrubs.py): leaves in the vertex colours, and how much is in flower and which flower in their
 // alpha ((kind + share) / 4: 1 azalea magenta, 2 white, 3 kerria yellow). Close by the flowers are small spots (two
@@ -229,7 +234,7 @@ export function shrubMaterial() {
     const bloom = sstep(0.45, 0.7, diffuseColor.r);
     const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(vec3(0.16)).add(U.uSkyAmb.mul(0.1))).mul(bloom).mul(0.6));
+    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(skyGlow())).mul(bloom).mul(0.6));
   })());
 }
 

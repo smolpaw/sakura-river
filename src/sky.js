@@ -18,8 +18,11 @@ const MOON_COS = [Math.cos(THREE.MathUtils.degToRad(1.4)), Math.cos(THREE.MathUt
 // Stars: a cube map of cells around the sky, STAR_N cells per unit of face coordinate, one star in STAR_P of them,
 // kept off the cell edges so a star is never cut. The sky turns about the celestial pole (north is +z, Japan's
 // latitude) with the clock.
-const STAR_N = 70, STAR_P = 0.2;
+const STAR_N = 70, STAR_P = 0.45;
 const POLE = new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(35)), Math.cos(THREE.MathUtils.degToRad(35)));
+// the galactic plane in the stars' frame: in April it stands low in the west after dusk (the winter Milky Way)
+const MILKY_N = new THREE.Vector3(0.62, 0.55, -0.56).normalize();
+const MILKY_U = new THREE.Vector3(0, 1, 0).cross(MILKY_N).normalize(), MILKY_V = MILKY_N.clone().cross(MILKY_U);
 const starField = Fn(([s]) => {
   const a = abs(s).toVar();
   const m = max(a.x, max(a.y, a.z)).toVar();
@@ -31,7 +34,7 @@ const starField = Fn(([s]) => {
   const px = length(fwidth(s)).div(m).mul(STAR_N * 0.6);
   const r = length(fract(q).sub(o)).div(px);
   const k = hash12(c.add(5.1)).toVar();
-  const b = pow(hash12(c.add(9.7)), 9.0).mul(2.6).add(0.05); // many faint stars, a few bright ones
+  const b = pow(hash12(c.add(9.7)), 14.0).mul(3.2).add(0.004); // many faint stars, a few bright ones
   const twinkle = sin(U.uTime.mul(k.mul(5.0).add(2.0)).add(k.mul(60.0))).mul(0.22).add(0.85);
   const tint = mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.68), hash12(c.add(3.3)));
   return tint.mul(b.mul(twinkle).mul(exp(r.mul(r).mul(-1.0))).mul(step(k, STAR_P)));
@@ -92,7 +95,17 @@ export function makeSky() {
     // stars, dimmed towards the horizon and hidden behind the moon's disc (its dark side included)
     If(uStarVis.greaterThan(0.0), () => {
       const behindMoon = sstep(MOON_COS[0], MOON_COS[1], dot(d, uMoonDir));
-      col.addAssign(starField(uStarRot.mul(d)).mul(uStarVis).mul(sstep(-0.01, 0.3, h)).mul(float(1.0).sub(behindMoon)));
+      const sd = uStarRot.mul(d).toVar();
+      col.addAssign(starField(sd).mul(uStarVis).mul(sstep(-0.01, 0.3, h)).mul(float(1.0).sub(behindMoon)));
+      // the Milky Way: a faint, mottled band along its great circle, split by its dark lane, washed out low down
+      const x = dot(sd, MILKY_N);
+      const band = exp(x.mul(x).mul(-1.0 / (0.16 * 0.16))).toVar();
+      If(band.greaterThan(0.01), () => {
+        const q = vec2(dot(sd, MILKY_U), dot(sd, MILKY_V)).mul(3.0);
+        const cloud = cfbm(q.add(vec2(x.mul(9.0), 0.0))).toVar();
+        const lane = float(1.0).sub(sstep(0.05, 0.0, x.add(cloud.sub(0.5).mul(0.08)).abs()).mul(0.6));
+        col.addAssign(vec3(0.62, 0.66, 0.8).mul(band.mul(sstep(0.3, 0.75, cloud)).mul(lane).mul(0.05)).mul(uStarVis).mul(sstep(0.02, 0.35, h)));
+      });
     });
     // a shooting star: a streak along a great circle, brightest at its head, its trail fading behind
     If(uMeteor.greaterThan(0.0), () => {
@@ -202,7 +215,7 @@ export function makeSky() {
 
 // keyframes by sun elevation (degrees). Linear HDR colours.
 const KF = [
-  { e: -14, zen: [0.008, 0.014, 0.045], hor: [0.04, 0.05, 0.11], sun: [0.5, 0.55, 0.8], si: 0.0, fog: [0.035, 0.045, 0.08], fogS: [0.05, 0.055, 0.1], cl: [0.06, 0.07, 0.12], cs: [0.02, 0.025, 0.05] },
+  { e: -14, zen: [0.007, 0.01, 0.026], hor: [0.032, 0.038, 0.068], sun: [0.5, 0.55, 0.8], si: 0.0, fog: [0.035, 0.045, 0.08], fogS: [0.05, 0.055, 0.1], cl: [0.06, 0.07, 0.12], cs: [0.02, 0.025, 0.05] },
   { e: -5, zen: [0.02, 0.03, 0.09], hor: [0.5, 0.2, 0.26], sun: [1.0, 0.28, 0.14], si: 0.0, fog: [0.14, 0.11, 0.18], fogS: [0.6, 0.24, 0.2], cl: [0.5, 0.22, 0.3], cs: [0.08, 0.07, 0.14] },
   { e: 1.5, zen: [0.04, 0.07, 0.24], hor: [1.25, 0.46, 0.34], sun: [1.0, 0.4, 0.18], si: 1.7, fog: [0.28, 0.2, 0.3], fogS: [0.75, 0.36, 0.24], cl: [1.5, 0.62, 0.42], cs: [0.2, 0.14, 0.26] },
   { e: 9, zen: [0.05, 0.12, 0.38], hor: [1.1, 0.6, 0.46], sun: [1.0, 0.62, 0.36], si: 3.2, fog: [0.34, 0.31, 0.43], fogS: [0.72, 0.44, 0.36], cl: [1.6, 0.95, 0.68], cs: [0.26, 0.22, 0.38] },
