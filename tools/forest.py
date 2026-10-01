@@ -18,6 +18,10 @@ def smoothstep(a, b, x):
     return t * t * (3 - 2 * t)
 
 
+def clamp(x, a, b):
+    return min(b, max(a, x))
+
+
 def lerp(a, b, t):
     return a + (b - a) * t
 
@@ -151,7 +155,7 @@ def vertex_ao(bm, reach, same=lambda a, b: True):
     return ao
 
 
-def leaf_cards(name, bm, kind, base, mid, soft, low, ao_reach, ao_min, *, n, size, cell, seed):
+def leaf_cards(name, bm, kind, base, mid, soft, low, ao_reach, ao_min, *, n, size, cell, seed, width=None):
     """Leaf cards over the crown (the near model only): n small quads scattered over its surface by area, facing out
     with a random turn and tilt, a few sunk into it and some standing proud of it, so the crown's edge is leaves, not
     a hull. UVs into the leaf atlas's cell `cell` (2x2: 0 broadleaf, 1 sugi/hinoki, 2 pine, 3 blossom; the page paints
@@ -173,7 +177,11 @@ def leaf_cards(name, bm, kind, base, mid, soft, low, ao_reach, ao_min, *, n, siz
         out = (p - mid(p)).normalized()
         nrm = f.normal.lerp(out, 0.5).normalized()
         s = size * rng.uniform(0.75, 1.3)
-        c = p + nrm * s * rng.uniform(-0.1, 0.6)
+        out_by = rng.uniform(-0.1, 0.6)
+        if width:
+            s = min(s, max(0.25 * size, width(p.z) * 0.7))
+            out_by = rng.uniform(-0.3, 0.2)
+        c = p + nrm * s * out_by
         t = Matrix.Rotation(rng.uniform(0, math.tau), 3, nrm) @ nrm.orthogonal().normalized()
         w = Matrix.Rotation(rng.uniform(-0.75, 0.75), 3, t) @ nrm.cross(t)
         o = p + nrm * 0.004  # shaded as the crown's surface under it (a card sunk into it would read black)
@@ -280,7 +288,7 @@ def conifer(name, seed, *, w, base, n, taper, droop, size, col, target, level=0,
     crown = foliage(clumps, (0.0065, 0.0065, 0.014)[level], 0.005, 18, target * (1, 0.25, 0.09)[level], seed)
     bark = limbs([([V((0, 0, -0.04)), V((0, 0, base + 0.1)), V((0, 0, 0.84))], 0.024, 0.006)], (6, 4, 3)[level])
     return assemble(name + LEVELS[level], [(crown, col)], bark, lambda p: V((0, 0, p.z - 0.5 * math.hypot(p.x, p.y))), 0.75, 0.5, 0.12,
-                    cards=None if level else dict(n=leaves[0], size=leaves[1], cell=1, seed=seed))
+                    cards=None if level else dict(n=leaves[0], size=leaves[1], cell=1, seed=seed, width=lambda z: R(clamp((z - base) / (0.96 - base), 0, 1))))
 
 
 def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.4, n_limbs=4, mottle=None, flat=1.0, soft=0.85, ao_min=0.4, level=0,
