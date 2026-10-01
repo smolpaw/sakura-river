@@ -12,7 +12,9 @@ import { grassColor, grassWave, patchFrom } from './grass.js';
 const wp = positionWorld;
 const viewDir = () => normalize(cameraPosition.sub(wp));
 
-export function terrainMaterial() {
+// The ground. With `sky` (its uniforms) it draws the farmland's and the village's mesh (world.js buildFields), where
+// flooded paddies (aWater) are still water mirroring the sky.
+export function terrainMaterial({ sky = null } = {}) {
   const n09 = vnoise(wp.xz.mul(0.9)), n012 = vnoise(wp.xz.mul(0.12));
   const dn = n09.mul(0.5).add(vnoise(wp.xz.mul(3.7)).mul(0.3)).add(n012.mul(0.45));
   // where grass grows (aGround: density, length, tint, as grass.js reads them) the ground takes the grass's colour:
@@ -48,9 +50,34 @@ export function terrainMaterial() {
     o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(back.mul(1.6).add(0.15)).mul(grassy).mul(0.5));
     o.mulAssign(float(1.0).add(grassWave(wp.xz).mul(U.uWind).mul(grassy).mul(0.3)));
     o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
+    if (sky) o.assign(mix(o, paddyWater(sky), sstep(0.35, 0.65, attribute('aWater', 'float'))));
     return o;
   })());
 }
+
+// a flooded paddy: muddy water a hand deep, mirroring the sky (the far hills a dark band along the horizon), wind
+// ripples, the sun's glint
+const paddyWater = (sky) => Fn(() => {
+  const { uZenith, uHorizon } = sky.uniforms;
+  const t = U.uTime, p = wp.xz;
+  const drift = U.uWindDir.mul(t.mul(0.35));
+  const amp = U.uWind.mul(0.1).add(0.015).add(U.uRain.mul(0.08));
+  const nx = vnoise(p.mul(2.1).sub(drift)).add(vnoise(p.mul(5.3).add(drift.mul(1.7))).mul(0.5)).sub(0.75);
+  const nz = vnoise(p.mul(2.1).add(13.0).sub(drift)).add(vnoise(p.mul(5.3).add(7.0).add(drift.mul(1.7))).mul(0.5)).sub(0.75);
+  const dist = wp.sub(cameraPosition).length();
+  const N = normalize(vec3(nx.mul(amp).mul(sstep(120.0, 20.0, dist)), 1.0, nz.mul(amp).mul(sstep(120.0, 20.0, dist))));
+  const V = normalize(cameraPosition.sub(wp));
+  const R = reflect(V.negate(), N);
+  const fres = float(0.02).add(pow(max(float(1.0).sub(max(dot(N, V), 0.0)), 0.0), 5.0).mul(0.98));
+  const skyC = mix(uZenith, uHorizon, pow(float(1.0).sub(clamp(R.y, 0.0, 1.0)), 4.0)).toVar();
+  skyC.assign(mix(skyC, mix(U.uSkyAmb.mul(0.35), U.uFogColor, 0.35), sstep(0.16, 0.03, R.y)));
+  const light = U.uSunVis.mul(0.65).add(0.35);
+  const body = vec3(0.07, 0.07, 0.045).mul(light).add(U.uSkyAmb.mul(0.03));
+  const col = mix(body, skyC, clamp(fres.mul(1.1), 0.0, 1.0)).toVar();
+  const sd = max(dot(R, U.uSunDir), 0.0);
+  col.addAssign(U.uSunColor.mul(U.uSunVis).mul(pow(sd, 600.0).mul(6.0).add(pow(sd, 60.0).mul(0.3))));
+  return col.add(lanternLight(wp).mul(0.3));
+})();
 
 // light thrown back by the sunlit ground onto faces turned sideways or down, at full strength once the sun is a little
 // above the horizon: a wall in shade stays warm grey rather than going the blue of the sky light alone
@@ -194,6 +221,21 @@ export function templeMaterial(d) {
       const flicker = sin(U.uTime.mul(9.0).add(wp.x.mul(3.7))).mul(0.08).add(0.92);
       o.addAssign(diffuseColor.rgb.mul(U.uLightColor.mul(near.mul(flicker).mul(0.6)).add(vec3(1.0, 0.82, 0.6).mul(up).mul(0.55))).mul(U.uLights));
       o.addAssign(vec3(1.0, 0.62, 0.3).mul(glow).mul(U.uLights).mul(mix(1.0, flicker, sstep(1.5, 2.0, glow))));
+    });
+    return o;
+  })());
+}
+
+// the village's buildings (village.js): vertex colours with how much each part glows after dusk in their alpha (the
+// shoji, lit from inside); not every room is lit, and the light flickers a little as a lamp's would
+export function villageMaterial() {
+  const col = attribute('color', 'vec4');
+  return new LitMaterial({ roughness: 0.85, metalness: 0, colorNode: col.rgb }, (out) => Fn(() => {
+    const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
+    If(U.uLights.greaterThan(0.0), () => {
+      const room = sstep(0.3, 0.45, vnoise(wp.xz.mul(0.45).add(wp.y.mul(0.3))));
+      const flicker = sin(U.uTime.mul(7.0).add(wp.x.mul(1.3))).mul(0.05).add(0.95);
+      o.addAssign(vec3(1.0, 0.64, 0.32).mul(col.a).mul(room).mul(flicker).mul(U.uLights).mul(0.9));
     });
     return o;
   })());

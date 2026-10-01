@@ -8,6 +8,7 @@ import { templeData } from '../temple.js';
 import { fallenData, raftData } from '../petals.js';
 import { lanternData, lanternGeometry, paintLanternInk } from '../lanterns.js';
 import { tessellate } from '../stress.js';
+import { villageData } from '../village.js';
 import { lerp } from '../noise.js';
 import { layout, rockAvoid, trunkAvoid, underTree, lawn, turf } from './layout.js';
 
@@ -39,6 +40,8 @@ export const JOBS = {
     return { bridge: b, temple: t };
   },
   rocks: ({ tier }) => rocksData(world(), tier, xz(L().tree)),
+  fields: ({ zones }) => world().buildFields(0.5, zones),
+  village: () => villageData(world()),
   // no grass in the boulders or round the cherries' trunks
   grassMask: ({ tier }) => {
     const l = L();
@@ -66,4 +69,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 330, depth: 220, grassMask: 5, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 5, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 5, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, flowers: 10, fallen: 7, rafts: 8, river: 3 };

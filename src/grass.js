@@ -88,6 +88,21 @@ export const grassWave = Fn(([p]) => {
   return w.mul(w);
 });
 
+// the farmland's own grid (world.js buildFields: y, grass density, grass length, 1 where the mesh is) under (x, z),
+// triangle interpolated as its mesh is -> vec4(y, density, length, 1 if the mesh is there all round)
+const fieldsSampler = (tex, nx, nz, [x0, z0, step]) => Fn(([p]) => {
+  const u = p.x.sub(x0).div(step), v = p.y.sub(z0).div(step);
+  const i0 = clamp(floor(u), 0, nx - 2), j0 = clamp(floor(v), 0, nz - 2);
+  const fx = clamp(u.sub(i0), 0, 1), fz = clamp(v.sub(j0), 0, 1);
+  const ii = int(i0), jj = int(j0);
+  const a = textureLoad(tex, ivec2(ii, jj)), b = textureLoad(tex, ivec2(ii.add(1), jj));
+  const c = textureLoad(tex, ivec2(ii, jj.add(1))), d = textureLoad(tex, ivec2(ii.add(1), jj.add(1)));
+  const lower = a.add(b.sub(a).mul(fx)).add(c.sub(a).mul(fz));
+  const upper = d.add(c.sub(d).mul(fx.oneMinus())).add(b.sub(d).mul(fz.oneMinus()));
+  const ok = min(min(a.w, b.w), min(c.w, d.w));
+  return vec4(select(fx.add(fz).lessThanEqual(1), lower, upper).xyz, ok);
+});
+
 // world -> fine mask texel (R: 1 grass .. 0 none), outside its bounds 1
 const fineMask = (maskTex, b) => Fn(([p]) => {
   const uv = p.sub(vec2(b[0], b[1])).mul(vec2(b[2], b[3]));
@@ -95,7 +110,7 @@ const fineMask = (maskTex, b) => Fn(([p]) => {
   return select(inside, texture(maskTex, uv).r, float(1));
 });
 
-export function makeGrass({ grid, segX, segZ, mask }, tier) {
+export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
   const T = GRASS_TIERS[tier];
   const nLev = T.segs.length;
   const gridTex = new THREE.DataTexture(grid, segX + 1, segZ + 1, THREE.RGBAFormat, THREE.FloatType);
@@ -105,7 +120,26 @@ export function makeGrass({ grid, segX, segZ, mask }, tier) {
   maskTex.minFilter = maskTex.magFilter = THREE.LinearFilter;
   maskTex.unpackAlignment = 1;
   maskTex.needsUpdate = true;
-  const ground = terrainSampler(gridTex, segX, segZ), masked = fineMask(maskTex, mask.bounds);
+  const terrain = terrainSampler(gridTex, segX, segZ), masked = fineMask(maskTex, mask.bounds);
+  // on the farmland the blades stand on its own mesh (levees, banks); elsewhere on the terrain's
+  const farm = fields.map((f) => {
+    const tex = new THREE.DataTexture(f.grid, f.nx, f.nz, THREE.RGBAFormat, THREE.FloatType);
+    tex.minFilter = tex.magFilter = THREE.NearestFilter;
+    tex.needsUpdate = true;
+    const [x0, z0, step] = f.box;
+    return { sample: fieldsSampler(tex, f.nx, f.nz, f.box), box: [x0, z0, x0 + (f.nx - 1) * step, z0 + (f.nz - 1) * step] };
+  });
+  const ground = Fn(([p]) => {
+    const g = terrain(p).toVar();
+    for (const f of farm) {
+      const [x0, z0, x1, z1] = f.box;
+      If(p.x.greaterThan(x0).and(p.x.lessThan(x1)).and(p.y.greaterThan(z0)).and(p.y.lessThan(z1)), () => {
+        const v = f.sample(p);
+        If(v.w.greaterThan(0.5), () => { g.assign(vec4(v.xyz, g.w)); });
+      });
+    }
+    return g;
+  });
 
   // levels: cell size, rank range, range, tile cells per side
   const levels = T.segs.map((segs, k) => {

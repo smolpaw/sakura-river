@@ -226,8 +226,44 @@ export function rocksData(world, tier, treePos) {
     const l = isPebble.has(r) ? stones : lists[vi];
     l.m.push(...m.elements); l.c.push(tint, tint * (0.97 + rng() * 0.05), tint * (0.93 + rng() * 0.08));
   }));
+  // the farmhouses' pads (world.js BUILDINGS): dry-stone walls (ishigaki) on the banks where a pad is built up or cut
+  // into the slope by more than 40 cm: courses of rounded stones from the bank's foot to its top (the pebbles' stone,
+  // ~2,100 of them, merged in groups: lods.js makeMerged)
+  const r2 = mulberry32(4321), walls = [];
+  world.BUILDINGS.forEach((b, bi) => {
+    // a group per four farmhouses along the lane (lods.js makeMerged draws each merged, near or far)
+    const wall = (walls[bi >> 2] ||= { m: [], c: [] });
+    const z0 = -b.hd, z1 = b.hd + b.yard;
+    // walk the pad's edge, then out across its bank (world.js padAt: 0.15 .. 2.2 m out)
+    const edge = [[-b.hw, z0, b.hw, z0, 0, -1], [b.hw, z0, b.hw, z1, 1, 0], [b.hw, z1, -b.hw, z1, 0, 1], [-b.hw, z1, -b.hw, z0, -1, 0]];
+    for (const [ax, az, bx, bz, ox, oz] of edge) {
+      const len = Math.hypot(bx - ax, bz - az), n = Math.round(len / 0.85);
+      for (let i = 0; i <= n; i++) {
+        const lx = lerp(ax, bx, i / n), lz = lerp(az, bz, i / n);
+        const at = (o) => [b.x + (lx + ox * o) * b.c + (lz + oz * o) * b.s, b.z - (lx + ox * o) * b.s + (lz + oz * o) * b.c];
+        const [fx, fz] = at(2.4);
+        const foot = world.height(fx, fz), step = Math.abs(foot - b.y);
+        if (step < 0.4) continue;
+        const rows = Math.max(1, Math.round(step / 0.55));
+        for (let r = 0; r < rows; r++) {
+          // up the bank: the height of this course, and how far out the bank stands at that height
+          const t = (r + 0.5) / rows, yy = lerp(Math.min(foot, b.y), Math.max(foot, b.y), t);
+          let o = 0.15, best = Infinity;
+          for (let k = 0; k <= 12; k++) { const oo = 0.15 + k * 0.17, [qx, qz] = at(oo), dy = Math.abs(world.height(qx, qz) - yy); if (dy < best) { best = dy; o = oo; } }
+          const [x, z] = at(o + (r2() - 0.5) * 0.12 + (i % 2) * 0.0);
+          const sc = 0.44 + r2() * 0.2;
+          p.set(x, yy - sc * 0.3, z);
+          q.setFromEuler(new THREE.Euler((r2() - 0.5) * 0.5, r2() * 6.28, (r2() - 0.5) * 0.5));
+          s.set(sc * (1 + r2() * 0.3), sc * (0.7 + r2() * 0.25), sc * (1 + r2() * 0.3));
+          const t2 = 0.5 + r2() * 0.28;
+          wall.m.push(...m.compose(p, q, s).elements);
+          wall.c.push(t2, t2 * 0.98, t2 * 0.93);
+        }
+      }
+    }
+  });
   const data = (l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 });
-  return { boulders: lists.map(data), pebbles: data(stones), rocksInWater, blockers: placements };
+  return { boulders: lists.map(data), pebbles: data(stones), walls: walls.map(data), rocksInWater, blockers: placements };
 }
 
 // ---------- the gorge's rock walls ----------
@@ -292,6 +328,26 @@ export function bambooData(world) {
     s.set(h, h, h);
     const g = 0.88 + rng() * 0.24;
     lists[Math.floor(rng() * BAMBOO_KINDS.length)].push({ m: m.compose(p, q, s).toArray(), c: [g * (1 + (rng() - 0.5) * 0.1), g, g * 0.95] });
+  }
+  // groves behind the farmhouses on the western slope (yashikirin, the homestead's windbreak), clear of the other
+  // pads, the lanes and the paddies
+  const r2 = mulberry32(929);
+  for (const b of world.BUILDINGS) {
+    if (b.x > -60 || !b.kind.startsWith('minka')) continue;
+    for (let t = 0, n = 0; t < 160 && n < 16; t++) {
+      const lx = lerp(-b.hw - 4, b.hw + 4, r2()), lz = -b.hd - lerp(3.2, 12, r2());
+      const x = b.x + lx * b.c + lz * b.s, z = b.z - lx * b.s + lz * b.c;
+      if (world.padAt(x, z) || world.zoneAt(x, z) || world.laneDist(x, z) < 3) continue;
+      if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 1.9)) continue;
+      placed.push([x, z]);
+      n++;
+      const h = lerp(10, 15, r2());
+      p.set(x, world.height(x, z) - 0.3, z);
+      q.setFromAxisAngle(up, r2() * Math.PI * 2);
+      s.set(h, h, h);
+      const g = 0.88 + r2() * 0.24;
+      lists[Math.floor(r2() * BAMBOO_KINDS.length)].push({ m: m.compose(p, q, s).toArray(), c: [g * (1 + (r2() - 0.5) * 0.1), g, g * 0.95] });
+    }
   }
   return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
 }

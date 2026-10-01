@@ -9,7 +9,7 @@ import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter } from './tsl.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
-import { makeLods } from './lods.js';
+import { makeLods, makeMerged } from './lods.js';
 import { makeGrass } from './grass.js';
 import { nearBlossoms } from './blossoms.js';
 import forestUrl from './models/forest.glb?url&inline';
@@ -17,6 +17,8 @@ import cliffsUrl from './models/cliffs.glb?url&inline';
 import bambooUrl from './models/bamboo.glb?url&inline';
 import rocksUrl from './models/rocks.glb?url&inline';
 import cherryUrl from './models/cherry.glb?url&inline';
+import villageUrl from './models/village.glb?url&inline';
+import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
@@ -125,6 +127,12 @@ export async function create(canvas, opts = {}) {
   const trees = treeSpecs(Lay);
   const { results: G, stats: genStats } = await runJobs({
     terrain: { name: 'terrain', args: { seg: Q.terrain } },
+    // the farmland and village mesh in three jobs that run at once (the floor's paddies and the village, the eastern
+    // terraces, the western ones)
+    fieldsA: { name: 'fields', args: { zones: [0, 3, 4] } },
+    fieldsB: { name: 'fields', args: { zones: [1] } },
+    fieldsC: { name: 'fields', args: { zones: [2] } },
+    village: { name: 'village' },
     heightCache: { name: 'heightCache' },
     depth: { name: 'depth', args: { tier: tierName } },
     river: { name: 'river' },
@@ -173,6 +181,12 @@ export async function create(canvas, opts = {}) {
   scene.add(sun); scene.add(sun.target);
   const hemi = new THREE.HemisphereLight(0xbcd0ff, 0x3a3a20, 0.9);
   scene.add(hemi);
+  // the village's farmland: rice paddies, flooded or dry, terraced up the slopes (world.js buildFields)
+  const fieldParts = [G.fieldsA, G.fieldsB, G.fieldsC];
+  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky }));
+  fields.receiveShadow = true;
+  fields.name = 'fields';
+  scene.add(fields);
 
   await yieldTask();
   // ---------- trees ----------
@@ -313,11 +327,16 @@ export async function create(canvas, opts = {}) {
   const rockMat = M.rockMaterial();
   const rocks = await makeLods(rocksUrl, ROCK_KINDS, G.rocks.boulders, rockMat, [45]);
   const pebbles = await makeLods(rocksUrl, ['pebble'], [G.rocks.pebbles], rockMat, []);
+  // the village's stone walls: merged, a group per few farmhouses (layer 1: far from the river, never in its reflection)
+  const walls = await makeMerged(rocksUrl, 'pebble', G.rocks.walls, rockMat, 70);
+  walls.traverse((o) => { if (o.isMesh) o.layers.set(1); });
+  walls.name = 'stoneWalls';
+  scene.add(walls);
   rocks.traverse((o) => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
   pebbles.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
   rocks.name = 'rocks'; pebbles.name = 'pebbles';
   scene.add(rocks, pebbles);
-  const grass = makeGrass({ ...G.terrain, mask: G.grassMask }, tierName);
+  const grass = makeGrass({ ...G.terrain, mask: G.grassMask, fields: fieldParts.flatMap((f) => f.grids) }, tierName);
   grass.name = 'grass';
   scene.add(grass);
   const turf = makeTurf(G.turf, M.grassMaterial());
@@ -335,6 +354,9 @@ export async function create(canvas, opts = {}) {
   const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial(), [60, 160]);
   bamboo.name = 'bamboo';
   scene.add(bamboo);
+  const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village, M.villageMaterial(), [90]);
+  village.name = 'village';
+  scene.add(village);
 
   await yieldTask();
   // ---------- river ----------
@@ -689,7 +711,9 @@ export async function create(canvas, opts = {}) {
     cliffs.userData.lod(camera.position);
     rocks.userData.lod(camera.position);
     pebbles.userData.lod(camera.position);
+    walls.userData.lod(camera.position);
     bamboo.userData.lod(camera.position);
+    village.userData.lod(camera.position);
     if (nearFlowers) nearFlowers.update(camera.position, warming);
 
     // sun light / shadow frustum anchored on the tree

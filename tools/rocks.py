@@ -90,7 +90,8 @@ def stone(name, seed, target, *, splits, lumps, moss, grey):
     return me
 
 
-# five boulders, each near (`rockN`) and far (`rockN_far`), and one stone for the pebbles at the water's edge
+# five boulders, each near (`rockN`) and far (`rockN_far`), and one stone for the pebbles at the water's edge (and the
+# village's stone walls, with a far one)
 KINDS = [f'rock{i}' for i in range(5)]
 TARGET, FAR = 1200, 0.25
 # split faces, lumpiness, moss
@@ -105,6 +106,9 @@ if __name__ == '__main__':
             me = stone(kind + ('_far' if far else ''), 31 + i, TARGET * (FAR if far else 1), splits=s, lumps=l, moss=m, grey=GREYS[i])
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     me = stone('pebble', 61, 90, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41))
+    print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
+    # the same stone, lighter, for the farmhouses' stone walls seen from further off
+    me = stone('pebble_far', 61, 24, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41))
     print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=False, export_yup=True)

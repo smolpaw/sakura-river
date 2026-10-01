@@ -6,6 +6,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const HYST = 5, STEP = 4, SUFFIX = ['', '_far', '_dist'];
 
@@ -47,6 +48,56 @@ export async function makeLods(url, kinds, lists, mat, ranges) {
         mesh.count = count[f];
         mesh.instanceMatrix.needsUpdate = mesh.instanceColor.needsUpdate = true;
       });
+    }
+  };
+  return group;
+}
+
+// Many copies of one small model as merged meshes, a full one and a far one per group (lists[i]: { matrix, color, n }),
+// switched by the camera's distance to the group's middle (with HYST metres of hysteresis). For a model of a few
+// dozen triangles in thousands of copies: instanced past 1,024 copies three moves the matrices from a uniform
+// buffer to per-instance attributes, which cost ~1.4 ms a frame here for 2,100 stones of 24 triangles (WebGL,
+// RTX 2060); merged they cost nothing measurable.
+export async function makeMerged(url, kind, lists, mat, range) {
+  const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url);
+  gltf.scene.updateMatrixWorld(true);
+  const plain = (name) => {
+    const src = gltf.scene.getObjectByName(name), g = new THREE.BufferGeometry();
+    for (const k of ['position', 'normal', 'color']) {
+      const a = src.geometry.attributes[k], out = new Float32Array(a.count * a.itemSize);
+      for (let i = 0; i < a.count; i++) for (let j = 0; j < a.itemSize; j++) out[i * a.itemSize + j] = a.getComponent(i, j);
+      g.setAttribute(k, new THREE.BufferAttribute(out, a.itemSize));
+    }
+    g.setIndex(Array.from(src.geometry.index.array));
+    return g.applyMatrix4(src.matrixWorld);
+  };
+  const models = [plain(kind), plain(kind + '_far')];
+  const group = new THREE.Group(), m = new THREE.Matrix4();
+  const sets = lists.filter((l) => l.n > 0).map((l) => {
+    const centre = new THREE.Vector3();
+    const levels = models.map((base) => {
+      const parts = [];
+      for (let i = 0; i < l.n; i++) {
+        const g = base.clone().applyMatrix4(m.fromArray(l.matrix, i * 16)), c = g.attributes.color;
+        const tint = l.color.subarray(i * 3, i * 3 + 3);
+        for (let v = 0; v < c.count; v++) c.setXYZ(v, c.getX(v) * tint[0], c.getY(v) * tint[1], c.getZ(v) * tint[2]);
+        parts.push(g);
+      }
+      const mesh = new THREE.Mesh(mergeGeometries(parts), mat);
+      group.add(mesh);
+      return mesh;
+    });
+    for (let i = 0; i < l.n; i++) centre.add(new THREE.Vector3(l.matrix[i * 16 + 12], l.matrix[i * 16 + 13], l.matrix[i * 16 + 14]));
+    centre.divideScalar(l.n);
+    levels[1].visible = false;
+    return { centre, levels, far: false };
+  });
+  group.userData.lod = (cam) => {
+    for (const s of sets) {
+      const d = cam.distanceTo(s.centre);
+      s.far = s.far ? d > range - HYST : d > range + HYST;
+      s.levels[0].visible = !s.far;
+      s.levels[1].visible = s.far;
     }
   };
   return group;
