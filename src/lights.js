@@ -6,7 +6,7 @@ import { DataUtils } from 'three';
 
 // the map's extent (x0, z0 its corner, `cell` metres a texel); a lamp keeps 2.6 r inside it (its pool's reach: the
 // edge texels stretch out over everything beyond)
-export const LIGHTMAP = { x0: -128, z0: -252, cell: 0.5, nx: 480, nz: 784 };
+export const LIGHTMAP = { x0: -128, z0: -252, cell: 0.5, nx: 480, nz: 830 };
 
 // a light: where (y: its height, from which the light fades up and down, tsl.js), strength, and r: its pool's
 // radius, exp(-d² / r²) across the ground

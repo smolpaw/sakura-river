@@ -43,10 +43,12 @@ function bridgeFrame(world, zc) {
 const CORNER = 0.035; // corner lamp posts stand this far (in u) past the deck ends
 const cornerOff = (width) => width * 0.5 + 0.28;
 
-// where the riverside lantern ropes tie on: the downstream corner post at each end (side -1: u = 0, +1: u = 1)
+// where the riverside lantern ropes tie on: the corner posts at each end (side -1: u = 0, +1: u = 1), downstream
+// and upstream
 export function bridgeRopeAnchors(world) {
   const { width, pt } = bridgeFrame(world, BRIDGE_Z);
-  return { [-1]: pt(-CORNER, cornerOff(width), 2.42), [1]: pt(1 + CORNER, cornerOff(width), 2.42) };
+  const at = (o) => ({ [-1]: pt(-CORNER, o, 2.42), [1]: pt(1 + CORNER, o, 2.42) });
+  return { down: at(cornerOff(width)), up: at(-cornerOff(width)) };
 }
 
 export function bridgeData(world, zc) {

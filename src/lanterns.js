@@ -1,16 +1,19 @@
-// Yozakura lanterns: rows of paper chōchin hung from a sagging rope between bamboo poles along the river from the
-// bridge: down the west bank past the cherry tree beside the footpath, and down the east bank as far as the small
-// cherry there. Generation only (runs in a worker); fx.js draws them and the light map (lights.js) lights what is
-// near them.
+// Yozakura lanterns: rows of paper chōchin hung from a sagging rope between bamboo poles along both banks of the
+// river, from the bridge downstream past the cherry tree to where the river bends away, and upstream to the gorge
+// (the west bank's to the waterwheel's mill). Generation only (runs in a worker); fx.js draws them and the light map
+// (lights.js) lights what is near them.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32, lerp } from './noise.js';
 
 const V = THREE.Vector3;
 
-// the lines follow the banks just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD), from the bridge to z1
-// (west, east)
-export const LINE = { z1: { [-1]: 38, [1]: -28 }, K: 1.38, PAD: 0.4 };
+// the lines follow the banks just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD); each from one of the
+// bridge's corner posts (side -1 west, 1 east; dir 1 downstream, -1 upstream) to z `to`
+export const LINE = {
+  K: 1.38, PAD: 0.4,
+  lines: [{ side: -1, dir: 1, to: 150 }, { side: 1, dir: 1, to: 150 }, { side: -1, dir: -1, to: -100 }, { side: 1, dir: -1, to: -113 }],
+};
 export const bankX = (world, z, side) => world.riverX(z) + side * (world.riverHW(z) * LINE.K + LINE.PAD);
 
 const SPAN = 6.4; // pole spacing (m)
@@ -45,21 +48,24 @@ function bamboo(h, r, rng) {
   return paint(g, (x, yy, z) => (Math.hypot(x, z) > r * 1.08 ? NODE : BAMBOO));
 }
 
-// blockers: [{x, z, r}] the poles keep clear of (boulders, tree trunks); anchors: {-1, 1} where each bank's line
-// starts, tied to the bridge's corner post (props.js bridgeRopeAnchors)
+// blockers: [{x, z, r}] the poles keep clear of (boulders, tree trunks); anchors: {down, up}, each {-1, 1}: where
+// each line starts, tied to the bridge's corner post (props.js bridgeRopeAnchors)
 export function lanternData(world, blockers, anchors) {
   const rng = mulberry32(31);
   const parts = [], hang = [], look = [];
-  const clear = (x, z) => blockers.every((b) => Math.hypot(x - b.x, z - b.z) > b.r + 0.3);
-  for (const side of [-1, 1]) {
-    // from the bridge, poles about SPAN apart along the bank, nudged along it off rocks and trees
-    const a = anchors[side];
+  // a pole stands clear of rocks and trees, off the farmland and the buildings' pads
+  const ok = (x, z) => blockers.every((b) => Math.hypot(x - b.x, z - b.z) > b.r + 0.3) && !world.zoneAt(x, z) && !world.padAt(x, z);
+  for (const { side, dir, to } of LINE.lines) {
+    // from the bridge, poles about SPAN apart along the bank, nudged along it off what is in the way; the line ends
+    // where nothing clears
+    const a = (dir > 0 ? anchors.down : anchors.up)[side];
     const poles = [new V(a.x, a.y, a.z)];
-    let z = a.z + 1;
-    while (Math.hypot(bankX(world, z, side) - a.x, z - a.z) < SPAN) z += 0.1;
-    while (z <= LINE.z1[side]) {
-      let zz = z;
-      for (let t = 0; t < 12 && !clear(bankX(world, zz, side), zz); t++) zz += 0.3;
+    const next = (x0, z0) => { let z = z0 + dir; while (Math.hypot(bankX(world, z, side) - x0, z - z0) < SPAN) z += 0.1 * dir; return z; };
+    let z = next(a.x, a.z);
+    while ((z - to) * dir <= 0) {
+      let zz = z, t = 0;
+      for (; t < 12 && !ok(bankX(world, zz, side), zz); t++) zz += 0.3 * dir;
+      if (t === 12) break;
       const x = bankX(world, zz, side), g = world.height(x, zz);
       const lean = new V((rng() - 0.5) * 0.06, 1, (rng() - 0.5) * 0.06).normalize();
       const h = ROPE + 0.35 + rng() * 0.3;
@@ -69,9 +75,7 @@ export function lanternData(world, blockers, anchors) {
       pole.translate(x, g - 0.3, zz);
       parts.push(pole);
       poles.push(new V(x, g - 0.3, zz).addScaledVector(lean, ROPE + 0.3));
-      let z2 = zz + 1;
-      while (Math.hypot(bankX(world, z2, side) - x, z2 - zz) < SPAN) z2 += 0.1;
-      z = z2 + (rng() - 0.5) * 0.8;
+      z = next(x, zz) + (rng() - 0.5) * 0.8;
     }
     // rope spans with lanterns
     for (let i = 0; i + 1 < poles.length; i++) {
