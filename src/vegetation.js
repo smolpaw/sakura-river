@@ -228,11 +228,13 @@ export function rocksData(world, tier, treePos) {
   }));
   // the farmhouses' pads (world.js BUILDINGS): dry-stone walls (ishigaki) on the banks where a pad is built up or cut
   // into the slope by more than 40 cm: courses of rounded stones from the bank's foot to its top (the pebbles' stone,
-  // ~2,100 of them, merged in groups: lods.js makeMerged)
-  const r2 = mulberry32(4321), walls = [];
-  world.BUILDINGS.forEach((b, bi) => {
-    // a group per four farmhouses along the lane (lods.js makeMerged draws each merged, near or far)
-    const wall = (walls[bi >> 2] ||= { m: [], c: [] });
+  // ~2,900 of them, merged in groups by place: lods.js makeMerged)
+  const r2 = mulberry32(4321), groups = new Map();
+  world.BUILDINGS.forEach((b) => {
+    // a group per 50 m square of the village (lods.js makeMerged draws each merged, near or far by its middle)
+    const key = `${Math.floor(b.x / 50)},${Math.floor(b.z / 50)}`;
+    if (!groups.has(key)) groups.set(key, { m: [], c: [] });
+    const wall = groups.get(key);
     const z0 = -b.hd, z1 = b.hd + b.yard;
     // walk the pad's edge, then out across its bank (world.js padAt: 0.15 .. 2.2 m out)
     const edge = [[-b.hw, z0, b.hw, z0, 0, -1], [b.hw, z0, b.hw, z1, 1, 0], [b.hw, z1, -b.hw, z1, 0, 1], [-b.hw, z1, -b.hw, z0, -1, 0]];
@@ -263,7 +265,7 @@ export function rocksData(world, tier, treePos) {
     }
   });
   const data = (l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 });
-  return { boulders: lists.map(data), pebbles: data(stones), walls: walls.map(data), rocksInWater, blockers: placements };
+  return { boulders: lists.map(data), pebbles: data(stones), walls: [...groups.values()].filter((g) => g.c.length).map(data), rocksInWater, blockers: placements };
 }
 
 // ---------- the gorge's rock walls ----------

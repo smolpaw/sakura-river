@@ -89,12 +89,13 @@ export const grassWave = Fn(([p]) => {
 });
 
 // the farmland's own grid (world.js buildFields: y, grass density, grass length, 1 where the mesh is) under (x, z),
-// triangle interpolated as its mesh is -> vec4(y, density, length, 1 if the mesh is there all round)
-const fieldsSampler = (tex, nx, nz, [x0, z0, step]) => Fn(([p]) => {
+// rows `row0` on in the atlas of all of them, triangle interpolated as its mesh is -> vec4(y, density, length, 1 if
+// the mesh is there all round)
+const fieldsSampler = (tex, nx, nz, [x0, z0, step], row0) => Fn(([p]) => {
   const u = p.x.sub(x0).div(step), v = p.y.sub(z0).div(step);
   const i0 = clamp(floor(u), 0, nx - 2), j0 = clamp(floor(v), 0, nz - 2);
   const fx = clamp(u.sub(i0), 0, 1), fz = clamp(v.sub(j0), 0, 1);
-  const ii = int(i0), jj = int(j0);
+  const ii = int(i0), jj = int(j0).add(row0);
   const a = textureLoad(tex, ivec2(ii, jj)), b = textureLoad(tex, ivec2(ii.add(1), jj));
   const c = textureLoad(tex, ivec2(ii, jj.add(1))), d = textureLoad(tex, ivec2(ii.add(1), jj.add(1)));
   const lower = a.add(b.sub(a).mul(fx)).add(c.sub(a).mul(fz));
@@ -121,14 +122,21 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
   maskTex.unpackAlignment = 1;
   maskTex.needsUpdate = true;
   const terrain = terrainSampler(gridTex, segX, segZ), masked = fineMask(maskTex, mask.bounds);
-  // on the farmland the blades stand on its own mesh (levees, banks); elsewhere on the terrain's
+  // on the farmland the blades stand on its own mesh (levees, banks); elsewhere on the terrain's. Its zones' grids
+  // stacked in one texture (a vertex stage may read only 16 on default limits)
+  const AW = Math.max(1, ...fields.map((f) => f.nx)), AH = Math.max(1, fields.reduce((n, f) => n + f.nz, 0));
+  const atlas = new Float32Array(AW * AH * 4);
+  let row = 0;
   const farm = fields.map((f) => {
-    const tex = new THREE.DataTexture(f.grid, f.nx, f.nz, THREE.RGBAFormat, THREE.FloatType);
-    tex.minFilter = tex.magFilter = THREE.NearestFilter;
-    tex.needsUpdate = true;
-    const [x0, z0, step] = f.box;
-    return { sample: fieldsSampler(tex, f.nx, f.nz, f.box), box: [x0, z0, x0 + (f.nx - 1) * step, z0 + (f.nz - 1) * step] };
+    for (let j = 0; j < f.nz; j++) atlas.set(f.grid.subarray(j * f.nx * 4, (j + 1) * f.nx * 4), ((row + j) * AW) * 4);
+    const [x0, z0, step] = f.box, r0 = row;
+    row += f.nz;
+    return { r0, f, box: [x0, z0, x0 + (f.nx - 1) * step, z0 + (f.nz - 1) * step] };
   });
+  const atlasTex = new THREE.DataTexture(atlas, AW, AH, THREE.RGBAFormat, THREE.FloatType);
+  atlasTex.minFilter = atlasTex.magFilter = THREE.NearestFilter;
+  atlasTex.needsUpdate = true;
+  for (const z of farm) z.sample = fieldsSampler(atlasTex, z.f.nx, z.f.nz, z.f.box, z.r0);
   const ground = Fn(([p]) => {
     const g = terrain(p).toVar();
     for (const f of farm) {
@@ -259,7 +267,7 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
   group.userData.update = (camera, all = false) => {
     pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(pv);
-    const cam = camera.position;
+    const cam = camera.position, thin = Math.sqrt(uDensity.value); // thinned grass ends sooner: keep ~ f (D0 / d)^2
     levels.forEach((L, k) => {
       const ox = Math.floor(cam.x / L.tile) - SIDE / 2, oz = Math.floor(cam.z / L.tile) - SIDE / 2;
       cand.length = 0;
@@ -267,7 +275,7 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
         const x0 = (ox + i) * L.tile, z0 = (oz + j) * L.tile;
         const dx = Math.max(x0 - cam.x, 0, cam.x - x0 - L.tile), dz = Math.max(z0 - cam.z, 0, cam.z - z0 - L.tile);
         const dd = Math.hypot(dx, dz);
-        if (dd > L.range) continue;
+        if (dd > L.range * thin) continue;
         box.min.set(x0, -3, z0); box.max.set(x0 + L.tile, 260, z0 + L.tile);
         if (!all && !frustum.intersectsBox(box)) continue;
         cand.push(dd, (ox + i) * L.n, (oz + j) * L.n);

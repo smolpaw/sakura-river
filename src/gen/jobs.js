@@ -71,4 +71,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 5, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };

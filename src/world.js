@@ -165,13 +165,13 @@ export function createWorld(seed = 7) {
   // the share flooded for planting, the rest still dry. Each zone fades into the natural ground at its edges.
   const ZONES = [
     // the valley floor west of the river, from below the bridge up past the village: rectangular paddies (fieldFloor)
-    { floor: true, row: 21, wet: 0.8, box: [-90, -262, -30, -60], mask: (x, z, rx, hw) => smoothstep(-90, -80, x) * smoothstep(rx - hw - 3, rx - hw - 9, x) * smoothstep(-60, -70, z) * smoothstep(-264, -252, z) },
+    { floor: true, row: 21, wet: 0.8, box: [-90, -262, -30, -60], mask: (x, z, rx, hw) => smoothstep(-90, -80, x) * smoothstep(rx - hw - 3, rx - hw - 9, x) * smoothstep(-60, -70, z) * smoothstep(-262, -250, z) },
     // terraces up the slope below the temple, east of the river
     { s: 1.4, len: 21, axis: [0.1, 1], wet: 0.65, box: [-25, -176, 100, -46], mask: (x, z, rx, hw) => smoothstep(rx + hw + 4, rx + hw + 11, x) * smoothstep(98, 86, x) * smoothstep(-62, -72, z) * smoothstep(-174, -162, z) * smoothstep(14, 22, templeDist(x, z)) },
     // terraces above the village, west
     { s: 1.3, len: 18, axis: [0.1, 1], wet: 0.6, box: [-164, -218, -96, -62], mask: (x, z) => smoothstep(-162, -150, x) * smoothstep(-98, -108, x) * smoothstep(-64, -74, z) * smoothstep(-216, -204, z) },
     // downstream, behind the cherry tree: paddies on the floor either side of the river, terraces up both slopes
-    { floor: true, row: 19, wet: 0.75, box: [-48, 42, 30, 152], mask: (x, z, rx, hw) => smoothstep(-48, -40, x) * smoothstep(rx - hw - 4, rx - hw - 9, x) * smoothstep(42, 50, z) * smoothstep(152, 144, z) + smoothstep(rx + hw + 4, rx + hw + 9, x) * smoothstep(30, 24, x) * smoothstep(40, 48, z) * smoothstep(152, 144, z) },
+    { floor: true, row: 19, wet: 0.75, box: [-48, 42, 30, 152], mask: (x, z, rx, hw) => smoothstep(-48, -40, x) * smoothstep(rx - hw - 4, rx - hw - 9, x) * smoothstep(42, 50, z) * smoothstep(152, 144, z) + smoothstep(rx + hw + 4, rx + hw + 9, x) * smoothstep(30, 24, x) * smoothstep(42, 50, z) * smoothstep(152, 144, z) },
     { s: 1.25, len: 19, axis: [0.15, 1], wet: 0.65, box: [22, 38, 92, 158], mask: (x, z) => smoothstep(24, 32, x) * smoothstep(90, 80, x) * smoothstep(38, 48, z) * smoothstep(158, 148, z) },
     { s: 1.25, len: 18, axis: [0.15, 1], wet: 0.6, box: [-86, 50, -38, 158], mask: (x, z) => smoothstep(-86, -78, x) * smoothstep(-38, -46, x) * smoothstep(50, 60, z) * smoothstep(158, 148, z) },
     // the village (no paddies: the fine mesh for the farmhouses' pads, yards and stone walls), west and east
@@ -222,10 +222,14 @@ export function createWorld(seed = 7) {
   // the farmland at (x, z) over ground g: its height y, how far into it m (0..1), and what is there
   function field(x, z, g) {
     for (let i = 0; i < ZONES.length; i++) {
-      const m = zoneMask(i, x, z);
-      if (m <= 0) continue;
-      const Z = ZONES[i], zm = { m, i, Z };
-      const F = Z.floor ? fieldFloor(x, z, g, zm) : Z.village ? { y: g, m, zone: i, village: true, riser: 0, levee: 0, inside: false } : fieldTerrace(x, z, g, zm);
+      const Z = ZONES[i], b = Z.box;
+      if (x < b[0] || z < b[1] || x > b[2] || z > b[3]) continue;
+      let F = null;
+      if (Z.floor) F = fieldFloor(x, z, g, { i, Z }); // its fields decide, each wholly farmland or not
+      else {
+        const m = zoneMask(i, x, z);
+        if (m > 0) F = Z.village ? { y: g, m, zone: i, village: true, riser: 0, levee: 0, inside: false } : fieldTerrace(x, z, g, { m, i, Z });
+      }
       if (F) return F;
     }
     return null;
@@ -276,7 +280,8 @@ export function createWorld(seed = 7) {
     // level at its middle (neighbours step a little: their shared levee is a low bank), a little into the floor;
     // none where the ground falls too far across it (the field would cut a tall bank into the hill)
     const level = ground(xc, zc) - meadowFine(xc, zc) - 0.12;
-    c = { x0, x1, z0, z1: z0 - Z.row, xs, on: m > 0.5 && hi - lo < 2.2, level, cell: fieldHash(iu + i * 101, n) };
+    const inside = x1 <= Z.box[2] && z0 - Z.row >= Z.box[1];
+    c = { x0, x1, z0, z1: z0 - Z.row, xs, on: inside && m > 0.5 && hi - lo < 2.2, level, cell: fieldHash(iu + i * 101, n) };
     FLOOR.set(key, c);
     return c;
   }
@@ -305,11 +310,12 @@ export function createWorld(seed = 7) {
     const water = c.level + (wet ? 0.1 : 0.05);
     let y, m, levee;
     if (ko < e[0] || !nb || !nb.on) {
-      // a bank to the natural ground beyond (a lane, a clearing, the zone's edge): a levee, then down or up
+      // a levee, then a bank down or up to the natural ground at the field's own edge (beyond: a lane, a clearing,
+      // the zone's edge), so the ground runs on without a step
       const d = Math.min(e[0], ko);
-      levee = smoothstep(1.4, 0.8, d) * smoothstep(-0.2, 0.5, d);
-      y = lerp(lerp(water, c.level + 0.25, levee), g, smoothstep(0.6, -0.4, d));
-      m = smoothstep(-0.4, 0.8, d);
+      levee = smoothstep(1.9, 1.3, d);
+      y = lerp(lerp(water, c.level + 0.25, levee), g, smoothstep(0.9, 0.0, d));
+      m = smoothstep(0.0, 0.9, d);
     } else {
       // a levee shared with the next field, as high as the higher of the two
       levee = smoothstep(0.75, 0.2, e[0]);
@@ -487,24 +493,45 @@ export function createWorld(seed = 7) {
   // height and grass (density, length) and where the mesh is, for grass.js to stand blades on.
   function buildFields(step = 0.5, zones = ZONES.map((_, i) => i)) {
     const P = [], I = [], grids = [], verts = [];
+    const inBox = (b, x, z) => x >= b[0] && z >= b[1] && x <= b[2] && z <= b[3];
+    // the cheap test: could (x, z) be farmland or village at all
+    const near = (x, z) => ZONES.some((Z, i) => inBox(Z.box, x, z) && (Z.floor || zoneMask(i, x, z) > 0));
+    // each quad is drawn by the first zone whose box holds its middle (boxes overlap; the lattice is shared, so
+    // neighbouring zones' meshes meet without a seam)
+    const owner = (x, z) => ZONES.findIndex((Z) => inBox(Z.box, x, z));
     for (const zi of zones) {
-      const Z = ZONES[zi], [bx0, bz0, bx1, bz1] = Z.box;
-      const nx = Math.ceil((bx1 - bx0) / step) + 1, nz = Math.ceil((bz1 - bz0) / step) + 1;
+      const Z = ZONES[zi];
+      const bx0 = Math.floor(Z.box[0] / step) * step, bz0 = Math.floor(Z.box[1] / step) * step;
+      const nx = Math.round((Math.ceil(Z.box[2] / step) * step - bx0) / step) + 1, nz = Math.round((Math.ceil(Z.box[3] / step) * step - bz0) / step) + 1;
       const idx = new Int32Array(nx * nz).fill(-1);
       const grid = new Float32Array(nx * nz * 4); // y, grass density, grass length, 1 where the mesh is
       grids.push({ grid, nx, nz, box: [bx0, bz0, step] });
+      // where the farmland and village are, and a ring of the natural ground round them (so the mesh's edge comes back
+      // down to the ground the terrain mesh draws, however steeply the farmland ends)
+      const H = new Array(nx * nz).fill(null);
       for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
         const x = bx0 + i * step, z = bz0 + j * step;
-        if (zoneMask(zi, x, z) < 0.02) continue; // (the cheap test first)
-        const { y, F } = heightField(x, z);
-        if (!F || ZONES[F.zone] !== Z || F.m < 0.02) continue;
-        idx[j * nx + i] = P.length / 3;
-        P.push(x, y - 0.15 * (1 - smoothstep(0.02, 0.25, F.m)), z);
-        verts.push({ x, y, z, F, grid, k: (j * nx + i) * 4 });
+        if (near(x, z)) { const h = heightField(x, z); if (h.F) H[j * nx + i] = h; }
+      }
+      for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+        const k = j * nx + i;
+        let h = H[k];
+        if (!h) {
+          let ring = false;
+          for (let dj = -1; dj <= 1 && !ring; dj++) for (let di = -1; di <= 1; di++) { const q = (j + dj) * nx + i + di; if (i + di >= 0 && i + di < nx && j + dj >= 0 && j + dj < nz && H[q] && H[q].F) { ring = true; break; } }
+          if (!ring) continue;
+          const x = bx0 + i * step, z = bz0 + j * step;
+          h = { y: height(x, z), F: { y: 0, m: 0, zone: zi, village: true, riser: 0, levee: 0, inside: false } };
+        }
+        const x = bx0 + i * step, z = bz0 + j * step;
+        idx[k] = P.length / 3;
+        // (where the farmland fades out the terrain mesh takes over: this one a little under it)
+        P.push(x, h.y - 0.15 * (1 - smoothstep(0.02, 0.25, h.F.m)), z);
+        verts.push({ x, y: h.y, z, F: h.F, grid, k: k * 4 });
       }
       for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
         const a = idx[j * nx + i], b = idx[j * nx + i + 1], c = idx[(j + 1) * nx + i], d = idx[(j + 1) * nx + i + 1];
-        if (a < 0 || b < 0 || c < 0 || d < 0) continue;
+        if (a < 0 || b < 0 || c < 0 || d < 0 || owner(bx0 + (i + 0.5) * step, bz0 + (j + 0.5) * step) !== zi) continue;
         I.push(a, c, b, b, c, d);
       }
     }
@@ -537,8 +564,8 @@ export function createWorld(seed = 7) {
       }
       C.set(c, v * 3);
       Gr.set([dens, len, g.tint], v * 3);
-      // blades where the mesh is on top (grass.js reads this grid)
-      grid.set([y, dens * smoothstep(0.02, 0.2, F.m), len, 1], k);
+      // blades on this mesh (grass.js reads this grid where it is)
+      grid.set([y, dens, len, 1], k);
     });
     geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
     geo.setAttribute('aGround', new THREE.BufferAttribute(Gr, 3));
