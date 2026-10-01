@@ -91,10 +91,12 @@ export function createWorld(seed = 7) {
     // the footpath from the bridge along the west bank to the cherry tree, outside the lantern line
     lane([[-33, -60], [-32, -50], [-27, -40], [-22, -30], [-20, -20], [-21, -10], [-22, -4]]),
     lane([[-13, -61], [-8, -74], [-2, -92], [3, -112], [5, -132], [9, -152], [13, -170], [15, -182]]),
+    // from the temple's approach across the terraces to the hamlet on the eastern slope
+    lane([[5, -117], [16, -116], [28, -115], [38, -117], [44, -124], [44, -134]]),
     lane([[-33, -60], [-42, -64], [-55, -73], [-70, -84], [-84, -96], [-89, -115], [-91, -140], [-93, -165], [-95, -190], [-93, -215], [-90, -240]]),
   ];
   // distance to the nearest lane: looked up in a 1 m grid made on first use (out to 8 m; beyond, Infinity)
-  const LD = { x0: -104, z0: -250, s: 1, nx: 129, nz: 253, d: null };
+  const LD = { x0: -104, z0: -250, s: 1, nx: 165, nz: 253, d: null };
   function laneDist(x, z) {
     if (!LD.d) {
       LD.d = new Float32Array(LD.nx * LD.nz);
@@ -118,7 +120,7 @@ export function createWorld(seed = 7) {
   }
   // The village's buildings (village.js draws them): their kind, where, which way their front faces (+z turned by
   // yaw), and the levelled pad each stands on (half-sizes hw, hd round it; its yard reaching `yard` metres out in
-  // front). Farmhouses strung along the lane at the foot of the western slope, a pair above the eastern terraces.
+  // front). Farmhouses strung along the lane at the foot of the western slope, a hamlet above the eastern terraces.
   const B = (kind, x, z, yaw, hw, hd, yard) => ({ kind, x, z, yaw, hw, hd, yard, c: Math.cos(yaw), s: Math.sin(yaw), y: 0 });
   // the waterwheel's mill on the west bank at z, its axle (local +x) across the river to the wheel 2.9 m out (village.js
   // turns it), the wheel in the water at 0.85 of the river's half-width; its pad low by the water (cut into the bank)
@@ -134,7 +136,10 @@ export function createWorld(seed = 7) {
     B('minka0', -103, -104, E, 7.6, 5.2, 4), B('kura', -100, -121, E + 0.1, 3.2, 2.7, 2), B('minka1', -79, -130, Wd, 5.8, 4.4, 3.5),
     B('koya', -102, -133, E, 2.6, 2.3, 1), B('minka0', -106, -153, E - 0.12, 7.6, 5.2, 4), B('minka1', -105, -177, E + 0.15, 5.8, 4.4, 3.5),
     B('koya', -83, -185, Wd, 2.6, 2.3, 1), B('minka0', -81, -205, Wd + 0.08, 7.6, 5.2, 4), B('kura', -105, -199, E, 3.2, 2.7, 2),
-    B('minka1', -103, -226, E - 0.1, 5.8, 4.4, 3.5), B('minka1', 44, -46, -0.64, 5.8, 4.4, 3.5), B('koya', 53, -38, -0.64, 2.6, 2.3, 1),
+    B('minka1', -103, -226, E - 0.1, 5.8, 4.4, 3.5),
+    // a hamlet on the eastern slope above its terraces, right of the temple from the cherry tree, facing down the valley
+    B('minka1', 30, -126, -0.25, 5.8, 4.4, 3.5), B('koya', 20, -134, -0.2, 2.6, 2.3, 1), B('minka0', 44, -146, -0.27, 7.6, 5.2, 4),
+    B('kura', 58, -157, -0.3, 3.2, 2.7, 2),
     // the hamlet downstream: a farmhouse, its storehouse and shed among the eastern terraces, one across the river
     B('minka0', 52, 90, -Math.PI / 2 - 0.2, 7.6, 5.2, 4), B('kura', 56, 108, -Math.PI / 2, 3.2, 2.7, 2), B('koya', 50, 78, -Math.PI / 2 - 0.2, 2.6, 2.3, 1),
     B('minka1', -56, 96, Math.PI / 2 + 0.25, 5.8, 4.4, 3.5),
@@ -176,7 +181,7 @@ export function createWorld(seed = 7) {
     { s: 1.25, len: 18, axis: [0.15, 1], wet: 0.6, box: [-86, 50, -38, 158], mask: (x, z) => smoothstep(-86, -78, x) * smoothstep(-38, -46, x) * smoothstep(50, 60, z) * smoothstep(158, 148, z) },
     // the village (no paddies: the fine mesh for the farmhouses' pads, yards and stone walls), west and east
     { village: true, box: [-122, -244, -66, -86], mask: (x, z) => smoothstep(-122, -115, x) * smoothstep(-66, -72, x) * smoothstep(-86, -93, z) * smoothstep(-244, -237, z) },
-    { village: true, box: [28, -62, 68, -22], mask: (x, z) => smoothstep(28, 34, x) * smoothstep(68, 62, x) * smoothstep(-62, -56, z) * smoothstep(-22, -28, z) },
+    { village: true, box: [10, -166, 70, -106], mask: (x, z) => smoothstep(10, 16, x) * smoothstep(70, 64, x) * smoothstep(-166, -160, z) * smoothstep(-106, -112, z) },
     { village: true, box: [34, 70, 72, 124], mask: (x, z) => smoothstep(34, 40, x) * smoothstep(72, 66, x) * smoothstep(70, 76, z) * smoothstep(124, 118, z) },
     { village: true, box: [-72, 80, -42, 112], mask: (x, z) => smoothstep(-72, -66, x) * smoothstep(-42, -48, x) * smoothstep(80, 86, z) * smoothstep(112, 106, z) },
   ];

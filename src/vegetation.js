@@ -331,8 +331,8 @@ export function bambooData(world) {
     const g = 0.88 + rng() * 0.24;
     lists[Math.floor(rng() * BAMBOO_KINDS.length)].push({ m: m.compose(p, q, s).toArray(), c: [g * (1 + (rng() - 0.5) * 0.1), g, g * 0.95] });
   }
-  // groves behind the farmhouses (yashikirin, the homestead's windbreak), clear of the other
-  // pads, the lanes and the paddies
+  // groves behind the farmhouses (yashikirin, the homestead's windbreak), clear of the lanes and the paddies, and
+  // well back from the other buildings (on a slope, a grove behind one house would hide the house above it)
   const r2 = mulberry32(929);
   for (const b of world.BUILDINGS) {
     if (!b.kind.startsWith('minka')) continue;
@@ -340,6 +340,7 @@ export function bambooData(world) {
       const lx = lerp(-b.hw - 4, b.hw + 4, r2()), lz = -b.hd - lerp(3.2, 12, r2());
       const x = b.x + lx * b.c + lz * b.s, z = b.z - lx * b.s + lz * b.c;
       if (world.padAt(x, z) || world.zoneAt(x, z) || world.laneDist(x, z) < 3) continue;
+      if (world.BUILDINGS.some((o) => o !== b && Math.abs(x - o.x) < 30 && Math.abs(z - o.z) < 30 && world.padDist(o, x, z) < 7)) continue;
       if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 1.9)) continue;
       placed.push([x, z]);
       n++;
