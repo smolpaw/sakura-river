@@ -4,8 +4,8 @@
 // multiplies the sun by `sunShadow` (tsl.js R170LightingModel), and the hand-made sun terms (backlit grass and
 // blossom, petals, water glints) follow.
 import * as THREE from 'three/webgpu';
-import { Fn, If, float, vec2, vec4, uniform, texture, normalWorld, positionWorld, renderGroup, max, clamp } from 'three/tsl';
-import { vnoise, sstep } from './tsl.js'; // (used only when the node is built, after tsl.js has loaded)
+import { Fn, If, float, vec2, vec4, uniform, texture, normalWorld, positionWorld, renderGroup, max, clamp, sin } from 'three/tsl';
+import { sstep } from './tsl.js'; // (used only when the node is built, after tsl.js has loaded)
 
 export const FAR_LAYER = 3;
 // the valley's box: everything the camera can come near, and the hills round it
@@ -45,7 +45,7 @@ const farShadow = Fn(() => {
   return s;
 });
 
-// The clouds' shadows: a cloud layer CLOUD_H up, three octaves of noise drifting with the sky's clouds, thresholded
+// The clouds' shadows: a cloud layer CLOUD_H up, a pattern drifting with the sky's clouds, thresholded
 // by the cover as the sky's are; where the sun's ray through the point meets it, 70% of the sun is held back. Under
 // a full overcast the sun is already dim and even (weather.js), so the patches fade out there.
 const CLOUD_H = 900;
@@ -55,8 +55,10 @@ const cloudShadow = Fn(() => {
   If(k.greaterThan(0.0), () => {
     const L = CLOUDS.uSun;
     const q = positionWorld.xz.add(L.xz.mul(float(CLOUD_H).sub(positionWorld.y).div(max(L.y, 0.12))));
-    const c = q.div(320.0).add(CLOUDS.uPos.mul(2.0)).toVar();
-    const n = vnoise(c).mul(0.55).add(vnoise(c.mul(2.3).add(7.1)).mul(0.3)).add(vnoise(c.mul(5.4).sub(3.7)).mul(0.15));
+    const c = q.div(150.0).add(CLOUDS.uPos.mul(3.2)).toVar();
+    // (interfering waves, not noise: hashed noise in every lit material cost ~1 s of pipeline compilation at start-up)
+    const w = c.add(vec2(sin(c.y.mul(0.83).add(1.7)), sin(c.x.mul(0.71).sub(0.4))).mul(0.9));
+    const n = sin(w.x.mul(1.37)).mul(sin(w.y.mul(1.13).add(0.6))).mul(0.35).add(sin(w.x.mul(0.53).add(w.y.mul(0.61)).add(2.1)).mul(0.15)).add(0.5);
     const t = float(0.66).sub(CLOUDS.uCover.sub(0.35).mul(0.5));
     s.assign(float(1.0).sub(sstep(t.sub(0.08), t.add(0.1), n).mul(clamp(k, 0.0, 1.0)).mul(0.7)));
   });
