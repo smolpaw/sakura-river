@@ -50,7 +50,11 @@ export function terrainMaterial({ sky = null } = {}) {
     o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(back.mul(1.6).add(0.15)).mul(grassy).mul(0.5));
     o.mulAssign(float(1.0).add(grassWave(wp.xz).mul(U.uWind).mul(grassy).mul(0.3)));
     o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
-    if (sky) o.assign(mix(o, paddyWater(sky), sstep(0.35, 0.65, attribute('aWater', 'float'))));
+    if (sky) {
+      // (only where there is water: the levees, banks and dry paddies skip it)
+      const wet = sstep(0.35, 0.65, attribute('aWater', 'float'));
+      If(wet.greaterThan(0.0), () => { o.assign(mix(o, paddyWater(sky), wet)); });
+    }
     return o;
   })());
 }
@@ -68,11 +72,12 @@ const paddyWater = (sky) => Fn(() => {
   const N = normalize(vec3(nx.mul(amp).mul(sstep(120.0, 20.0, dist)), 1.0, nz.mul(amp).mul(sstep(120.0, 20.0, dist))));
   const V = normalize(cameraPosition.sub(wp));
   const R = reflect(V.negate(), N);
-  const fres = float(0.02).add(pow(max(float(1.0).sub(max(dot(N, V), 0.0)), 0.0), 5.0).mul(0.98));
+  // (a hand of muddy water scatters the sky too: no darker than this from above)
+  const fres = float(0.07).add(pow(max(float(1.0).sub(max(dot(N, V), 0.0)), 0.0), 5.0).mul(0.93));
   const skyC = mix(uZenith, uHorizon, pow(float(1.0).sub(clamp(R.y, 0.0, 1.0)), 4.0)).toVar();
   skyC.assign(mix(skyC, mix(U.uSkyAmb.mul(0.35), U.uFogColor, 0.35), sstep(0.16, 0.03, R.y)));
   const light = U.uSunVis.mul(0.65).add(0.35);
-  const body = vec3(0.07, 0.07, 0.045).mul(light).add(U.uSkyAmb.mul(0.03));
+  const body = vec3(0.12, 0.11, 0.075).mul(light).add(U.uSkyAmb.mul(0.05));
   const col = mix(body, skyC, clamp(fres.mul(1.1), 0.0, 1.0)).toVar();
   const sd = max(dot(R, U.uSunDir), 0.0);
   col.addAssign(U.uSunColor.mul(U.uSunVis).mul(pow(sd, 600.0).mul(6.0).add(pow(sd, 60.0).mul(0.3))));

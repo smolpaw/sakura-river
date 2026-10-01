@@ -125,13 +125,15 @@ export async function create(canvas, opts = {}) {
   const focus = new THREE.Vector3(...Lay.focus);
   const triMul = ST ? ST.triMul : 1;
   const trees = treeSpecs(Lay);
+  const fieldJobs = [[], [], []], area = [0, 0, 0];
+  world.ZONES.map((Z, i) => ({ i, a: (Z.box[2] - Z.box[0]) * (Z.box[3] - Z.box[1]) })).sort((p, q) => q.a - p.a).forEach(({ i, a }) => {
+    const k = area.indexOf(Math.min(...area));
+    fieldJobs[k].push(i); area[k] += a;
+  });
   const { results: G, stats: genStats } = await runJobs({
     terrain: { name: 'terrain', args: { seg: Q.terrain } },
-    // the farmland and village mesh in three jobs that run at once (the floor's paddies and the village, the eastern
-    // terraces, the western ones)
-    fieldsA: { name: 'fields', args: { zones: [0, 3, 4] } },
-    fieldsB: { name: 'fields', args: { zones: [1] } },
-    fieldsC: { name: 'fields', args: { zones: [2] } },
+    // the farmland and village mesh in three jobs that run at once, its zones shared out by area
+    ...Object.fromEntries(fieldJobs.map((zones, k) => [`fields${k}`, { name: 'fields', args: { zones } }])),
     village: { name: 'village' },
     heightCache: { name: 'heightCache' },
     depth: { name: 'depth', args: { tier: tierName } },
@@ -182,7 +184,7 @@ export async function create(canvas, opts = {}) {
   const hemi = new THREE.HemisphereLight(0xbcd0ff, 0x3a3a20, 0.9);
   scene.add(hemi);
   // the village's farmland: rice paddies, flooded or dry, terraced up the slopes (world.js buildFields)
-  const fieldParts = [G.fieldsA, G.fieldsB, G.fieldsC];
+  const fieldParts = fieldJobs.map((_, k) => G[`fields${k}`]);
   const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky }));
   fields.receiveShadow = true;
   fields.name = 'fields';

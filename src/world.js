@@ -13,7 +13,9 @@ export function createWorld(seed = 7) {
   const N = makeNoise(seed);
   const N2 = makeNoise(seed * 3 + 11);
 
-  const riverX = (z) => 8.5 * Math.sin(z * 0.021 + 0.9) + 20 * Math.sin(z * 0.0072 - 0.35) + 3.5 * Math.sin(z * 0.047 + 2.2) - 4;
+  // (downstream, past z = 150, it swings west and out of sight behind the hills, so the valley's end shows hills,
+  // not the terrain's edge; tsl.js lanternLight copies the rest, which is all there is where the lanterns are)
+  const riverX = (z) => 8.5 * Math.sin(z * 0.021 + 0.9) + 20 * Math.sin(z * 0.0072 - 0.35) + 3.5 * Math.sin(z * 0.047 + 2.2) - 4 - 55 * smoothstep(150, 262, z);
   const riverHW = (z) => lerp(7.6, 3.4, smoothstep(20, -520, z));
   const valleyW = (z) => 48 + 0.16 * Math.max(0, -z);
 
@@ -52,8 +54,8 @@ export function createWorld(seed = 7) {
     const wall = smoothstep(vw * 0.45, vw * 1.9, d);
     const hillN = 0.5 + 0.5 * N.fbm2(x * 0.006 + 5, z * 0.006 - 2, 5);
     g += wall * (10 + 38 * hillN) * (0.55 + 2.2 * far);
-    // background hills behind the camera side too (keeps horizon closed)
-    g += smoothstep(90, 260, z) * 30 * hillN;
+    // background hills behind the camera side too (keeps horizon closed), leaving the river its valley
+    g += smoothstep(90, 260, z) * 30 * hillN * smoothstep(12, 55, d);
     // far mountains, carved by the river valley
     const carve = lerp(smoothstep(riverHW(z) * 3, riverHW(z) * 3 + 160 + 0.35 * Math.max(0, -z - 600), d), 1, smoothstep(-1000, -1700, z));
     const mv = mountains(x, z) * carve;
@@ -124,6 +126,9 @@ export function createWorld(seed = 7) {
     B('koya', -102, -133, E, 2.6, 2.3, 1), B('minka0', -106, -153, E - 0.12, 7.6, 5.2, 4), B('minka1', -105, -177, E + 0.15, 5.8, 4.4, 3.5),
     B('koya', -83, -185, Wd, 2.6, 2.3, 1), B('minka0', -81, -205, Wd + 0.08, 7.6, 5.2, 4), B('kura', -105, -199, E, 3.2, 2.7, 2),
     B('minka1', -103, -226, E - 0.1, 5.8, 4.4, 3.5), B('minka1', 44, -46, -0.64, 5.8, 4.4, 3.5), B('koya', 53, -38, -0.64, 2.6, 2.3, 1),
+    // the hamlet downstream: a farmhouse, its storehouse and shed among the eastern terraces, one across the river
+    B('minka0', 52, 90, -Math.PI / 2 - 0.2, 7.6, 5.2, 4), B('kura', 56, 108, -Math.PI / 2, 3.2, 2.7, 2), B('koya', 50, 78, -Math.PI / 2 - 0.2, 2.6, 2.3, 1),
+    B('minka1', -56, 96, Math.PI / 2 + 0.25, 5.8, 4.4, 3.5),
   ];
   // signed distance outside a building's pad (its yard included), in its own frame
   const padDist = (b, x, z) => {
@@ -155,9 +160,15 @@ export function createWorld(seed = 7) {
     { s: 1.4, len: 21, axis: [0.1, 1], wet: 0.65, box: [-25, -176, 100, -46], mask: (x, z, rx, hw) => smoothstep(rx + hw + 4, rx + hw + 11, x) * smoothstep(98, 86, x) * smoothstep(-62, -72, z) * smoothstep(-174, -162, z) * smoothstep(14, 22, templeDist(x, z)) },
     // terraces above the village, west
     { s: 1.3, len: 18, axis: [0.1, 1], wet: 0.6, box: [-164, -218, -96, -62], mask: (x, z) => smoothstep(-162, -150, x) * smoothstep(-98, -108, x) * smoothstep(-64, -74, z) * smoothstep(-216, -204, z) },
+    // downstream, behind the cherry tree: paddies on the floor either side of the river, terraces up both slopes
+    { floor: true, row: 19, wet: 0.75, box: [-48, 42, 30, 152], mask: (x, z, rx, hw) => smoothstep(-48, -40, x) * smoothstep(rx - hw - 4, rx - hw - 9, x) * smoothstep(42, 50, z) * smoothstep(152, 144, z) + smoothstep(rx + hw + 4, rx + hw + 9, x) * smoothstep(30, 24, x) * smoothstep(40, 48, z) * smoothstep(152, 144, z) },
+    { s: 1.25, len: 19, axis: [0.15, 1], wet: 0.65, box: [22, 38, 92, 158], mask: (x, z) => smoothstep(24, 32, x) * smoothstep(90, 80, x) * smoothstep(38, 48, z) * smoothstep(158, 148, z) },
+    { s: 1.25, len: 18, axis: [0.15, 1], wet: 0.6, box: [-86, 50, -38, 158], mask: (x, z) => smoothstep(-86, -78, x) * smoothstep(-38, -46, x) * smoothstep(50, 60, z) * smoothstep(158, 148, z) },
     // the village (no paddies: the fine mesh for the farmhouses' pads, yards and stone walls), west and east
     { village: true, box: [-122, -244, -66, -86], mask: (x, z) => smoothstep(-122, -115, x) * smoothstep(-66, -72, x) * smoothstep(-86, -93, z) * smoothstep(-244, -237, z) },
     { village: true, box: [28, -62, 68, -22], mask: (x, z) => smoothstep(28, 34, x) * smoothstep(68, 62, x) * smoothstep(-62, -56, z) * smoothstep(-22, -28, z) },
+    { village: true, box: [34, 70, 72, 124], mask: (x, z) => smoothstep(34, 40, x) * smoothstep(72, 66, x) * smoothstep(70, 76, z) * smoothstep(124, 118, z) },
+    { village: true, box: [-72, 80, -42, 112], mask: (x, z) => smoothstep(-72, -66, x) * smoothstep(-42, -48, x) * smoothstep(80, 86, z) * smoothstep(112, 106, z) },
   ];
   // what keeps the farmland back: the lanes, and clearings round the small cherries (signed: < 0 inside)
   function keepOut(x, z) {
@@ -239,7 +250,7 @@ export function createWorld(seed = 7) {
   // the zone's edge. A field is farmland or not as a whole (the zone's mask at its middle).
   const FLOOR = new Map();
   function floorCell(Z, i, iu, n) {
-    const key = iu * 1000 + n;
+    const key = (i * 1000 + iu) * 1000 + n;
     let c = FLOOR.get(key);
     if (c) return c;
     const z0 = Z.box[3] - iu * Z.row;
@@ -247,10 +258,15 @@ export function createWorld(seed = 7) {
     while (xs[xs.length - 1] < Z.box[2]) xs.push(xs[xs.length - 1] + 11 + 8 * fieldHash(iu * 7 + 3, xs.length));
     const x0 = xs[n], x1 = xs[n + 1], xc = (x0 + x1) / 2, zc = z0 - Z.row / 2;
     const m = Z.mask(xc, zc, riverX(zc), riverHW(zc)) * smoothstep(0, 3, keepOut(xc, zc)) + 0.3 * FN.noise2(xc * 0.045, zc * 0.045);
-    let level = Infinity;
-    for (const [px, pz] of [[xc, zc], [x0 + 1, z0 - 1], [x1 - 1, z0 - 1], [x0 + 1, z0 - Z.row + 1], [x1 - 1, z0 - Z.row + 1]]) level = Math.min(level, ground(px, pz) - meadowFine(px, pz));
-    level -= 0.12; // cut a little into the floor
-    c = { x0, x1, z0, z1: z0 - Z.row, xs, on: m > 0.5, level, cell: fieldHash(iu + i * 101, n) };
+    let lo = Infinity, hi = -Infinity;
+    for (const [px, pz] of [[x0 + 1, z0 - 1], [x1 - 1, z0 - 1], [x0 + 1, z0 - Z.row + 1], [x1 - 1, z0 - Z.row + 1]]) {
+      const h = ground(px, pz) - meadowFine(px, pz);
+      lo = Math.min(lo, h); hi = Math.max(hi, h);
+    }
+    // level at its middle (neighbours step a little: their shared levee is a low bank), a little into the floor;
+    // none where the ground falls too far across it (the field would cut a tall bank into the hill)
+    const level = ground(xc, zc) - meadowFine(xc, zc) - 0.12;
+    c = { x0, x1, z0, z1: z0 - Z.row, xs, on: m > 0.5 && hi - lo < 2.2, level, cell: fieldHash(iu + i * 101, n) };
     FLOOR.set(key, c);
     return c;
   }
@@ -525,7 +541,7 @@ export function createWorld(seed = 7) {
   // ---------- river ribbon: follows the meandering centreline ----------
   function buildRiver(stepNear = 0.6) {
     const zs = [];
-    let z = 190;
+    let z = 262; // to the terrain's end downstream
     while (z > -980) { zs.push(z); const dist = Math.abs(z - 10); z -= stepNear + dist * 0.012; }
     const across = 10;
     const pos = [], uv = [], riv = [], idx = [];
@@ -559,7 +575,7 @@ export function createWorld(seed = 7) {
   }
 
   // water depth texture around the river (R = depth/4)
-  const HB = { x0: -110, z0: -760, x1: 110, z1: 200 };
+  const HB = { x0: -110, z0: -760, x1: 110, z1: 264 };
   function buildDepthMap(rocks = []) {
     const W = 256, H = 1024;
     const data = new Uint8Array(W * H * 4);
