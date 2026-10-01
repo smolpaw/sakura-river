@@ -14,7 +14,7 @@ export function createWorld(seed = 7) {
   const N2 = makeNoise(seed * 3 + 11);
 
   // (downstream, past z = 150, it swings west and out of sight behind the hills, so the valley's end shows hills,
-  // not the terrain's edge; tsl.js lanternLight copies the rest, which is all there is where the lanterns are)
+  // not the terrain's edge)
   const riverX = (z) => 8.5 * Math.sin(z * 0.021 + 0.9) + 20 * Math.sin(z * 0.0072 - 0.35) + 3.5 * Math.sin(z * 0.047 + 2.2) - 4 - 55 * smoothstep(150, 262, z);
   const riverHW = (z) => lerp(7.6, 3.4, smoothstep(20, -520, z));
   const valleyW = (z) => 48 + 0.16 * Math.max(0, -z);
@@ -92,7 +92,7 @@ export function createWorld(seed = 7) {
     lane([[-33, -60], [-32, -50], [-27, -40], [-22, -30], [-20, -20], [-21, -10], [-22, -4]]),
     lane([[-13, -61], [-8, -74], [-2, -92], [3, -112], [5, -132], [9, -152], [13, -170], [15, -182]]),
     // from the temple's approach across the terraces to the hamlet on the eastern slope
-    lane([[5, -117], [16, -116], [28, -115], [38, -117], [44, -124], [44, -134]]),
+    lane([[5, -117], [16, -114], [28, -112], [37, -112.5], [44, -118], [45, -126], [44.5, -131]]),
     lane([[-33, -60], [-42, -64], [-55, -73], [-70, -84], [-84, -96], [-89, -115], [-91, -140], [-93, -165], [-95, -190], [-93, -215], [-90, -240]]),
   ];
   // distance to the nearest lane: looked up in a 1 m grid made on first use (out to 8 m; beyond, Infinity)
