@@ -1,27 +1,37 @@
-// Yozakura lanterns: rows of paper chōchin hung from a sagging rope between bamboo poles along both banks of the
-// river, from the bridge downstream past the cherry tree to where the river bends away, and upstream to the gorge
-// (the west bank's to the waterwheel's mill). Generation only (runs in a worker); fx.js draws them and the light map
-// (lights.js) lights what is near them.
+// The riverside's lamps after dusk. Round the cherries, from the bridge down past the cherry tree, yozakura lanterns:
+// rows of paper chōchin, red and white, hung from a sagging rope between weathered posts along both banks. Along the
+// rest of both banks, from the gorge and the waterwheel's mill above the bridge down to where the river bends away,
+// bonbori: paper lamps on wooden posts, every few strides. And by the cherry tree, two fire baskets (kagaribi).
+// The posts, bonbori and fire baskets are Blender models (tools/lamps.py; drawn by lods.js); the ropes are built here.
+// Generation only (runs in a worker); fx.js draws the lanterns and the flames, and the light map (lights.js) and
+// tsl.js lanternLight light what is near them.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { mulberry32, lerp } from './noise.js';
+import { mulberry32 } from './noise.js';
 
 const V = THREE.Vector3;
 
-// the lines follow the banks just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD); each from one of the
-// bridge's corner posts (side -1 west, 1 east; dir 1 downstream, -1 upstream) to z `to`
-export const LINE = {
-  K: 1.38, PAD: 0.4,
-  lines: [{ side: -1, dir: 1, to: 150 }, { side: 1, dir: 1, to: 150 }, { side: -1, dir: -1, to: -100 }, { side: 1, dir: -1, to: -113 }],
-};
+export const LAMP_KINDS = ['post', 'bonbori', 'kagaribi'];
+
+// the lantern lines follow the banks just past the boulders: x = riverX(z) +- (riverHW(z) * K + PAD), each from one of
+// the bridge's downstream corner posts (side -1 west, 1 east) to z `to`
+export const LINE = { K: 1.38, PAD: 0.4, lines: [{ side: -1, to: 38 }, { side: 1, to: 38 }] };
 export const bankX = (world, z, side) => world.riverX(z) + side * (world.riverHW(z) * LINE.K + LINE.PAD);
+// the bonbori: `out` metres further from the water than the lines, about `every` metres apart along the bank, over
+// stretches of z on each side
+const BONBORI = {
+  every: 10, out: 0.6, lightY: 1.76,
+  runs: [{ side: -1, from: 46, to: 150 }, { side: 1, from: 46, to: 150 }, { side: -1, from: -67, to: -100 }, { side: 1, from: -67, to: -114 }],
+};
+// the fire baskets, from the cherry tree's trunk: on the meadow side, out from under its crown (which hangs to 1-3 m
+// above the ground for ~7 m round the trunk), and the flames' foot above the ground (tools/lamps.py)
+const FIRES = { at: [[-10, -8], [-12.5, -3]], flameY: 1.55 };
 
-const SPAN = 6.4; // pole spacing (m)
-const ROPE = 2.55; // rope height on the pole above ground
+const SPAN = 6.4; // post spacing (m)
+const ROPE = 2.55; // the rope's height on the post above ground (tools/lamps.py)
 const SAG = 0.32;
-const PER_SPAN = 3; // lanterns between two poles
-
-const BAMBOO = [0.5, 0.42, 0.2], NODE = [0.3, 0.24, 0.1], ROPE_C = [0.28, 0.2, 0.11];
+const PER_SPAN = 3; // lanterns between two posts
+const ROPE_C = [0.42, 0.35, 0.22];
 
 function paint(g, fn) {
   g.deleteAttribute('uv');
@@ -31,69 +41,84 @@ function paint(g, fn) {
   return g;
 }
 
-// a bamboo pole of height h: slight bulges at the nodes, the top cut on a slant
-function bamboo(h, r, rng) {
-  const prof = [];
-  let y = 0;
-  prof.push(new THREE.Vector2(r * 1.05, 0));
-  while (y < h - 0.3) {
-    y += lerp(0.3, 0.42, rng());
-    prof.push(new THREE.Vector2(r, y - 0.03), new THREE.Vector2(r * 1.14, y), new THREE.Vector2(r, y + 0.03));
-  }
-  prof.push(new THREE.Vector2(r, h), new THREE.Vector2(r * 0.7, h), new THREE.Vector2(0, h - 0.02));
-  const g = new THREE.LatheGeometry(prof, 7);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) if (p.getY(i) > h - 0.05) p.setY(i, p.getY(i) + p.getX(i) * 0.9); // slant cut
-  g.computeVertexNormals();
-  return paint(g, (x, yy, z) => (Math.hypot(x, z) > r * 1.08 ? NODE : BAMBOO));
-}
-
-// blockers: [{x, z, r}] the poles keep clear of (boulders, tree trunks); anchors: {down, up}, each {-1, 1}: where
-// each line starts, tied to the bridge's corner post (props.js bridgeRopeAnchors)
-export function lanternData(world, blockers, anchors) {
+// blockers: [{x, z, r}] what stands clear of (boulders, tree trunks); anchors: {-1, 1} where each line starts, tied to
+// the bridge's downstream corner post (props.js bridgeRopeAnchors); tree: the cherry tree's trunk {x, z}
+export function lanternData(world, blockers, anchors, tree) {
   const rng = mulberry32(31);
-  const parts = [], hang = [], look = [];
-  // a pole stands clear of rocks and trees, off the farmland and the buildings' pads
+  const ropes = [], hang = [], look = [];
+  const lists = LAMP_KINDS.map(() => ({ m: [], c: [] }));
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new V(1, 1, 1), up = new V(0, 1, 0);
+  const put = (k, p, quat) => {
+    lists[k].m.push(...m4.compose(p, quat, one).elements);
+    const t = 0.88 + rng() * 0.22;
+    lists[k].c.push(t, t * (0.97 + rng() * 0.05), t * (0.95 + rng() * 0.06));
+  };
+  // stands clear of rocks and trees, off the farmland and the buildings' pads
   const ok = (x, z) => blockers.every((b) => Math.hypot(x - b.x, z - b.z) > b.r + 0.3) && !world.zoneAt(x, z) && !world.padAt(x, z);
-  for (const { side, dir, to } of LINE.lines) {
-    // from the bridge, poles about SPAN apart along the bank, nudged along it off what is in the way; the line ends
+  for (const { side, to } of LINE.lines) {
+    // from the bridge, posts about SPAN apart along the bank, nudged along it off what is in the way; the line ends
     // where nothing clears
-    const a = (dir > 0 ? anchors.down : anchors.up)[side];
-    const poles = [new V(a.x, a.y, a.z)];
-    const next = (x0, z0) => { let z = z0 + dir; while (Math.hypot(bankX(world, z, side) - x0, z - z0) < SPAN) z += 0.1 * dir; return z; };
+    const a = anchors[side];
+    const posts = [new V(a.x, a.y, a.z)];
+    const next = (x0, z0) => { let z = z0 + 1; while (Math.hypot(bankX(world, z, side) - x0, z - z0) < SPAN) z += 0.1; return z; };
     let z = next(a.x, a.z);
-    while ((z - to) * dir <= 0) {
+    while (z <= to) {
       let zz = z, t = 0;
-      for (; t < 12 && !ok(bankX(world, zz, side), zz); t++) zz += 0.3 * dir;
+      for (; t < 12 && !ok(bankX(world, zz, side), zz); t++) zz += 0.3;
       if (t === 12) break;
-      const x = bankX(world, zz, side), g = world.height(x, zz);
-      const lean = new V((rng() - 0.5) * 0.06, 1, (rng() - 0.5) * 0.06).normalize();
-      const h = ROPE + 0.35 + rng() * 0.3;
-      const pole = bamboo(h + 0.3, 0.045, rng);
-      pole.applyMatrix4(new THREE.Matrix4().makeRotationY(rng() * Math.PI * 2));
-      pole.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new V(0, 1, 0), lean)));
-      pole.translate(x, g - 0.3, zz);
-      parts.push(pole);
-      poles.push(new V(x, g - 0.3, zz).addScaledVector(lean, ROPE + 0.3));
+      const x = bankX(world, zz, side), base = new V(x, world.height(x, zz) - 0.05, zz);
+      const lean = new V((rng() - 0.5) * 0.05, 1, (rng() - 0.5) * 0.05).normalize();
+      q.setFromUnitVectors(up, lean).multiply(new THREE.Quaternion().setFromAxisAngle(up, rng() * Math.PI * 2));
+      put(0, base, q);
+      posts.push(base.clone().addScaledVector(lean, ROPE));
       z = next(x, zz) + (rng() - 0.5) * 0.8;
     }
-    // rope spans with lanterns
-    for (let i = 0; i + 1 < poles.length; i++) {
-      const a = poles[i], b = poles[i + 1];
+    // rope spans with lanterns, red and white by turns
+    for (let i = 0; i + 1 < posts.length; i++) {
+      const a = posts[i], b = posts[i + 1];
       const at = (u) => a.clone().lerp(b, u).add(new V(0, -SAG * 4 * u * (1 - u), 0));
       const pts = [];
       for (let k = 0; k <= 10; k++) pts.push(at(k / 10));
-      parts.push(paint(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.013, 5, false), () => ROPE_C));
-      const n = PER_SPAN, face = Math.atan2(a.z - b.z, b.x - a.x); // writing across the rope, to both banks
-      for (let k = 0; k < n; k++) {
-        const p = at((k + 1) / (n + 1));
+      ropes.push(paint(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.018, 5, false), () => ROPE_C));
+      const face = Math.atan2(a.z - b.z, b.x - a.x); // writing across the rope, to both banks
+      for (let k = 0; k < PER_SPAN; k++) {
+        const p = at((k + 1) / (PER_SPAN + 1));
         hang.push(p.x, p.y, p.z);
-        // phase, what it says (LANTERN_TEXTS), brightness, yaw
-        look.push(rng() * 6.28, Math.floor(rng() * LANTERN_TEXTS.length), 0.85 + rng() * 0.3, face + (rng() - 0.5) * 0.5);
+        // phase, what it says (LANTERN_TEXTS; + 8 on red paper), brightness, yaw
+        const red = (i + k) % 2 === 0;
+        look.push(rng() * 6.28, Math.floor(rng() * LANTERN_TEXTS.length) + (red ? 8 : 0), 0.85 + rng() * 0.3, face + (rng() - 0.5) * 0.5);
       }
     }
   }
-  return { frame: mergeGeometries(parts), hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 };
+  // the bonbori, set back a little from the water, nudged off what is in the way (none where nothing clears)
+  const lamps = [];
+  for (const { side, from, to } of BONBORI.runs) {
+    const dir = Math.sign(to - from), x0 = (z) => bankX(world, z, side) + side * BONBORI.out;
+    for (let z = from; (to - z) * dir >= 0;) {
+      let zz = z, t = 0;
+      for (; t < 10 && !ok(x0(zz), zz); t++) zz += 0.4 * dir;
+      if (t < 10) {
+        const x = x0(zz), g = world.height(x, zz);
+        put(1, new V(x, g - 0.05, zz), q.setFromAxisAngle(up, rng() * Math.PI));
+        lamps.push(x, g - 0.05 + BONBORI.lightY, zz);
+      }
+      // about `every` metres along the bank
+      let z2 = zz + dir;
+      while (Math.hypot(x0(z2) - x0(zz), z2 - zz) < BONBORI.every) z2 += 0.1 * dir;
+      z = z2;
+    }
+  }
+  const fires = [];
+  for (const [dx, dz] of FIRES.at) {
+    const x = tree.x + dx, z = tree.z + dz, g = world.height(x, z);
+    put(2, new V(x, g - 0.05, z), q.setFromAxisAngle(up, rng() * Math.PI));
+    fires.push(x, g - 0.05 + FIRES.flameY, z);
+  }
+  return {
+    ropes: mergeGeometries(ropes), hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3,
+    lists: lists.map((l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 })),
+    bonbori: new Float32Array(lamps), fires: new Float32Array(fires),
+  };
 }
 
 // What the lanterns say, written down the paper on the front and back as on votive lanterns: a small red line on top

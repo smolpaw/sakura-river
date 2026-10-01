@@ -20,11 +20,13 @@ import rocksUrl from './models/rocks.glb?url&inline';
 import cherryUrl from './models/cherry.glb?url&inline';
 import villageUrl from './models/village.glb?url&inline';
 import shrubsUrl from './models/shrubs.glb?url&inline';
+import lampsUrl from './models/lamps.glb?url&inline';
+import { LAMP_KINDS } from './lanterns.js';
 import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
-import { petalMaterial, makeMotes, makeLanterns, makeGlows } from './fx.js';
+import { petalMaterial, makeMotes, makeLanterns, makeGlows, makeFires } from './fx.js';
 import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
 import { buildPipeline } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
@@ -327,15 +329,30 @@ export async function create(canvas, opts = {}) {
   toro.name = 'toro';
   scene.add(toro);
   const fixed = new Float32Array([...G.props.temple.lamps, ...G.village.toro.lamps]);
-  const templeGlows = makeGlows(fixed, lanterns.uFocal);
+  const templeGlows = makeGlows(new Float32Array([...fixed, ...G.lanterns.bonbori]), lanterns.uFocal);
   templeGlows.name = 'templeGlows';
   scene.add(templeGlows);
+  // the lantern lines' posts, the bonbori along the banks, the fire baskets by the cherry tree; the flames, their
+  // glows (from the flames' middle) and their flickering light (tsl.js lanternLight)
+  const lamps = await makeLods(lampsUrl, LAMP_KINDS, G.lanterns.lists, M.lampMaterial(), [60]);
+  lamps.name = 'lamps';
+  lamps.traverse((o) => { o.castShadow = o.isMesh; });
+  scene.add(lamps);
+  const fires = makeFires(G.lanterns.fires);
+  fires.name = 'fires';
+  scene.add(fires);
+  const fireAt = (i) => new THREE.Vector3(...G.lanterns.fires.subarray(i * 3, i * 3 + 3)).add(new THREE.Vector3(0, 0.5, 0));
+  U.uFireA.value.copy(fireAt(0)); U.uFireB.value.copy(fireAt(1));
+  const fireGlows = makeGlows(new Float32Array([...fireAt(0).toArray(), ...fireAt(1).toArray()]), lanterns.uFocal, 4.5, 0.22);
+  fireGlows.name = 'fireGlows';
+  scene.add(fireGlows);
   // all the lamps' light on what is near them (tsl.js lanternLight): paper lanterns (the hang point; the paper's
-  // middle 0.36 below), the stone lanterns' and the temple's fireboxes, the shoji's light on the yards
+  // middle 0.36 below), the stone lanterns' and the temple's fireboxes, the bonbori, the shoji's light on the yards
   const pts = (a, f) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(f(a[i], a[i + 1], a[i + 2])); return out; };
   setLightMap(lightMap([
     ...pts(cat('hang'), (x, y, z) => lamp(x, y - 0.36, z, 0.2, 3)),
     ...pts(fixed, (x, y, z) => lamp(x, y, z, 0.3, 2.4)),
+    ...pts(G.lanterns.bonbori, (x, y, z) => lamp(x, y, z, 0.32, 3.2)),
     ...pts(G.village.spill, (x, y, z) => lamp(x, y, z, 0.12, 3.5)),
   ]));
 
@@ -716,7 +733,7 @@ export async function create(canvas, opts = {}) {
     deer.update(dt);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
-    lanterns.halos.visible = templeGlows.visible = warming || U.uLights.value > 0.001;
+    lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = warming || U.uLights.value > 0.001;
     birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
@@ -754,6 +771,7 @@ export async function create(canvas, opts = {}) {
     walls.userData.lod(camera.position);
     bamboo.userData.lod(camera.position);
     village.userData.lod(camera.position);
+    lamps.userData.lod(camera.position);
     if (wheel.children.length) {
       // a turn every ~9 s at the river's usual speed; the far model beyond 90 m
       const far = camera.position.distanceTo(wheel.position) > 90;

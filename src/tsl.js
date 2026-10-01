@@ -25,14 +25,17 @@ export const U = {
   uFlow: uniform(0),
   uLights: uniform(0), // the lamps: 0 off .. 1 fully on (dusk)
   uLightColor: uniform(new THREE.Color(1.0, 0.6, 0.3)), // warm light through the paper
+  uFireA: uniform(new THREE.Vector3(0, -1e4, 0)), // the fire baskets' flames (lanterns.js): their light flickers
+  uFireB: uniform(new THREE.Vector3(0, -1e4, 0)),
   uRain: uniform(0), // rain intensity 0..1 (streaks, ripples on the river)
   uFlash: uniform(0), // lightning flash level
   uMist: uniform(0), // river mist at dawn (kawagiri) 0..1
 };
 
-// Warm light from the lamps (lights.js) on whatever is near them: ground, grass, rocks, the deer, falling petals. The
-// light map holds each spot's light and its lamps' height; it falls off up and down from there as from a lamp.
-// Filled in once the lamps are known (setLightMap); read at level 0, so it is safe in any branch.
+// Warm light from the lamps (lights.js) on whatever is near them: ground, grass, rocks, the cherries' bark and
+// blossoms, the deer, falling petals. The light map holds each spot's light and its lamps' height; it falls off up
+// and down from there as from a lamp. Filled in once the lamps are known (setLightMap); read at level 0, so it is
+// safe in any branch. The two fire baskets' light is added as it is: orange, flickering.
 const LM = LIGHTMAP;
 const lightTex = new THREE.DataTexture(new Uint16Array(LM.nx * LM.nz * 2), LM.nx, LM.nz, THREE.RGFormat, THREE.HalfFloatType);
 lightTex.magFilter = lightTex.minFilter = THREE.LinearFilter;
@@ -46,7 +49,13 @@ export const lanternLight = Fn(([wp]) => {
   If(U.uLights.greaterThan(0.0), () => {
     const t = texture(lightTex, wp.xz.sub(vec2(LM.x0, LM.z0)).div(vec2(LM.nx * LM.cell, LM.nz * LM.cell))).level(0);
     const dy = wp.y.sub(t.g.div(max(t.r, 1e-4)));
-    o.assign(U.uLightColor.mul(U.uLights).mul(t.r).mul(exp(dy.mul(dy).mul(-1.0 / 9.0))));
+    o.assign(U.uLightColor.mul(t.r).mul(exp(dy.mul(dy).mul(-1.0 / 9.0))));
+    const fire = (f) => {
+      const v = wp.sub(f);
+      const flicker = sin(U.uTime.mul(13.0).add(f.x)).mul(0.1).add(sin(U.uTime.mul(7.7).add(f.z.mul(3.0))).mul(0.08)).add(0.82);
+      return exp(dot(v, v).mul(-1.0 / 10.0)).mul(flicker);
+    };
+    o.assign(o.add(vec3(1.0, 0.42, 0.13).mul(fire(U.uFireA).add(fire(U.uFireB))).mul(0.75)).mul(U.uLights));
   });
   return o;
 });

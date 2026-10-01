@@ -64,7 +64,7 @@ export const JOBS = {
     const l = L();
     const trees = [l.tree, ...l.small.map((sp) => [sp.x, 0, sp.z])].map(([x, , z]) => ({ x, z, r: 1 }));
     const rocks = rockPlan(world(), tier, xz(l.tree)).placements.map((r) => ({ x: r.x, z: r.z, r: r.sc }));
-    return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world())), lantern: lanternGeometry(), ink: paintLanternInk() };
+    return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world()), xz(l.tree)), lantern: lanternGeometry(), ink: paintLanternInk() };
   },
   fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L()), underTree(L())),
   rafts: ({ count, tier }) => raftData(world(), count, rockPlan(world(), tier, xz(L().tree)).rocksInWater),

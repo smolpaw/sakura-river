@@ -278,6 +278,21 @@ export function villageMaterial() {
   })());
 }
 
+// the riverside's lamps (lanterns.js, Blender models): vertex colours with how much each part glows after dusk in
+// their alpha (the bonbori's paper, the fire baskets' coals), glowing in their own colour; lit by the lamps near them
+export function lampMaterial() {
+  const col = attribute('color', 'vec4');
+  return new LitMaterial({ roughness: 0.8, metalness: 0, colorNode: col.rgb }, (out) => Fn(() => {
+    const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
+    If(U.uLights.greaterThan(0.0), () => {
+      const flicker = sin(U.uTime.mul(8.0).add(wp.x.mul(2.3))).mul(0.06).add(0.94);
+      o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
+      o.addAssign(col.rgb.mul(vec3(1.0, 0.78, 0.5)).mul(col.a).mul(U.uLights).mul(flicker).mul(1.6));
+    });
+    return o;
+  })());
+}
+
 // the stone lanterns up the temple's approach (village.js): the temple's weathered stone, its paper fireboxes
 // glowing after dusk (aGlow) and lighting the stone round them
 export function stoneLanternMaterial() {

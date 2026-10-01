@@ -5,7 +5,7 @@ import {
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
-import { U, sstep, applyFog, LitMaterial, lanternLight } from './tsl.js';
+import { U, sstep, vnoise, applyFog, LitMaterial, lanternLight } from './tsl.js';
 import { mulberry32 } from './noise.js';
 import { INK } from './lanterns.js';
 
@@ -91,13 +91,13 @@ export function makeMotes(center, count) {
   return { mesh: sprite, uPx };
 }
 
-// Paper lanterns (see lanterns.js): the rope and bamboo frame, the lanterns swinging in the wind, and at dusk a
+// Paper lanterns (see lanterns.js): the ropes, the lanterns swinging in the wind, and at dusk a
 // small round halo per lantern. The halo keeps distant lanterns round (bloom turns sub-pixel bright points into
 // blocky squares, so the paper's own glow also dims with distance to stay under the bloom threshold); up close the
 // paper itself is the light, so the halo fades out there.
 export function makeLanterns(d, lanternGeo) {
   const group = new THREE.Group();
-  const frame = new THREE.Mesh(d.frame, new LitMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 }));
+  const frame = new THREE.Mesh(d.ropes, new LitMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 }));
   frame.castShadow = true; frame.receiveShadow = true;
   group.add(frame);
 
@@ -137,18 +137,21 @@ export function makeLanterns(d, lanternGeo) {
   ink.needsUpdate = true;
   mat.colorNode = Fn(() => {
     // white washi on thin bamboo ribs, a narrow red band at the top and bottom, and on the front and back what the
-    // lantern says (look.y: its cell in the ink atlas), read the right way round from either side
-    const paper = vec3(0.95, 0.92, 0.8), red = vec3(0.62, 0.04, 0.03), black = vec3(0.03, 0.025, 0.025);
-    const band = sstep(0.1, 0.08, vv).add(sstep(0.9, 0.92, vv)).min(1.0);
+    // lantern says (look.y: its cell in the ink atlas, + 8 on red paper), read the right way round from either side;
+    // on red paper the bands are black and the red ink white
+    const onRed = look.y.greaterThan(7.5);
+    const white = vec3(0.95, 0.92, 0.8), redP = vec3(0.66, 0.07, 0.04);
+    const paper = select(onRed, redP, white), red = select(onRed, vec3(0.93, 0.87, 0.72), vec3(0.62, 0.04, 0.03)), black = vec3(0.03, 0.025, 0.025);
+    const band = sstep(0.1, 0.08, vv).add(sstep(0.9, 0.92, vv)).min(1.0), bandC = select(onRed, black, vec3(0.62, 0.04, 0.03));
     const rib = sstep(0.75, 1.0, sin(vv.mul(Math.PI * 26)).abs());
     // across the paper (metres) from the middle of the nearer of front and back, left to right as seen from outside
     const th = atan(positionGeometry.x, positionGeometry.z);
     const s = select(th.abs().lessThan(Math.PI / 2), th, sign(th).mul(th.abs().sub(Math.PI))).mul(length(positionGeometry.xz));
     const cu = s.div(INK.span).add(0.5), cv = vv.sub(INK.v0).div(INK.v1 - INK.v0);
     const inside = sstep(0.0, 0.01, cu).mul(sstep(1.0, 0.99, cu)).mul(sstep(0.0, 0.01, cv)).mul(sstep(1.0, 0.99, cv));
-    const cell = look.y;
+    const cell = select(onRed, look.y.sub(8.0), look.y);
     const t = texture(ink, vec2(mod(cell, INK.cols).add(clamp(cu, 0.005, 0.995)).div(INK.cols), floor(cell.div(INK.cols)).add(clamp(cv, 0.005, 0.995)).div(INK.rows)));
-    const col = mix(mix(paper, red, max(band, t.g.mul(inside))), black, t.r.mul(inside)).mul(float(1.0).sub(rib.mul(0.3)));
+    const col = mix(mix(mix(paper, bandC, band), red, t.g.mul(inside)), black, t.r.mul(inside)).mul(float(1.0).sub(rib.mul(0.3)));
     return vec4(select(part.lessThan(0.5), col, vec3(0.02, 0.018, 0.016)), 1.0);
   })();
   const lamps = new THREE.Mesh(geo, mat);
@@ -172,7 +175,8 @@ export function makeLanterns(d, lanternGeo) {
   hm.colorNode = Fn(() => {
     const c = uv().sub(0.5);
     const far = mix(0.05, 0.35, sstep(8.0, 40.0, mvz)); // barely there up close, where the paper shows its own light
-    return vec4(vec3(1.0, 0.82, 0.42).mul(dot(c, c).mul(-22.0).exp().mul(far).mul(seed.z)), U.uLights);
+    const tint = select(seed.y.greaterThan(7.5), vec3(1.0, 0.5, 0.32), vec3(1.0, 0.82, 0.42)); // red paper: a redder halo
+    return vec4(tint.mul(dot(c, c).mul(-22.0).exp().mul(far).mul(seed.z)), U.uLights);
   })();
   const halos = new THREE.Sprite(hm);
   halos.count = d.n;
@@ -182,9 +186,10 @@ export function makeLanterns(d, lanternGeo) {
   return { group, halos, uFocal };
 }
 
-// soft round glows on fixed lamps (the temple's lanterns), the lantern halos' look for lights that do not swing;
-// uFocal is the lanterns' (drawing-buffer pixels per unit at unit distance)
-export function makeGlows(pos, uFocal) {
+// soft round glows on fixed lamps (the temple's lanterns, the stone lanterns, the bonbori; with a larger `size`, the
+// fire baskets), the lantern halos' look for lights that do not swing; uFocal is the lanterns' (drawing-buffer pixels
+// per unit at unit distance)
+export function makeGlows(pos, uFocal, size = 2.2, strength = 0.5) {
   const centre = instancedBufferAttribute(new THREE.InstancedBufferAttribute(pos, 3), 'vec3');
   const mvz = cameraViewMatrix.mul(vec4(centre, 1.0)).z.negate();
   const m = new THREE.PointsNodeMaterial({
@@ -193,15 +198,66 @@ export function makeGlows(pos, uFocal) {
     blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
   });
   m.positionNode = centre;
-  m.sizeNode = clamp(uFocal.mul(2.2).div(mvz), 6.0, 400.0).div(screenDPR);
+  m.sizeNode = clamp(uFocal.mul(size).div(mvz), 6.0, 400.0 * size / 2.2).div(screenDPR);
   m.colorNode = Fn(() => {
     const c = uv().sub(0.5);
     const flicker = sin(U.uTime.mul(9.0).add(centre.x.mul(3.7))).mul(0.08).add(0.92);
-    return vec4(vec3(1.0, 0.6, 0.28).mul(dot(c, c).mul(-20.0).exp().mul(0.5).mul(flicker)), U.uLights);
+    return vec4(vec3(1.0, 0.6, 0.28).mul(dot(c, c).mul(-20.0).exp().mul(strength).mul(flicker)), U.uLights);
   })();
   const glows = new THREE.Sprite(m);
   glows.count = pos.length / 3;
   glows.frustumCulled = false;
   glows.layers.set(1);
   return glows;
+}
+
+// The fire baskets' flames (lanterns.js fires: their foot): per fire an outer flame and a brighter core, each a sheet
+// turned to face the camera about the vertical, shaped by noise rising through it; added onto the scene, lit at dusk.
+export function makeFires(fires) {
+  const n = fires.length / 3, LAYERS = [[0.42, 1.3, 0], [0.24, 0.78, 1]]; // half-width, height, core
+  const pos = [], centre = [], corner = [], layer = [], idx = [];
+  for (let f = 0; f < n; f++) for (const [hw, h, core] of LAYERS) {
+    const b = pos.length / 3;
+    for (const [u, v] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) {
+      pos.push(fires[f * 3], fires[f * 3 + 1], fires[f * 3 + 2]);
+      centre.push(fires[f * 3], fires[f * 3 + 1], fires[f * 3 + 2]);
+      corner.push(u * hw, v * h, u, v);
+      layer.push(core, f * 3.7);
+    }
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('aCentre', new THREE.Float32BufferAttribute(centre, 3));
+  geo.setAttribute('aCorner', new THREE.Float32BufferAttribute(corner, 4));
+  geo.setAttribute('aLayer', new THREE.Float32BufferAttribute(layer, 2));
+  geo.setIndex(idx);
+  const c = attribute('aCentre', 'vec3'), k = attribute('aCorner', 'vec4'), L = attribute('aLayer', 'vec2');
+  const m = new THREE.MeshBasicNodeMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
+  });
+  const d = c.sub(cameraPosition);
+  const right = normalize(vec3(d.z, 0.0, d.x.negate()));
+  // the flame leans a little downwind
+  m.positionNode = c.add(right.mul(k.x)).add(vec3(U.uWindDir.x, 0.0, U.uWindDir.y).mul(k.y.mul(k.y).mul(U.uWind).mul(0.12))).add(vec3(0.0, k.y, 0.0));
+  const vk = k.zw.toVarying('vFireUV'), vl = L.toVarying('vFireLayer');
+  m.colorNode = Fn(() => {
+    const u = vk.x, v = vk.y, core = vl.x, seed = vl.y, t = U.uTime;
+    const n1 = vnoise(vec2(u.mul(1.6).add(seed), v.mul(2.6).sub(t.mul(2.4))));
+    const n2 = vnoise(vec2(u.mul(3.8).sub(seed), v.mul(5.5).sub(t.mul(4.3))));
+    // a tongue, waving more towards its tip, ragged at the top
+    const ud = u.add(n1.sub(0.5).mul(v).mul(0.9)).abs();
+    const w = pow(float(1.0).sub(v), 0.75).mul(sstep(0.0, 0.18, v).mul(0.5).add(0.5)).mul(n2.mul(0.5).add(0.72));
+    const shape = sstep(w, w.mul(0.45), ud).mul(sstep(0.0, 0.3, n2.add(0.62).sub(v.mul(0.95))));
+    const heat = shape.mul(float(1.0).sub(v.mul(0.85))).mul(core.mul(0.35).add(0.7)).clamp(0.0, 1.0);
+    const col = mix(mix(vec3(0.6, 0.07, 0.01), vec3(1.0, 0.36, 0.05), sstep(0.1, 0.5, heat)), vec3(1.0, 0.72, 0.32), sstep(0.65, 1.0, heat));
+    const flicker = sin(t.mul(13.0).add(seed)).mul(0.08).add(0.92);
+    return vec4(col.mul(heat).mul(flicker).mul(U.uLights).mul(0.9), 1.0);
+  })();
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 2;
+  return mesh;
 }
