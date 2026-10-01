@@ -183,11 +183,10 @@ export class LitMaterial extends THREE.MeshStandardNodeMaterial {
   // rain soaks the scene: darker and glossier, most on what faces up, nothing out at the mountain
   setupVariants(builder) {
     super.setupVariants(builder);
-    If(U.uWet.greaterThan(0.0), () => {
-      const w = U.uWet.mul(clamp(normalWorld.y.mul(0.5).add(0.5), 0.0, 1.0)).mul(sstep(900.0, 400.0, length(positionWorld.sub(cameraPosition))));
-      diffuseContribution.mulAssign(float(1.0).sub(w.mul(0.38)));
-      roughness.assign(mix(roughness, roughness.mul(0.45), w));
-    });
+    // (no branch: assigned inside one, these leave the lighting black on the frames it is skipped)
+    const w = U.uWet.mul(clamp(normalWorld.y.mul(0.5).add(0.5), 0.0, 1.0)).mul(sstep(900.0, 400.0, length(positionWorld.sub(cameraPosition))));
+    diffuseContribution.mulAssign(float(1.0).sub(w.mul(0.38)));
+    roughness.assign(mix(roughness, roughness.mul(0.45), w));
   }
   setupLighting(builder) {
     const out = super.setupLighting(builder);
