@@ -41,7 +41,8 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/birds.js`: birds in flight (swallows, kites, crows): their paths by weather and time of day, wings flapped in the vertex stage.
 - `src/sky.js`: sky dome, moon, stars and shooting stars, clouds and time-of-day palette.
 - `src/weather.js`: weather presets and times of day, the sky under cloud cover, rain streaks and lightning.
-- `src/petals.js`: simulated falling petals, the fallen-petal carpet and the petal rafts on the water.
+- `src/petalsgpu.js`: on WebGPU, the falling petals simulated in a compute pass, from every cherry.
+- `src/petals.js`: simulated falling petals (on the CPU: the WebGL fallback), the fallen-petal carpet and the petal rafts on the water.
 - `src/fx.js`: petal, pollen-mote and lantern materials, the temple's and the stone lanterns' glows.
 - `src/post.js`: light shafts pass and final grade (sharpening, local contrast, vignette).
 - `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera, thunder, bird songs, the evening bell.

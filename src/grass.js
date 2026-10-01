@@ -303,5 +303,6 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
   };
   group.userData.setFraction = (f) => { uDensity.value = f; };
   group.userData.levels = levels;
+  group.userData.groundAt = terrain; // (x, z) -> vec4(height, density, length, tint), for other GPU work (petals)
   return group;
 }

@@ -28,6 +28,7 @@ import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
+import { makeGpuPetals } from './petalsgpu.js';
 import { petalMaterial, makeMotes, makeLanterns, makeGlows, makeFires, makeSmoke, makeSparks } from './fx.js';
 import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
 import { buildPipeline } from './post.js';
@@ -465,7 +466,12 @@ export async function create(canvas, opts = {}) {
   const sp3 = main.data.spawn, spawnPts = [];
   for (let i = 0; i < sp3.length; i += 3) spawnPts.push(new THREE.Vector3(sp3[i], sp3[i + 1], sp3[i + 2]).add(treePos));
   const petalMat = petalMaterial();
-  const petals = new PetalSystem(world, spawnPts, Q.petals, petalMat, U.uWindDir.value);
+  // WebGPU: simulated in a compute pass (petalsgpu.js), shed by every cherry, 2.5 times as many; WebGL: on the CPU, from
+  // the main tree
+  const petals = renderer.backend.isWebGPUBackend && opts.gpuPetals !== false
+    ? makeGpuPetals([main, ...smallTrees].map((t) => ({ spawn: t.data.spawn, pos: t.group.position, scale: t.group.scale.x, weight: 1 })),
+      grass.userData.groundAt, Math.round(Q.petals * 2.5), petalMaterial)
+    : new PetalSystem(world, spawnPts, Q.petals, petalMat, U.uWindDir.value);
   petals.mesh.name = 'petals';
   scene.add(petals.mesh);
   const fallen = makeFallenPetals(G.fallen, petalMat);
@@ -780,7 +786,8 @@ export async function create(canvas, opts = {}) {
     post.bloom.uniforms.strength.value = S.bloom * 1.6;
     post.grade.uniforms.time.value = U.uTime.value;
 
-    petals.update(dt, U.uTime.value, S.wind, S.river);
+    if (petals.isPetalSystem) petals.update(dt, U.uTime.value, S.wind, S.river);
+    else petals.update(renderer, warming ? 1 / 60 : dt, U.uTime.value, S.wind, S.river);
     koi.update(dt, U.uTime.value);
     rafts.geometry.instanceCount = Math.round(G.rafts.n * Math.min(1, S.petals / 0.6)); // fewer when fewer petals fall
     deer.update(dt);

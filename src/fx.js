@@ -18,15 +18,16 @@ const rotYXZ = (r, v) => {
   return vec3(cy.mul(x.x).add(sy.mul(x.z)), x.y, sy.mul(x.x).negate().add(cy.mul(x.z)));
 };
 
-// instanced petal: attributes iPos (vec3), iRot (yaw, pitch, roll, scale), iTint
-export function petalMaterial() {
-  const iPos = attribute('iPos', 'vec3'), iRot = attribute('iRot', 'vec4');
+// instanced petal: attributes iPos (vec3), iRot (yaw, pitch, roll, scale), iTint; or those as nodes (`src`: pos, rot,
+// tint), e.g. read from the GPU simulation's buffers (petalsgpu.js)
+export function petalMaterial(src = null) {
+  const iPos = src ? src.pos : attribute('iPos', 'vec3'), iRot = src ? src.rot : attribute('iRot', 'vec4');
+  const vTint = (src ? src.tint : attribute('iTint', 'float')).toVarying('vPetalTint');
   const camD = length(iPos.sub(cameraPosition));
   const position = rotYXZ(iRot, positionGeometry.mul(iRot.w).mul(sstep(0.9, 2.2, camD))).add(iPos);
   const vN = rotYXZ(iRot, normalGeometry).toVarying('vPetalN');
   const vP = positionGeometry.xy.div(0.1).toVarying('vPetalP');
   const color = Fn(() => {
-    const vTint = attribute('iTint', 'float');
     const N = normalize(vN).toVar();
     const V = normalize(cameraPosition.sub(positionWorld));
     N.assign(select(dot(N, V).lessThan(0.0), N.negate(), N));

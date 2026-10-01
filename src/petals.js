@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { mulberry32, clamp, lerp } from './noise.js';
 
-function petalGeometry() {
+export function petalGeometry() {
   // cherry petal: rounded with a notch, gently cupped
   const s = new THREE.Shape();
   const L = 1, W = 0.62;
@@ -23,6 +23,7 @@ function petalGeometry() {
 
 export class PetalSystem {
   constructor(world, spawnPoints, max, material, windDir) {
+    this.isPetalSystem = true;
     this.windDir = windDir;
     this.world = world; this.spawn = spawnPoints; this.max = max;
     this.rng = mulberry32(2024);
