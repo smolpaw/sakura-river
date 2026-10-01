@@ -439,6 +439,11 @@ export function createWorld(seed = 7) {
     if (out > 0) gTint = clamp(gTint + out * (smoothstep(0.0, 0.35, dry) * 0.4 - 0.3 * Math.max(smoothstep(0.06, 0.24, gn), smoothstep(-0.1, -0.45, N2.noise2(x * 0.07, z * 0.07)))), 0, 1);
     dens *= smoothstep(1.3, 2.3, ld); // none on the lanes
     dens *= 1 - yard;
+    // reeds (yoshi) in clumps where the bank meets the river, some standing in the shallows: grass.js grows them where
+    // the tint is below zero (its depth: how many)
+    const reed = smoothstep(-0.3, -0.08, y) * smoothstep(0.75, 0.4, y) * smoothstep(1.6, 1.3, ri.t) * (1 - steep) *
+      smoothstep(0.08, 0.3, N2.noise2(x * 0.22 + 31, z * 0.22)) * smoothstep(1.3, 2.3, ld);
+    if (reed > 0.02) { dens = Math.max(dens, Math.min(1, reed * 1.5)); gTint = -reed; }
     return { r: c.r, g: c.g, b: c.b, dens, len, tint: gTint };
   }
 

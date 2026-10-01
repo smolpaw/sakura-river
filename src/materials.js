@@ -23,7 +23,8 @@ export function terrainMaterial({ sky = null } = {}) {
   const gr = attribute('aGround', 'vec3');
   const dist = wp.sub(cameraPosition).length();
   const far = sstep(12.0, 40.0, dist);
-  const cover = clamp(gr.x.mul(1.4), 0.0, 1.0).mul(sstep(0.02, 0.12, gr.y));
+  // (not under the reeds by the water, grass.js: their ground keeps its mud and sand)
+  const cover = clamp(gr.x.mul(1.4), 0.0, 1.0).mul(sstep(0.02, 0.12, gr.y)).mul(sstep(-0.1, 0.0, gr.z));
   const colorNode = Fn(() => {
     // the blades' own patches; blade-scale streaks close by, faded out before they would shimmer
     const patch = patchFrom(n012, n09);
@@ -45,6 +46,8 @@ export function terrainMaterial({ sky = null } = {}) {
       o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(cc).mul(cw).mul(2.2));
       o.mulAssign(mix(1.0, 0.75, sstep(0.0, -1.5, y)));
     });
+    // the ground the water wets: a dark band a hand or two up from the waterline
+    o.mulAssign(mix(1.0, 0.6, sstep(0.32, 0.06, y).mul(sstep(-0.12, 0.02, y))));
     // far grass as the blades are lit: the sun through their tips, and the wind's waves running over it
     const grassy = cover.mul(far);
     const back = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 3.0);
