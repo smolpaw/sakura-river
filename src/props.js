@@ -229,6 +229,7 @@ export function makeBridge(d, mat) {
 }
 
 // ---------------- Fuji-style stratovolcano (own radial mesh for crisp snow streaks) ----------------
+const HOEI = { a: 0.75, u: 0.3 }; // the Hōei crater: its bearing (radians, 0 = east, +z south) and how far out (u)
 export function fujiGeometry(cx, cz, R = 1850, H = 700, baseY = 40) {
   const nz = makeNoise(4242);
   const rings = 110, segs = 300;
@@ -241,10 +242,14 @@ export function fujiGeometry(cx, cz, R = 1850, H = 700, baseY = 40) {
     // truncated summit crater rim
     const top = H * 0.935;
     if (h > top) h = top + (h - top) * 0.15 - 3 * smoothstep(0.0, 0.03, 0.03 - u);
-    // radial gullies (erosion), stronger mid-slope
+    // radial gullies (erosion), stronger mid-slope and deeper on some flanks than others
     const g = Math.abs(nz.noise2(a * 11, u * 3)) + 0.5 * Math.abs(nz.noise2(a * 29 + 5, u * 7));
-    h -= H * 0.035 * g * Math.sin(Math.PI * clamp(u * 1.4, 0, 1));
+    h -= H * 0.035 * g * Math.sin(Math.PI * clamp(u * 1.4, 0, 1)) * (0.6 + 0.8 * smoothstep(-0.5, 0.5, nz.noise2(a * 1.7 + 9, 0.5)));
     h += 14 * nz.noise2(a * 3, u * 5) * u;
+    // the Hōei crater on the south-east flank: a shoulder with a bowl blown out of it, breaking the cone's symmetry
+    const da = Math.atan2(Math.sin(a - HOEI.a), Math.cos(a - HOEI.a));
+    h += H * 0.13 * Math.exp(-((da / 0.22) ** 2) - (((u - HOEI.u) / 0.09) ** 2));
+    h -= H * 0.11 * Math.exp(-((da / 0.11) ** 2) - (((u - HOEI.u + 0.015) / 0.045) ** 2));
     return h;
   };
   for (let i = 0; i <= rings; i++) {
@@ -257,9 +262,12 @@ export function fujiGeometry(cx, cz, R = 1850, H = 700, baseY = 40) {
       P.push(cx + Math.cos(a) * rr, baseY + h, cz + Math.sin(a) * rr * 0.92);
       // snow: streaky fingers running down the gullies
       const g = Math.abs(nz.noise2(a * 11, u * 3));
-      const line = 0.5 + 0.13 * nz.noise2(a * 7, 1.3) + 0.09 * nz.noise2(a * 23, 7.7) - 0.18 * (1 - smoothstep(0.0, 0.35, g));
+      // (higher on the sunny south side, +z, where April has melted more of it)
+      const line = 0.5 + 0.13 * nz.noise2(a * 7, 1.3) + 0.09 * nz.noise2(a * 23, 7.7) - 0.18 * (1 - smoothstep(0.0, 0.35, g)) + 0.05 * Math.sin(a);
       const hf = h / H;
-      const sn = smoothstep(line - 0.02, line + 0.05, hf);
+      // below the line, patches left in hollows and on the shady sides of ridges
+      const patch = smoothstep(0.35, 0.6, nz.noise2(a * 45 + 3, u * 30)) * smoothstep(line - 0.22, line - 0.04, hf);
+      const sn = Math.max(smoothstep(line - 0.02, line + 0.05, hf), patch);
       let c = lerp3(forest, rock, smoothstep(0.08, 0.3, hf));
       c = lerp3(c, rockL, smoothstep(0.35, 0.6, hf) * 0.5);
       c = lerp3(c, snow, sn);

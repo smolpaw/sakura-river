@@ -47,6 +47,9 @@ Each item passed the visual gate or is pixel-identical to what it replaced.
 - **MSAA 2× at DPR 2** and **8-bit target after tone mapping:** fail the visual gate (banding, edges).
 - **Start-up GPU micro-benchmark for the tier:** GPU clocks ramp over ~1 s of load, so a short benchmark measures clock state rather than GPU class.
 
+- **Impostors for the distant woods:** not built. Hiding the distant level altogether (2,600 trees, ~0.7M triangles) saved 0.93–0.96× GPU (WebGL, 1080p, hero/cine250/cine750, CIs ±15–20%), so impostors (which cost overdraw of their own) could win back a few tenths of a millisecond at most.
+- **Render bundles (`BundleGroup`) for static objects:** not tried: they exist only on the WebGPU backend, and the CPU-bound case is the WebGL fallback.
+
 ## Open risks
 
 - The blossom prepass relies on a 4-unit depth margin between two vertex shaders. A compiler that rounds them more differently would punch holes in the canopy.
