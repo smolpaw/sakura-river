@@ -32,6 +32,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/lanterns.js`: the riverside's lamps: paper lanterns on ropes between posts round the cherries, bonbori along the rest of the banks, the fire baskets by the cherry tree (generation).
 - `src/models/lamps.glb`: the lantern lines' posts, the bonbori and the fire baskets, built by `tools/lamps.py`.
 - `src/lights.js`: the light map: every lamp's light on its surroundings summed into one texture at start-up.
+- `src/farshadow.js`: the valley's shadow map: the hills, woods and buildings shadowing the whole valley (redrawn when the sun has moved), on top of the sharp shadows round the cherry tree.
 - `src/water.js`: river shader and planar reflections, and the mist on the river at dawn.
 - `src/koi.js`: koi of eight varieties swimming under the river surface in two loose groups, steering round the rocks and each other.
 - `src/deer.js`: the grazing deer: models loaded and lit like the scene, their grazing clip looped mostly head-down.

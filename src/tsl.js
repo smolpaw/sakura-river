@@ -7,6 +7,7 @@ import {
   reference, renderGroup, texture, normalView, BRDF_GGX, BRDF_Lambert, specularColorBlended, specularF90, roughness, diffuseContribution,
 } from 'three/tsl';
 import { LIGHTMAP } from './lights.js';
+import { farShadow } from './farshadow.js';
 
 export const U = {
   uTime: uniform(0),
@@ -158,7 +159,8 @@ export const windShadowPosition = () => restShadowPos;
 // multi-scatter factor to direct specular and scales hemisphere diffuse by (1 - scattering); r170 did none of that.
 class R170LightingModel extends THREE.PhysicalLightingModel {
   direct({ lightDirection, lightColor, reflectedLight }) {
-    const irradiance = normalView.dot(lightDirection).clamp().mul(lightColor);
+    // (the one direct light is the sun: the valley's shadow map, farshadow.js, on top of its own)
+    const irradiance = normalView.dot(lightDirection).clamp().mul(lightColor).mul(farShadow);
     reflectedLight.directSpecular.addAssign(irradiance.mul(BRDF_GGX({ lightDirection, f0: specularColorBlended, f90: specularF90, roughness })));
     reflectedLight.directDiffuse.addAssign(irradiance.mul(BRDF_Lambert({ diffuseColor: diffuseContribution })));
   }
