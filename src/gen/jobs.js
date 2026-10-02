@@ -10,6 +10,7 @@ import { lanternData, lanternGeometry, paintLanternInk } from '../lanterns.js';
 import { tessellate } from '../stress.js';
 import { villageData } from '../village.js';
 import { lerp } from '../noise.js';
+import { paintCloudNoise } from '../clouds.js';
 import { layout, rockAvoid, trunkAvoid, underTree, lawn, turf } from './layout.js';
 
 let W = null;
@@ -30,6 +31,7 @@ export const JOBS = {
   trees: ({ list, tier, triMul }) => list.map((t) => treeData(world(), t.seed, t.small ? SMALL_TREE : MAIN_TREE, xz(t.pos), tier, triMul)),
   atlas: ({ size }) => paintFlowerAtlas(5, size),
   leafAtlas: ({ size }) => paintLeafAtlas(11, size),
+  cloudNoise: () => paintCloudNoise(64),
   bark: () => paintBark(3),
   fuji: () => { const w = world(); return fujiGeometry(w.peak.x, w.peak.z, w.peak.R, 820, 30); },
   props: ({ triMul }) => {
@@ -72,4 +74,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, leafAtlas: 60, cloudNoise: 500, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };

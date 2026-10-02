@@ -4,8 +4,9 @@
 // multiplies the sun by `sunShadow` (tsl.js R170LightingModel), and the hand-made sun terms (backlit grass and
 // blossom, petals, water glints) follow.
 import * as THREE from 'three/webgpu';
-import { Fn, If, float, vec2, vec4, uniform, nodeObject, normalWorld, positionWorld, renderGroup, max, clamp, sin } from 'three/tsl';
+import { Fn, If, float, vec2, vec4, uniform, nodeObject, normalWorld, positionWorld, renderGroup, max, clamp, sin, mix } from 'three/tsl';
 import { sstep } from './tsl.js'; // (used only when the node is built, after tsl.js has loaded)
+import { CLOUD, cloudShadowAt } from './clouds.js';
 
 export const FAR_LAYER = 3;
 // the valley's box: everything the camera can come near, and the hills round it
@@ -26,12 +27,8 @@ class MapLookup extends THREE.TextureNode {
 }
 const uTexel = uniform(new THREE.Vector2(1, 1)).setGroup(renderGroup); // one texel: in uv, and in metres (normal offset)
 const uOn = uniform(0).setGroup(renderGroup);
-// the clouds: their drift (the sky's cloud offset, sky.js) and cover (0..1), and the sun's direction
-export const CLOUDS = {
-  uPos: uniform(new THREE.Vector2()).setGroup(renderGroup),
-  uCover: uniform(0.35).setGroup(renderGroup),
-  uSun: uniform(new THREE.Vector3(0, 1, 0)).setGroup(renderGroup),
-};
+// the sun's direction for the clouds' shadows (the layer itself: clouds.js CLOUD)
+export const CLOUDS = { uSun: uniform(new THREE.Vector3(0, 1, 0)).setGroup(renderGroup) };
 
 // 1 in sunlight, 0 in the valley's shadow: one bilinear compare (a 2x2 texel filter; at its scale, a fraction of a
 // metre, that is soft enough). The receiver is pushed out along its normal by a texel and a half, and the depth back a
@@ -47,22 +44,13 @@ const farShadow = Fn(([pos, nrm]) => {
   return s;
 });
 
-// The clouds' shadows: a cloud layer CLOUD_H up, a pattern drifting with the sky's clouds, thresholded
-// by the cover as the sky's are; where the sun's ray through the point meets it, 70% of the sun is held back. Under
-// a full overcast the sun is already dim and even (weather.js), so the patches fade out there.
-const CLOUD_H = 900;
+// The clouds' shadows: the cloud layer's density (clouds.js) on the sun's ray through the point. Under a full overcast
+// the sun is already dim and even (weather.js), so the patches fade out there.
 const cloudShadow = Fn(([pos]) => {
   const s = float(1.0).toVar();
-  const k = sstep(0.15, 0.3, CLOUDS.uCover).mul(sstep(0.95, 0.8, CLOUDS.uCover)).toVar();
+  const k = sstep(0.12, 0.25, CLOUD.uCover).mul(sstep(0.95, 0.8, CLOUD.uCover)).toVar();
   If(k.greaterThan(0.0), () => {
-    const L = CLOUDS.uSun;
-    const q = pos.xz.add(L.xz.mul(float(CLOUD_H).sub(pos.y).div(max(L.y, 0.12))));
-    const c = q.div(150.0).add(CLOUDS.uPos.mul(3.2)).toVar();
-    // (interfering waves, not noise: hashed noise in every lit material cost ~1 s of pipeline compilation at start-up)
-    const w = c.add(vec2(sin(c.y.mul(0.83).add(1.7)), sin(c.x.mul(0.71).sub(0.4))).mul(0.9));
-    const n = sin(w.x.mul(1.37)).mul(sin(w.y.mul(1.13).add(0.6))).mul(0.35).add(sin(w.x.mul(0.53).add(w.y.mul(0.61)).add(2.1)).mul(0.15)).add(0.5);
-    const t = float(0.66).sub(CLOUDS.uCover.sub(0.35).mul(0.5));
-    s.assign(float(1.0).sub(sstep(t.sub(0.08), t.add(0.1), n).mul(clamp(k, 0.0, 1.0)).mul(0.7)));
+    s.assign(mix(float(1.0), cloudShadowAt(pos, CLOUDS.uSun).mul(0.75).add(0.25), k));
   });
   return s;
 });

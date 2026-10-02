@@ -1,7 +1,8 @@
 // Sky dome with sun, a crescent moon, stars, shooting stars, glow and drifting procedural clouds + time-of-day palette
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If } from 'three/tsl';
+import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If, screenCoordinate } from 'three/tsl';
 import { U, vnoise, hashSin, hash12, sstep } from './tsl.js';
+import { marchClouds } from './clouds.js';
 import { clamp as clampJS, lerp, smoothstep, mulberry32 } from './noise.js';
 
 const cfbm = Fn(([p0]) => {
@@ -58,7 +59,7 @@ const moonAlbedo = Fn(([uv]) => {
   return a;
 });
 
-export function makeSky() {
+export function makeSky({ cloudSteps = 24 } = {}) {
   const uniforms = {
     uZenith: uniform(new THREE.Color()),
     uHorizon: uniform(new THREE.Color()),
@@ -144,22 +145,20 @@ export function makeSky() {
       const x = length(p.sub(s2.mul(0.7))).sub(0.35).max(0.0);
       col.addAssign(vec3(0.6, 0.68, 0.86).mul(exp(x.mul(-3.0)).mul(0.035).add(exp(x.mul(-0.45)).mul(0.01))).mul(mv));
     });
-    // clouds on a virtual plane; cover moves the density thresholds (no shift at 0.35)
+    // high, thin cirrus streaks on a virtual plane far above the cloud layer (the old painted clouds, faint now)
     const sh = uCover.sub(0.35).mul(0.5);
-    const dens = float(0).toVar();
-    If(h.greaterThan(-0.02), () => {
-      const cuv = d.xz.div(h.add(0.12)).mul(1.3).add(uCloud).toVar();
+    If(h.greaterThan(0.02), () => {
+      const cuv = d.xz.div(h.add(0.12)).mul(1.3).add(uCloud.mul(0.6)).toVar();
       const w = vec2(cfbm(cuv.mul(0.35).add(7.0)), cfbm(cuv.mul(0.35).sub(4.0))).toVar();
-      const n = cfbm(cuv.mul(0.55).add(w.mul(1.4))).toVar();
-      const streak = cfbm(vec2(cuv.x.mul(0.25), cuv.y.mul(1.1)).add(w));
-      dens.assign(sstep(float(0.56).sub(sh), float(0.8).sub(sh), n.mul(0.75).add(streak.mul(0.35))));
-      dens.mulAssign(sstep(-0.02, 0.18, h).mul(float(1.0).sub(sstep(0.55, 0.95, h).mul(float(0.6).mul(float(1.0).sub(sstep(0.5, 1.0, uCover)))))));
-      const thick = sstep(float(0.55).sub(sh), float(0.95).sub(sh), n);
-      const cl = mix(uCloudLit, uCloudShade, sstep(0.3, 1.0, thick).mul(0.85).add(float(1.0).sub(sunSide).mul(0.25))).toVar();
-      // silver lining toward the sun
-      cl.addAssign(U.uSunColor.mul(pow(g, 14.0)).mul(float(1.0).sub(thick)).mul(1.2).mul(U.uSunVis));
-      col.assign(mix(col, cl, dens.mul(0.9)));
+      const streak = cfbm(vec2(cuv.x.mul(0.2), cuv.y.mul(1.4)).add(w.mul(1.2)));
+      const ci = sstep(float(0.5).sub(sh), float(0.85).sub(sh), streak).mul(sstep(0.02, 0.25, h)).mul(0.35);
+      const cl = mix(uCloudLit, uCloudShade, 0.25).add(U.uSunColor.mul(pow(g, 10.0)).mul(U.uSunVis).mul(0.6));
+      col.assign(mix(col, cl, ci));
     });
+    // the cloud layer itself, raymarched (clouds.js), over everything behind it (sun, moon, stars)
+    const cv = marchClouds(d, cameraPosition.y, U.uSunDir, uCloudLit, uCloudShade, cloudSteps, hash12(screenCoordinate.xy.mul(0.913)));
+    col.assign(col.mul(cv.w).add(cv.xyz));
+    const dens = float(1.0).sub(cv.w);
     // lightning: the clouds light up, most around the strike
     If(U.uFlash.greaterThan(0.0), () => {
       const glow = float(0.15).add(pow(max(dot(d, uBoltDir), 0.0), 6.0).mul(1.6));

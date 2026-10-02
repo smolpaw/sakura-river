@@ -39,7 +39,8 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/deer.js`: the grazing deer: models loaded and lit like the scene, their grazing clip looped mostly head-down.
 - `src/models/`: models inlined in the page: the deer, built by `tools/models.mjs` (`node tools/models.mjs`) from the sources in Models, and the woods' trees, the gorge's walls, the bamboo, the boulders and the cherries' trunks (`forest.glb`, `cliffs.glb`, `bamboo.glb`, `rocks.glb`, `cherry.glb`), built in Blender by `tools/forest.py`, `tools/cliffs.py`, `tools/bamboo.py`, `tools/rocks.py` and `tools/cherry.py` (`node tools/blender.mjs`; `tools/cherry.mjs` hands `cherry.py` the trees' skeletons).
 - `src/birds.js`: birds in flight (swallows, kites, crows): their paths by weather and time of day, wings flapped in the vertex stage.
-- `src/sky.js`: sky dome, moon, stars and shooting stars, clouds and time-of-day palette.
+- `src/sky.js`: sky dome, moon, stars and shooting stars, high cirrus and time-of-day palette.
+- `src/clouds.js`: the volumetric cloud layer: its 3D noise (painted at start-up), its density, the raymarch the sky draws it with, and its shadows on the ground.
 - `src/weather.js`: weather presets and times of day, the sky under cloud cover, rain streaks and lightning.
 - `src/petalsgpu.js`: on WebGPU, the falling petals simulated in a compute pass, from every cherry.
 - `src/petals.js`: simulated falling petals (on the CPU: the WebGL fallback), the fallen-petal carpet and the petal rafts on the water.
