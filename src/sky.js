@@ -1,8 +1,8 @@
 // Sky dome with sun, a crescent moon, stars, shooting stars, glow and drifting procedural clouds + time-of-day palette
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If, screenCoordinate } from 'three/tsl';
+import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If } from 'three/tsl';
 import { U, vnoise, hashSin, hash12, sstep } from './tsl.js';
-import { marchClouds } from './clouds.js';
+import { cloudsAbove } from './clouds.js';
 import { clamp as clampJS, lerp, smoothstep, mulberry32 } from './noise.js';
 
 const cfbm = Fn(([p0]) => {
@@ -59,7 +59,7 @@ const moonAlbedo = Fn(([uv]) => {
   return a;
 });
 
-export function makeSky({ cloudSteps = 24 } = {}) {
+export function makeSky() {
   const uniforms = {
     uZenith: uniform(new THREE.Color()),
     uHorizon: uniform(new THREE.Color()),
@@ -155,10 +155,18 @@ export function makeSky({ cloudSteps = 24 } = {}) {
       const cl = mix(uCloudLit, uCloudShade, 0.25).add(U.uSunColor.mul(pow(g, 10.0)).mul(U.uSunVis).mul(0.6));
       col.assign(mix(col, cl, ci));
     });
-    // the cloud layer itself, raymarched (clouds.js), over everything behind it (sun, moon, stars)
-    const cv = marchClouds(d, cameraPosition.y, U.uSunDir, uCloudLit, uCloudShade, cloudSteps, hash12(screenCoordinate.xy.mul(0.913)));
-    col.assign(col.mul(cv.w).add(cv.xyz));
-    const dens = float(1.0).sub(cv.w);
+    // under a heavy cover a grey deck closes over the sky, mottled by its own folds
+    const deck = sstep(0.55, 0.95, uCover).mul(sstep(-0.03, 0.12, h)).toVar();
+    If(deck.greaterThan(0.0), () => {
+      const q = d.xz.div(h.add(0.15)).mul(0.9).add(uCloud.mul(0.8));
+      const f = cfbm(q.mul(0.5).add(11.0)).toVar();
+      const dc = mix(uCloudShade.mul(1.1), uCloudLit.mul(0.6), sstep(0.35, 0.75, f)).add(U.uSunColor.mul(pow(g, 6.0)).mul(U.uSunVis).mul(0.25));
+      col.assign(mix(col, dc, deck.mul(sstep(0.2, 0.45, f).mul(0.25).add(0.75))));
+    });
+    // the cloud layer right overhead (clouds.js; the cumulus round the horizon are cards drawn over the sky)
+    const cv = cloudsAbove(d, cameraPosition, U.uSunDir, uCloudLit, uCloudShade);
+    col.assign(col.mul(float(1.0).sub(cv.w)).add(cv.xyz));
+    const dens = max(cv.w, deck);
     // lightning: the clouds light up, most around the strike
     If(U.uFlash.greaterThan(0.0), () => {
       const glow = float(0.15).add(pow(max(dot(d, uBoltDir), 0.0), 6.0).mul(1.6));

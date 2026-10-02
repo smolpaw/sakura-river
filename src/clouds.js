@@ -1,10 +1,16 @@
-// Volumetric clouds: a layer between CLOUD_BASE and CLOUD_TOP metres, raymarched in the sky's shader through a tiling
-// 3D noise painted at start-up (cloudNoise, in a worker). R: Perlin-Worley (the clouds' billowing shapes), G: Worley
-// fbm (the detail eroding their edges). The sky's time-of-day palette lights them (uCloudLit, uCloudShade), the cover
-// setting thickens them, and the ground's cloud shadows (sunshadow.js) sample the same density, so shadows and
-// clouds agree.
+// Clouds. The cumulus round the horizon are pictures (impostors, like the woods' far trees): a few dozen cards turned to
+// the camera, showing cumulus baked at start-up by raymarching real 3D shapes (puffs eroded by a tiling 3D noise). Each
+// picture holds the light that reaches the cloud from six directions (six-way lighting, as for game smoke), so the
+// card is lit by the sun from wherever it stands: bright tops at noon, pink undersides after sunset, silver edges
+// against the sun. The sky right overhead is the same noise as a flat layer (sky.js), and the ground's cloud shadows
+// (sunshadow.js) sample that noise too, so the clouds above the valley and their shadows agree.
+//
+// The noise: 64^3, painted in a worker (cloudNoise). R: Perlin-Worley (billowing shapes), G: Worley fbm (detail).
 import * as THREE from 'three/webgpu';
-import { If, Loop, Break, float, vec3, vec4, uniform, clamp, max, min, exp, mix, dot, renderGroup, nodeObject } from 'three/tsl';
+import {
+  Fn, If, Loop, Break, float, vec2, vec3, vec4, uniform, uniformArray, attribute, varyingProperty, texture, uv, clamp, max, min, exp, mix, dot, abs,
+  length, normalize, cross, floor, pow, renderGroup, nodeObject, cameraPosition, positionGeometry, positionWorld,
+} from 'three/tsl';
 import { mulberry32 } from './noise.js';
 
 export const CLOUD_BASE = 900, CLOUD_TOP = 1900;
@@ -129,44 +135,20 @@ export const cloudDensity = (p, detail = true) => {
   return clamp(base.sub(d.mul(0.38).mul(float(1.0).sub(base)).mul(hgt.mul(0.6).add(0.7))).div(0.7), 0.0, 1.0);
 };
 
-// March the layer along the view ray d from the camera at height camY (the sky dome sits at the camera) ->
-// vec4(light scattered towards the camera, transmittance). steps: samples across the layer.
-export const marchClouds = (d, camY, sunDir, lit, shade, steps, jitter) => {
-  const res = vec4(0.0, 0.0, 0.0, 1.0).toVar();
-  If(d.y.greaterThan(0.015), () => {
-    const t0 = float(CLOUD_BASE).sub(camY).div(d.y), t1 = float(CLOUD_TOP).sub(camY).div(d.y);
-    const far = min(t1, 60000.0);
-    const ds = far.sub(t0).div(steps).toVar();
-    const t = t0.add(ds.mul(jitter)).toVar();
-    const T = float(1.0).toVar(), acc = vec3(0.0).toVar();
-    const mu = dot(d, sunDir);
-    // a strong forward lobe (silver linings), a weak back one
-    const hg = (g) => float(1 - g * g).div(float(1 + g * g).sub(mu.mul(2 * g)).pow(1.5)).mul(1 / (4 * Math.PI));
-    const phase = mix(hg(-0.15), hg(0.7), 0.35).mul(4 * Math.PI);
-    // density -> extinction per metre: thick cumulus go opaque over a few hundred metres
-    const sigma = float(1 / 90);
-    Loop(steps, () => {
-      If(T.lessThan(0.02).or(t.greaterThan(far)), () => { Break(); });
-      const p = d.mul(t).add(vec3(0.0, camY, 0.0)).toVar();
-      const dens = cloudDensity(p).toVar();
-      If(dens.greaterThan(0.002), () => {
-        // the sun's light through the cloud above this point: three samples towards it, coarse shape only
-        const ls = float(0.0).toVar();
-        for (const k of [60, 180, 400]) ls.addAssign(cloudDensity(p.add(sunDir.mul(k)), false));
-        const toSun = exp(ls.mul(sigma).mul(-150.0));
-        const powder = float(1.0).sub(exp(dens.mul(-6.0)));
-        const hgt = clamp(p.y.sub(CLOUD_BASE).div(CLOUD_TOP - CLOUD_BASE), 0.0, 1.0);
-        // sunlit by the time of day's cloud colour, the shaded side its shade colour, darker towards the base
-        const c = mix(shade.mul(hgt.mul(0.6).add(0.55)), lit.mul(phase.mul(0.6).add(0.75)), toSun.mul(powder.mul(0.5).add(0.5)));
-        const a = float(1.0).sub(exp(dens.mul(sigma).mul(ds).negate()));
-        acc.addAssign(c.mul(a).mul(T));
-        T.mulAssign(float(1.0).sub(a));
-      });
-      t.addAssign(ds);
-    });
-    // far off the layer thins into the horizon's haze
-    const fade = exp(t0.div(-26000.0));
-    res.assign(vec4(acc.mul(fade), mix(float(1.0), T, fade)));
+// The layer right overhead, seen from below (the cards keep to the horizon): its density where the view ray d from
+// the camera at cam meets the layer's middle -> vec4(light, coverage), faded out towards the horizon
+export const cloudsAbove = (d, cam, sunDir, lit, shade) => {
+  const res = vec4(0.0).toVar();
+  If(d.y.greaterThan(0.3), () => {
+    const mid = (CLOUD_BASE + CLOUD_TOP) / 2;
+    const p = cam.add(d.mul(float(mid).sub(cam.y).div(d.y)));
+    const dens = cloudDensity(vec3(p.x, mid, p.z)).toVar();
+    // thin parts let the sun through, the thick ones show their grey bases; brightest towards the sun
+    const mu = max(dot(d, sunDir), 0.0);
+    const thin = float(1.0).sub(sstepT(0.05, 0.6, dens));
+    const c = mix(shade.mul(1.15), lit.mul(float(0.55).add(pow(mu, 8.0).mul(0.8))), thin.mul(0.7).add(0.15));
+    const a = sstepT(0.0, 0.25, dens).mul(sstepT(0.3, 0.55, d.y));
+    res.assign(vec4(c.mul(a), a));
   });
   return res;
 };
@@ -179,3 +161,280 @@ export const cloudShadowAt = (p, sunDir) => {
   const dens = cloudDensity(vec3(q.x, mid, q.z), false);
   return exp(dens.mul(-3.0));
 };
+
+// ---------- the cumulus pictures ----------
+// Each kind is a picture of S x S/2 pixels (a cloud box 2 wide, 1 tall, its flat base at the bottom), in a COLS x ROWS
+// atlas. Two atlases: A holds the light from +x, -x, +y, -y (the picture's right, left, up, down), B the light from
+// the front (+z, the camera's side) and the back (-z, through the cloud), the sky's light from above, and coverage.
+// All premultiplied by coverage (0 outside), so mip filtering leaves no fringe and the card blends them as they are.
+const COLS = 4, ROWS = 4, KINDS = COLS * ROWS, MAXP = 16;
+const SIGMA = 42; // extinction per unit of the box at density 1 (the box: ~2 km wide, so opaque in ~25 m)
+
+// the puffs of kind k (x, y, z, radius in the box's units), by type: cumulus mediocris, humilis (flat), congestus
+// (towers), fractus (rags)
+function puffs(k) {
+  const rng = mulberry32(911 + k * 131), r = (a, b) => a + rng() * (b - a), out = [];
+  const add = (x, y, z, rad) => {
+    rad = Math.min(rad, 0.9 - Math.abs(x), 0.92 - y);
+    if (rad > 0.02 && out.length < MAXP) out.push([x, Math.max(y, rad * 0.25), Math.max(-0.6 + rad, Math.min(0.6 - rad, z)), rad]);
+  };
+  const tops = (n, f) => {
+    for (let i = 0; i < n && out.length < MAXP; i++) {
+      const p = out[Math.floor(rng() * out.length)];
+      add(p[0] + r(-0.5, 0.5) * p[3], p[1] + p[3] * r(0.45, 0.7), p[2] + r(-0.3, 0.3) * p[3], p[3] * r(f[0], f[1]));
+    }
+  };
+  const type = k < 6 ? 0 : k < 10 ? 1 : k < 13 ? 2 : 3;
+  if (type === 0) {
+    const span = r(0.55, 0.7), n = 7 + Math.floor(rng() * 3);
+    for (let i = 0; i < n; i++) { const x = r(-span, span), rad = 0.27 * (1 - 0.5 * Math.abs(x) / span) + r(0, 0.08); add(x, rad * 0.45, r(-0.2, 0.2), rad); }
+    tops(6, [0.5, 0.72]);
+  } else if (type === 1) {
+    const span = r(0.62, 0.75), n = 10 + Math.floor(rng() * 3);
+    for (let i = 0; i < n; i++) { const x = r(-span, span), rad = r(0.13, 0.21) * (1 - 0.4 * Math.abs(x) / span); add(x, rad * 0.35, r(-0.22, 0.22), rad); }
+    tops(3, [0.45, 0.65]);
+  } else if (type === 2) {
+    const n = 4;
+    for (let i = 0; i < n; i++) { const x = r(-0.4, 0.4), rad = r(0.18, 0.24); add(x, rad * 0.5, r(-0.15, 0.15), rad); }
+    // a tower or two climbing out of the base
+    for (let t = 0; t < 2; t++) {
+      let x = r(-0.25, 0.25), y = 0.3, rad = r(0.2, 0.24);
+      for (let i = 0; i < 4; i++) { add(x, y, r(-0.1, 0.1), rad); y += rad * r(0.75, 0.95); x += r(-0.08, 0.08); rad *= r(0.78, 0.9); }
+    }
+    tops(2, [0.5, 0.7]);
+  } else {
+    const n = 3 + Math.floor(rng() * 4);
+    for (let i = 0; i < n; i++) add(r(-0.65, 0.65), r(0.08, 0.25), r(-0.2, 0.2), r(0.08, 0.17));
+  }
+  return out;
+}
+
+// Bake every kind into the atlases (cell: S, the picture's width in pixels). One draw per atlas; each texel
+// marches its column of the box front to back, and from each sample marches towards the four side lights.
+export function bakeClouds(renderer, S) {
+  const CW = S, CH = S / 2, W = COLS * CW, H = ROWS * CH;
+  const target = () => {
+    const rt = new THREE.RenderTarget(W, H, { depthBuffer: false });
+    const t = rt.texture;
+    t.generateMipmaps = true;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.magFilter = THREE.LinearFilter;
+    t.matrixAutoUpdate = false;
+    return rt;
+  };
+  const A = target(), B = target();
+  A.texture.name = 'CloudLightA'; B.texture.name = 'CloudLightB';
+
+  // every kind's puffs, and per kind: the noise's offset, how ragged
+  const P = [], K = [];
+  for (let k = 0; k < KINDS; k++) {
+    const ps = puffs(k);
+    for (let i = 0; i < MAXP; i++) P.push(ps[i] ? new THREE.Vector4(...ps[i]) : new THREE.Vector4(0, -9, 0, 0.01));
+    K.push(new THREE.Vector4(k * 3.17, k >= 13 ? 1 : 0, 0, 0));
+  }
+  const uP = uniformArray(P, 'vec4'), uK = uniformArray(K, 'vec4');
+  // the box's signed distance (negative inside): the puffs, smoothly joined, roughened by the shape noise and
+  // billowed by the detail noise, cut flat at the base -> density
+  const density = (fine) => Fn(([p, kind]) => {
+    const sd = float(9.0).toVar();
+    const kk = uK.element(kind);
+    // (loop variables named apart: these are inlined into the march's loops)
+    Loop({ start: 0, end: MAXP, type: 'int', name: 'puff' }, ({ puff }) => {
+      const s = uP.element(kind.mul(MAXP).add(puff));
+      const d = length(p.sub(s.xyz)).sub(s.w);
+      const h = max(float(0.09).sub(abs(sd.sub(d))), 0.0).div(0.09);
+      sd.assign(min(sd, d).sub(h.mul(h).mul(0.09 * 0.25)));
+    });
+    const q = p.add(vec3(kk.x, kk.x.mul(0.37), kk.x.mul(0.71))).toVar();
+    sd.addAssign(look(q.mul(0.55)).r.sub(0.5).mul(float(0.14).add(kk.y.mul(0.12))));
+    if (fine) sd.subAssign(look(q.mul(2.1)).g.sub(0.55).mul(0.07));
+    // the base: flat, a little ragged
+    sd.assign(max(sd, float(0.03).sub(p.y).add(look(q.mul(1.3)).g.sub(0.5).mul(0.03))));
+    return clamp(sd.negate().div(0.035), 0.0, 1.0).mul(float(1.0).sub(kk.y.mul(0.4)));
+  });
+  const densF = density(true), densC = density(false);
+  // the light that gets through optical depth tau, with a share of multiple scattering (softer, deeper)
+  const ms = (tau) => max(exp(tau.negate()), exp(tau.mul(-0.07)).mul(0.6));
+  // optical depth from p towards dir: six samples, ever longer steps
+  const SEG = [0.02, 0.035, 0.06, 0.1, 0.17, 0.3];
+  const toward = (p, kind, dir) => {
+    let tau = float(0.0), t = 0;
+    SEG.forEach((len, i) => {
+      t += len / 2;
+      tau = tau.add((i < 3 ? densF : densC)(p.add(dir.mul(t)), kind).mul(len));
+      t += len / 2;
+    });
+    return tau.mul(SIGMA);
+  };
+  const STEPS = 56, Z0 = 0.62, DZ = (2 * Z0) / STEPS;
+  const bake = (pass) => Fn(() => {
+    // the texel's cell (from the atlas's top left, as the sampling expects) and its point in the cell's box
+    const px = uv().x.mul(COLS), py = float(1.0).sub(uv().y).mul(ROWS);
+    const kind = floor(py).mul(COLS).add(floor(px)).toInt().toVar();
+    const x = px.sub(floor(px)).mul(2.0).sub(1.0), y = float(1.0).sub(py.sub(floor(py)));
+    // the column's whole optical depth (for the light from behind)
+    const total = float(0.0).toVar();
+    Loop({ start: 0, end: STEPS, type: 'int', name: 'zi' }, ({ zi }) => { total.addAssign(densF(vec3(x, y, float(Z0 - DZ / 2).sub(float(zi).mul(DZ))), kind)); });
+    total.mulAssign(SIGMA * DZ);
+    const T = float(1.0).toVar(), front = float(0.0).toVar(), acc = vec4(0.0).toVar(), acc2 = vec3(0.0).toVar();
+    If(total.greaterThan(0.01), () => {
+      Loop({ start: 0, end: STEPS, type: 'int', name: 'zj' }, ({ zj }) => {
+        const p = vec3(x, y, float(Z0 - DZ / 2).sub(float(zj).mul(DZ))).toVar();
+        const d = densF(p, kind).toVar();
+        If(d.greaterThan(0.004), () => {
+          const tau = d.mul(SIGMA * DZ);
+          const a = float(1.0).sub(exp(tau.negate()));
+          const w = T.mul(a).toVar();
+          const mid = front.add(tau.mul(0.5));
+          if (pass === 0) {
+            acc.addAssign(vec4(ms(toward(p, kind, vec3(1, 0, 0))), ms(toward(p, kind, vec3(-1, 0, 0))), ms(toward(p, kind, vec3(0, 1, 0))), ms(toward(p, kind, vec3(0, -1, 0)))).mul(w));
+          } else {
+            // the sky's light: from above, less of it under the cloud
+            const up = toward(p, kind, vec3(0, 1, 0));
+            acc2.addAssign(vec3(ms(mid), ms(total.sub(mid)), exp(up.mul(-0.08)).mul(0.65).add(0.35)).mul(w));
+          }
+          T.mulAssign(float(1.0).sub(a));
+          front.addAssign(tau);
+        });
+        If(T.lessThan(0.004), () => { Break(); });
+      });
+    });
+    return pass === 0 ? acc : vec4(acc2, float(1.0).sub(T));
+  })();
+
+  // one draw per atlas, over all of it
+  const mats = [0, 1].map((pass) => {
+    const m = new THREE.MeshBasicNodeMaterial({ fog: false, depthTest: false, depthWrite: false, blending: THREE.NoBlending, side: THREE.DoubleSide });
+    m.vertexNode = vec4(positionGeometry.xy, 0.5, 1.0);
+    m.colorNode = bake(pass);
+    return m;
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mats[0]);
+  quad.frustumCulled = false;
+  const scene = new THREE.Scene();
+  scene.add(quad);
+  const cam = new THREE.OrthographicCamera();
+  const prev = { target: renderer.getRenderTarget(), auto: renderer.autoClear };
+  renderer.autoClear = false;
+  for (const [pass, rt] of [[0, A], [1, B]]) {
+    renderer.setRenderTarget(rt);
+    quad.material = mats[pass];
+    renderer.render(scene, cam);
+  }
+  renderer.setRenderTarget(prev.target);
+  renderer.autoClear = prev.auto;
+  for (const m of mats) m.dispose();
+  quad.geometry.dispose();
+  return { A: A.texture, B: B.texture, targets: [A, B], CW, CH, W, H };
+}
+
+// the clouds drift through squares round the valley, wrapping round: most in a near one, the rest in a far ring
+// towards the horizon (beyond the near square's reach)
+const SPREAD = 26000, FAR_SPREAD = 64000, FAR_FROM = 11000;
+const R_DRAW = 6400; // where the cards are drawn: inside the sky's dome (scaled about the camera, so seen the same)
+
+// The cards: `count` cumulus scattered over the square, drifting with the clouds' noise. sky: the sky's uniforms (its
+// palette); U: tsl.js's (the sun, lightning). update() each frame sorts them far to near and uploads them.
+export function makeClouds(bake, count, sky, U) {
+  const rng = mulberry32(4711);
+  const clouds = [];
+  for (let i = 0; i < count; i++) {
+    const far = i >= count * 0.65, span = far ? FAR_SPREAD : SPREAD;
+    const u = rng();
+    const kind = u < 0.42 ? Math.floor(rng() * 6) : u < 0.72 ? 6 + Math.floor(rng() * 4) : u < 0.84 ? 10 + Math.floor(rng() * 3) : 13 + Math.floor(rng() * 3);
+    clouds.push({
+      x: (rng() - 0.5) * span, z: (rng() - 0.5) * span, y: 1500 + (rng() - 0.5) * 160, span, from: far ? FAR_FROM : 2600,
+      w: (kind >= 13 ? 800 : 1600) + rng() * (kind >= 13 ? 800 : 2400), kind, flip: rng() < 0.5 ? -1 : 1,
+      rank: rng(), px: 0, pz: 0, fade: 0, d: 0,
+    });
+  }
+  const data = new Float32Array(count * 8);
+  const ib = new THREE.InstancedInterleavedBuffer(data, 8).setUsage(THREE.DynamicDrawUsage);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, 0, 1, 0, 0, 1, 1, 0, -1, 1, 0], 3));
+  geo.setIndex([0, 1, 2, 0, 2, 3]);
+  geo.setAttribute('aPos', new THREE.InterleavedBufferAttribute(ib, 4, 0));
+  geo.setAttribute('aMeta', new THREE.InterleavedBufferAttribute(ib, 4, 4));
+  geo.instanceCount = 0;
+
+  const pos = attribute('aPos', 'vec4'), meta = attribute('aMeta', 'vec4');
+  const uSunK = uniform(1);
+  const vSun = varyingProperty('vec3', 'vCloudSun'), vCell = varyingProperty('vec4', 'vCloudCell');
+  const position = Fn(() => {
+    const rel = pos.xyz.sub(cameraPosition).toVar();
+    const dist = length(rel).toVar();
+    const fwd = rel.div(dist).negate().toVar(); // towards the camera
+    const right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd)).toVar(), up = cross(fwd, right).toVar();
+    const flip = meta.y;
+    // the sun in the picture's frame (mirrored with the picture)
+    vSun.assign(vec3(dot(U.uSunDir, right).mul(flip), dot(U.uSunDir, up), dot(U.uSunDir, fwd)));
+    const k = meta.x;
+    const qx = positionGeometry.x.mul(flip).mul(0.5).add(0.5);
+    vCell.assign(vec4(k.sub(floor(k.div(COLS)).mul(COLS)).add(qx), floor(k.div(COLS)).add(float(1.0).sub(positionGeometry.y)), dist, meta.z));
+    const off = right.mul(positionGeometry.x).add(up.mul(positionGeometry.y)).mul(pos.w.mul(0.5));
+    return cameraPosition.add(rel.add(off).mul(float(R_DRAW).div(dist)));
+  })();
+
+  const shade = Fn(() => {
+    const at = vec2(vCell.x, vCell.y).mul(vec2(bake.CW, bake.CH)).div(vec2(bake.W, bake.H));
+    const a = texture(bake.A, at), b = texture(bake.B, at).toVar();
+    const s = vSun;
+    const sq = (v) => max(v, 0.0).mul(max(v, 0.0));
+    const mu = dot(normalize(positionWorld.sub(cameraPosition)), U.uSunDir);
+    // against the sun, the light through the cloud is scattered forward: thin edges shine (silver linings)
+    const forward = pow(max(mu, 0.0), 6.0).mul(2.2).add(0.6);
+    const sun = a.x.mul(sq(s.x)).add(a.y.mul(sq(s.x.negate()))).add(a.z.mul(sq(s.y))).add(a.w.mul(sq(s.y.negate())))
+      .add(b.x.mul(sq(s.z))).add(b.y.mul(sq(s.z.negate())).mul(forward));
+    // (under a closing deck the sun no longer reaches them)
+    const col = sky.uCloudLit.mul(sun.mul(uSunK)).add(sky.uCloudShade.mul(b.z)).toVar();
+    // lightning lights them from inside
+    col.addAssign(vec3(0.5, 0.55, 0.75).mul(U.uFlash.mul(0.8)).mul(b.w));
+    // far off they fade into the horizon's haze
+    const haze = float(1.0).sub(exp(vCell.z.div(-21000.0)));
+    const alpha = b.w.mul(vCell.w).mul(float(1.0).sub(haze.mul(0.35)));
+    return vec4(mix(col, sky.uHorizon.mul(b.w), haze.mul(0.8)).mul(vCell.w), alpha);
+  })();
+  const mat = new THREE.MeshBasicNodeMaterial({ fog: false, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  mat.positionNode = position;
+  mat.colorNode = shade;
+  // premultiplied: the light added, the sky behind dimmed by coverage
+  mat.blending = THREE.CustomBlending;
+  mat.blendSrc = mat.blendSrcAlpha = THREE.OneFactor;
+  mat.blendDst = mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -9; // after the sky, before anything else see-through
+  mesh.name = 'clouds';
+
+  const sstepJ = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+  const wrap = (v, span) => v - span * Math.floor(v / span + 0.5);
+  const order = [];
+  return {
+    mesh, bake,
+    // camera: its position; drift: CLOUD.uDrift's value (the noise's offset, km); cover 0..1
+    update(camPos, drift, cover) {
+      // more of them and bigger as the cover thickens
+      const shown = Math.min(1, 0.2 + cover * 1.1), grow = 0.85 + 0.55 * sstepJ(0.3, 0.85, cover);
+      uSunK.value = 1 - 0.85 * sstepJ(0.55, 0.95, cover);
+      order.length = 0;
+      for (const c of clouds) {
+        c.px = wrap(c.x - drift.x * 1000, c.span); c.pz = wrap(c.z - drift.y * 1000, c.span);
+        const hd = Math.hypot(c.px - camPos.x, c.pz - camPos.z);
+        // not overhead (the sky's flat layer is), not where they wrap round
+        c.fade = sstepJ(c.rank - 0.04, c.rank + 0.04, shown) * sstepJ(c.from, c.from + 2000, hd)
+          * sstepJ(c.span / 2, c.span / 2 - 3000, Math.max(Math.abs(c.px), Math.abs(c.pz)));
+        if (c.fade <= 0.002) continue;
+        c.d = hd;
+        order.push(c);
+      }
+      order.sort((p, q) => q.d - p.d);
+      for (let i = 0; i < order.length; i++) {
+        const c = order[i], o = i * 8;
+        data[o] = c.px; data[o + 1] = c.y; data[o + 2] = c.pz; data[o + 3] = c.w * grow;
+        data[o + 4] = c.kind; data[o + 5] = c.flip; data[o + 6] = c.fade; data[o + 7] = 0;
+      }
+      geo.instanceCount = order.length;
+      ib.needsUpdate = true;
+    },
+  };
+}
