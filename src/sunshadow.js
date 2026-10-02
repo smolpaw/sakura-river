@@ -124,9 +124,9 @@ export function makeFarShadow(renderer, size) {
   }
 
   return {
-    // toSun: towards the sun. Redrawn once the sun has moved by more than ~0.04 degrees, at most every `every` frames
-    // (the clock moves it a quarter of a degree a second); `force` redraws now. A redraw costs ~1.5 ms of GPU time
-    // at 4096 (RTX 2060), so not every frame.
+    // toSun: towards the sun. Redrawn once the sun has moved by more than ~0.04 degrees (only a time-lapse moves it),
+    // at most every `every` frames; `force` redraws now. A redraw costs ~1.5 ms of GPU time at 4096 (RTX 2060), so
+    // not every frame.
     update(scene, toSun, { every = 8, force = false } = {}) {
       wait--;
       if (!uOn.value || toSun.y < -0.05) return false;

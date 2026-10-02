@@ -31,37 +31,37 @@ import { WEATHERS, TIMES } from './weather.js';
   showWeather();
   $('w-random').addEventListener('click', function () { pickWeather((wi + 1 + Math.floor(Math.random() * (WEATHERS.length - 1))) % WEATHERS.length); });
 
-  // ---------- time of day ----------
+  // ---------- time of day: fixed (no ticking clock); a preset or the half-hour slider moves there as a time-lapse ----------
+  var day = $('t-day'), dragged = null; // the slider's hour while it is being moved, shown instead of the scene's
   var tBtns = TIMES.map(function (t) {
     var b = document.createElement('button');
     b.type = 'button'; b.setAttribute('aria-label', t.name);
     b.innerHTML = '<b lang="ja"></b><span></span>'; b.firstChild.textContent = t.kanji; b.lastChild.textContent = t.name;
-    b.addEventListener('click', function () { if (engine) engine.setTimeOfDay(t.hour); });
+    b.addEventListener('click', function () { if (engine) { engine.setTimeOfDay(t.hour); day.value = t.hour; } });
     $('times').appendChild(b);
     return b;
   });
+  day.addEventListener('input', function () { dragged = +this.value; showTime(); });
+  // straight to the chosen half hour, back if it is earlier (presets go forward through the night)
+  day.addEventListener('change', function () { dragged = null; if (engine) { engine.setTimeOfDay(+this.value, true, false); showTime(); } });
   // the period the clock is in: dawn 04:30-09:00, afternoon to 17:00, dusk to 19:30, then night
   function period(h) { return h >= 4.5 && h < 9 ? 'dawn' : h >= 9 && h < 17 ? 'afternoon' : h >= 17 && h < 19.5 ? 'dusk' : 'night'; }
   function showTime() {
+    if (!engine) return;
     var h = engine.timeOfDay(), p = period(h);
     var waiting = engine.soundWaiting();
     if (waiting !== $('btn-sound').classList.contains('waiting')) {
       $('btn-sound').classList.toggle('waiting', waiting);
       $('btn-sound').title = waiting ? 'Click anywhere to start the sound' : 'Music and ambience';
     }
-    $('clock').textContent = clock(h);
+    $('clock').textContent = clock(dragged !== null ? dragged : h);
+    day.setAttribute('aria-valuetext', clock(+day.value));
     tBtns.forEach(function (b, i) { setPressed(b, TIMES[i].id === p); });
   }
   function clock(h) {
     var m = Math.floor(h * 60) % 1440, hh = Math.floor(m / 60), mm = m % 60;
     return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
   }
-  $('t-run').addEventListener('click', function () {
-    var on = this.getAttribute('aria-pressed') !== 'true';
-    setPressed(this, on);
-    this.setAttribute('aria-label', on ? 'Pause the clock' : 'Run the clock');
-    if (engine) engine.setClockRunning(on);
-  });
 
   // ---------- sound: on unless muted before; it starts with the first click or key press ----------
   var soundOn = load('sr.sound') !== 'off';
@@ -162,7 +162,7 @@ import { WEATHERS, TIMES } from './weather.js';
     }).then(function (e) {
       engine = e;
       engine.setWeather(WEATHERS[wi].id, 0);
-      engine.setClockRunning($('t-run').getAttribute('aria-pressed') === 'true');
+      day.value = engine.timeOfDay();
       engine.setVolume('music', vols.music);
       engine.setVolume('nature', vols.nature);
       engine.setSound(soundOn);

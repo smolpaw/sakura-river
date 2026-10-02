@@ -586,8 +586,8 @@ export async function create(canvas, opts = {}) {
   const S = { ...P }; // smoothed
   petals.setAmount(P.petals);
   let weatherTween = null; // { from, to, t, dur } in set() units
-  // time of day: clock hours, ticking (a minute per second) when the clock runs; moves to a new time as a time-lapse
-  let clockH = opts.hour ?? tToHour(0.92), clockRunning = false, timeTween = null; // { from, delta, lut, t, dur }
+  // time of day: clock hours, fixed (no ticking clock, see CLAUDE.md); moves to a new time as a time-lapse
+  let clockH = opts.hour ?? tToHour(0.92), timeTween = null; // { from, delta, lut, t, dur }
   const hemiBase = new THREE.Color(), ambBase = new THREE.Color(), flashCol = new THREE.Color(0.55, 0.6, 0.85), tmpC = new THREE.Color();
   let flashed = false;
 
@@ -733,10 +733,10 @@ export async function create(canvas, opts = {}) {
       const f = (e - lut[i]) / Math.max(1e-9, lut[i + 1] - lut[i]);
       clockH = (tt.from + tt.delta * Math.min(1, (i + f) / (lut.length - 1))) % 24;
       if (tt.t >= 1) timeTween = null;
-    } else if (clockRunning) clockH = (clockH + dt / 60) % 24;
+    }
     const tod = hourToT(clockH);
-    // every frame the clock or the cloud cover has moved: in steps (it had waited for 0.0004 of the day, ~20 frames at a
-    // minute a second) the sun's direction and colours jumped three times a second, most visibly on faces lit edge-on
+    // every frame a time-lapse or the cloud cover has moved: in steps the sun's direction and colours jump, most
+    // visibly on faces lit edge-on
     if (tod !== lastTime || Math.abs(S.clouds - lastCover) > 1e-5) skyNow = applyTimeOfDay(tod);
     // the moon moves every frame: a sharp disc would step with the sky's palette updates
     sky.uniforms.uMoonVis.value = moonState(clockH, skyNow.elev, sky.uniforms.uMoonDir.value);
@@ -917,25 +917,25 @@ export async function create(canvas, opts = {}) {
       weatherTween = { from, to: w, t: 0, dur: Math.max(1e-3, seconds) };
       if (seconds <= 0) { for (const key of WEATHER_KEYS) setParam(key, w[key]); weatherTween = null; for (const k in P) S[k] = P[k]; }
     },
-    // move the clock forward to `hour` (0..24) as an eased time-lapse (a longer way takes longer), or at once
-    setTimeOfDay(hour, animate = true) {
-      const delta = (((hour - clockH) % 24) + 24) % 24;
+    // move the clock to `hour` (0..24) as an eased time-lapse (a longer way takes longer), or at once; forward
+    // through midnight if need be, or (`forward` false) straight there, back if `hour` is earlier
+    setTimeOfDay(hour, animate = true, forward = true) {
+      const delta = forward ? (((hour - clockH) % 24) + 24) % 24 : hour - clockH;
       timeTween = null;
-      if (animate && delta > 0.01) {
+      if (animate && Math.abs(delta) > 0.01) {
         // the time-lapse slows where the light changes fastest: cumulative hours plus the sun's movement near the
         // horizon (at dusk and dawn the elevation changes steeply in a few clock minutes)
         const N = 160, lut = [0];
         let el0 = skyState(hourToT(clockH)).elev;
         for (let i = 1; i <= N; i++) {
           const el = skyState(hourToT((clockH + (delta * i) / N) % 24)).elev;
-          lut.push(lut[i - 1] + delta / N + 0.5 * Math.abs(el - el0) * Math.exp(-(((el + 3) / 8) ** 2)));
+          lut.push(lut[i - 1] + Math.abs(delta) / N + 0.5 * Math.abs(el - el0) * Math.exp(-(((el + 3) / 8) ** 2)));
           el0 = el;
         }
         timeTween = { from: clockH, delta, lut, t: 0, dur: clamp(1.5 + lut[N] * 0.11, 2.5, 4.5) };
       }
       if (!timeTween) clockH = ((hour % 24) + 24) % 24;
     },
-    setClockRunning(on) { clockRunning = !!on; },
     timeOfDay() { return clockH; },
     resetCamera() {
       cinematic = false; controls.enabled = true;

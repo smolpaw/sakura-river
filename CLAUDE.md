@@ -13,6 +13,7 @@ Procedural Three.js scene (cherry tree, river, Fuji-style mountain). See README.
 - `three` is pinned to an exact version. The materials are TSL node materials (`src/tsl.js`, `src/materials.js`) that reproduce r170's lighting by subclassing three internals (`PhysicalLightingModel`), and `main.js` wraps the private `renderer._getFallback`, so a three upgrade can silently break the look. Check visually after any bump.
 - TSL: don't assign three's lighting properties (`diffuseContribution`, `roughness`, …) inside an `If` in a material's setup: on frames the branch is skipped the lighting comes out black. Compute a factor and assign unconditionally.
 - TSL: an `Fn` without `setLayout` is inlined, so a `Loop` inside it nested in another `Loop` reuses the variable `i` and breaks silently: name the loops apart (`Loop({ start: 0, end: n, type: 'int', name: 'puff' }, ({ puff }) => …)`).
+- The time of day doesn't tick (owner, 2026-10-02). It stays where it is set (four presets, a half-hour slider), and only the time-lapse to a newly picked time moves it, which stays (the owner likes it). A running clock moving the sun, shadows, moon and stars was removed: its shadow-map redraws under a moving sun made shadows flicker, it cost GPU time and added little. Don't propose bringing back a ticking clock.
 - `src/ui.js` is page wiring only; scene logic belongs in the engine modules behind `create()`.
 
 ## Verifying changes

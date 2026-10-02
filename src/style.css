@@ -64,8 +64,14 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .mini { appearance: none; cursor: pointer; width: 22px; height: 22px; border-radius: 6px; border: 0; padding: 0;
   display: grid; place-items: center; color: var(--washi); background: rgba(255, 255, 255, 0.07); transition: background 0.2s; }
 .mini:hover { background: rgba(255, 255, 255, 0.14); }
-#t-run .i-play, #t-run[aria-pressed="false"] .i-pause { display: none; }
-#t-run[aria-pressed="false"] .i-play { display: block; }
+/* the time of day in half hours, on a strip of the day's sky: night, dawn, day, dusk, night */
+.day { display: block; width: 100%; margin: 2px 0 0; height: 22px; background: transparent; cursor: pointer; -webkit-appearance: none; appearance: none;
+  --day: linear-gradient(90deg, #1c1d3b 0%, #2a2a52 17%, #d9a0b4 23%, #f2d3a8 29%, #9cc6e8 42%, #8bbbe2 62%, #e9a56a 73%, #b5607a 78%, #4a3a6e 82%, #1c1d3b 90%, #1c1d3b 100%); }
+.day::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--day); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.day::-moz-range-track { height: 8px; border-radius: 4px; background: var(--day); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.day::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -4px; border-radius: 50%; border: 2px solid var(--sumi); background: var(--washi); box-shadow: 0 1px 4px rgba(10, 5, 15, 0.5); }
+.day::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--sumi); background: var(--washi); box-shadow: 0 1px 4px rgba(10, 5, 15, 0.5); }
+.day:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; border-radius: 6px; }
 #btn-sound .i-off, #btn-sound[aria-pressed="false"] .i-on { display: none; }
 #btn-sound[aria-pressed="false"] .i-off { display: block; }
 #btn-sound[aria-pressed="true"] { background: var(--glass); color: var(--washi); border-color: var(--glass-edge); }

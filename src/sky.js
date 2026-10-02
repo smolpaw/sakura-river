@@ -17,7 +17,7 @@ const MOON_COS = [Math.cos(THREE.MathUtils.degToRad(1.4)), Math.cos(THREE.MathUt
 
 // Stars: a cube map of cells around the sky, STAR_N cells per unit of face coordinate, one star in STAR_P of them,
 // kept off the cell edges so a star is never cut. The sky turns about the celestial pole (north is +z, Japan's
-// latitude) with the clock.
+// latitude) with the clock hour.
 const STAR_N = 70, STAR_P = 0.45;
 const POLE = new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(35)), Math.cos(THREE.MathUtils.degToRad(35)));
 // the galactic plane in the stars' frame: in April it stands low in the west after dusk (the winter Milky Way)
@@ -173,7 +173,7 @@ export function makeSky() {
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(7000, 48, 24), mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;
-  // Night sky per frame: the stars turn with the clock; now and then a shooting star, somewhere ahead of the
+  // Night sky per frame: the stars placed by the clock hour (they turn only during a time-lapse); now and then a shooting star, somewhere ahead of the
   // camera (vis: how clear and dark the sky is, 0..1; view: the camera's forward direction).
   const rng = mulberry32(2718);
   const rot = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(), east = new THREE.Vector3();

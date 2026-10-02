@@ -68,14 +68,10 @@
     </div>
     <div class="group">
       <div class="label"><span id="t-label">Time</span>
-        <span class="clock-wrap"><output id="clock"></output>
-          <button type="button" class="mini" id="t-run" aria-pressed="true" aria-label="Pause the clock" title="The clock runs a minute per second">
-            <svg class="i-pause" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
-            <svg class="i-play" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
-          </button>
-        </span>
+        <output id="clock"></output>
       </div>
       <div class="seg" id="times" role="group" aria-labelledby="t-label"></div>
+      <input type="range" class="day" id="t-day" min="0" max="23.5" step="0.5" aria-label="Time of day" title="Time of day, in half hours">
     </div>
     <div class="group">
       <div class="label"><span id="s-label">Sound</span></div>
