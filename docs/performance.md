@@ -52,6 +52,8 @@ Each item passed the visual gate or is pixel-identical to what it replaced.
 - **Start-up GPU micro-benchmark for the tier:** GPU clocks ramp over ~1 s of load, so a short benchmark measures clock state rather than GPU class.
 
 
+- **GPU-driven culling (compute-built instance lists, indirect draws) for the grass:** not built (2026-10-02). Hiding the grass altogether saved only 0.92–0.95× GPU (~0.4 ms; WebGPU, 1080p, hero/cine250/cine750, three runs, CIs spanning 1), and culling could win back only part of that. Rain and sparks already run entirely in the vertex stage, so compute would gain them nothing.
+
 ## Open risks
 
 - The blossom prepass relies on a 4-unit depth margin between two vertex shaders. A compiler that rounds them more differently would punch holes in the canopy.
