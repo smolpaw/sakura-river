@@ -4,7 +4,7 @@ What the renderer does for speed, what was tried and rejected, and what is still
 
 ## Targets
 
-- Devices from the last 3–4 years (owner, 2026-09-28): discrete desktop GPUs, modern integrated GPUs (Intel Iris Xe/Arc, AMD 680M-class, Apple M-series) and current mobile GPUs, on WebGPU or the WebGL2 fallback. Older hardware is out of scope.
+- Devices from the last 3–4 years (owner, 2026-09-28): discrete desktop GPUs, modern integrated GPUs (Intel Iris Xe/Arc, AMD 680M-class, Apple M-series) and current mobile GPUs, on WebGPU. The WebGL2 fallback need not match it in features or speed (owner, 2026-10-02). Older hardware is out of scope.
 - On integrated GPUs, memory bandwidth decides performance. The main costs are render-target formats, MSAA, fullscreen passes, shadow-map size and overdraw.
 - The owner's desktop (RTX 2060) is a personal machine, not a bench rig. Check changes with a few stills (see CLAUDE.md), and run long GPU timing only when the owner says it's a good time.
 

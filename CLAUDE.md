@@ -5,6 +5,7 @@ Procedural Three.js scene (cherry tree, river, Fuji-style mountain). See README.
 ## Working here
 
 - The owner cares about results, not about knowing the code. Work here is not tracked in GitHub issues. Any language or stack is fine when measurements show it helps.
+- This is a demo of what an agent can build, not a product that must run everywhere: WebGPU-only features are fine and Firefox may fail. The WebGL2 fallback stays because the headless look captures need it, but it does not run the WebGPU-only paths, so those are checked in a real browser.
 - `docs/performance.md`: what the renderer does for speed, what was rejected and why, open cross-GPU risks. Check it before adding anything that costs GPU time, and add new findings there.
 
 ## Conventions
