@@ -148,7 +148,13 @@ const blossomLight = (out) => Fn(() => {
   const vdirB = normalize(wp.sub(cameraPosition));
   const backB = pow(max(dot(vdirB, U.uSunDir), 0.0), 2.5);
   const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-  const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)));
+  // petals are thin: the sun on their far side shines through them, warm and a little more saturated
+  const sunV = normalize(cameraViewMatrix.mul(vec4(U.uSunDir, 0.0)).xyz);
+  const through = max(dot(normalView, sunV).negate(), 0.0).mul(1.0);
+  const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1).add(through))).toVar();
+  // light scattered inside the crown keeps the shade pink: the blue sky light alone turns it lilac grey
+  const lum = (c) => dot(c, vec3(0.2126, 0.7152, 0.0722));
+  o.assign(mix(o, diffuseColor.rgb.mul(lum(o).div(max(lum(diffuseColor.rgb), 1e-3))), 0.7));
   return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1)))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(1.6));
 })();
 
