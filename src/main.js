@@ -449,7 +449,7 @@ export async function create(canvas, opts = {}) {
   scene.add(koi.mesh);
   // reflection buffer per CSS pixel above DPR 1.4 (0.35 at DPR 2 passes against sub-pixel A/A, 0.25 does not;
   // bench/dpr_parity.py); the light shafts are per CSS pixel at every DPR (see buildPipeline below)
-  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr), clearing: koiClearing(koi.state, koi.count) });
+  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr), clearing: koiClearing(koi.state, koi.count), wheel: G.village.wheel });
   water.mesh.name = 'water';
   scene.add(water.mesh);
   const mist = makeMist(G.river);

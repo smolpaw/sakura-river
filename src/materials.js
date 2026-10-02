@@ -2,11 +2,11 @@
 // onBeforeCompile patch it replaces (see git history of src/shaders.js).
 import * as THREE from 'three/webgpu';
 import {
-  Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, select,
+  Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection,
 } from 'three/tsl';
-import { U, vnoise, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
+import { U, vnoise, hash12, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
 import { sunShadow } from './sunshadow.js';
 
@@ -31,7 +31,10 @@ export function terrainMaterial({ sky, paddies = false }) {
     const streak = float(0).toVar();
     If(dist.lessThan(40.0), () => { streak.assign(vnoise(wp.xz.mul(vec2(9.0, 6.0))).sub(0.5).mul(sstep(40.0, 12.0, dist)).mul(0.45)); });
     const carpet = grassColor(clamp(gr.z.add(patch.mul(0.12)), 0.0, 1.0), mix(0.5, 0.74, far).mul(patch.mul(0.12).add(1.0)).mul(streak.add(1.0)));
-    return mix(attribute('color', 'vec3').mul(dn.mul(0.42).add(0.7)), carpet, cover);
+    const c = mix(attribute('color', 'vec3').mul(dn.mul(0.42).add(0.7)), carpet, cover).toVar();
+    // the river's bed: rounded stones and gravel, each stone its own grey-brown, sand between, close by only
+    If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
+    return c;
   })();
   return new LitMaterial({ roughness: 0.96, metalness: 0, colorNode }, (out) => Fn(() => {
     // river-bed caustics and darkening under water: both are exactly zero / one above y = 0.03, so skip them there
@@ -69,6 +72,32 @@ export function terrainMaterial({ sky, paddies = false }) {
     return o;
   })());
 }
+
+// River stones: a jittered grid of cells, each a rounded stone of its own size and tone (nearest-two distances, so
+// stones meet in crevices of sand), with finer gravel cells between; `under`: the ground's colour, tinting the sand.
+const stones = (p, scale, seed) => {
+  const q = p.div(scale).toVar(), id = floor(q).toVar(), f = fract(q).toVar();
+  const d1 = float(8.0).toVar(), d2 = float(8.0).toVar(), tone = float(0).toVar();
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+    const c = id.add(vec2(i, j));
+    const o = vec2(hash12(c.add(seed)), hash12(c.add(seed + 37.1))).mul(0.8).add(0.1);
+    const v = vec2(i, j).add(o).sub(f), d = dot(v, v);
+    If(d.lessThan(d1), () => { d2.assign(d1); d1.assign(d); tone.assign(hash12(c.add(seed + 71.3))); }).ElseIf(d.lessThan(d2), () => { d2.assign(d); });
+  }
+  // x: inside the stone (0 at its edge), y: its tone
+  return vec2(sstep(0.0, 0.35, d2.sqrt().sub(d1.sqrt())), tone);
+};
+const riverBed = (xz, under) => {
+  // the cells' grid warped by a broad noise so stones don't line up in rows
+  const w = xz.add(vec2(vnoise(xz.mul(1.3)), vnoise(xz.mul(1.3).add(9.0))).mul(0.18));
+  const big = stones(w, 0.24, 3.0), small = stones(w, 0.07, 11.0);
+  const sand = mix(under, vec3(0.26, 0.23, 0.17), 0.6);
+  const tone = (t) => mix(mix(vec3(0.17, 0.165, 0.155), vec3(0.3, 0.26, 0.2), t), vec3(0.12, 0.15, 0.1), sstep(0.7, 0.95, t));
+  const gravel = mix(sand, tone(small.y), small.x.mul(0.55));
+  // only some cells hold a stone; the rest is gravel and sand
+  const has = sstep(0.45, 0.6, big.y.fract().mul(7.31).fract());
+  return mix(gravel, tone(big.y).mul(big.x.mul(0.35).add(0.75)), sstep(0.0, 0.2, big.x).mul(has));
+};
 
 // a flooded paddy: muddy water a hand deep, mirroring the sky (the far hills a dark band along the horizon), wind
 // ripples, the sun's glint

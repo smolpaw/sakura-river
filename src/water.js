@@ -7,7 +7,8 @@ import {
 import { U, vnoise, hash12, sstep, applyFog, fogTint } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
 
-export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null } = {}) {
+// wheel: the waterwheel's hub and its axle's direction ({ pos: [x, y, z], yaw }), where it churns the water white
+export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null, wheel = null } = {}) {
   const uniforms = { uHasRefl: uniform(0), uSpeed: uniform(1) };
   const { uZenith, uHorizon } = sky.uniforms;
   const uHB = uniform(depthMap.bounds), uRB = uniform(depthMap.rockBounds);
@@ -118,6 +119,22 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const streak = vnoise(vec2(p.x.mul(6.0), p.y.sub(U.uFlow.mul(1.3)).mul(0.9))).mul(0.6).add(foamN.mul(0.4));
     const broken = sstep(0.2, 0.65, wake.mul(streak.mul(0.9).add(0.45)));
     const foam = max(shore, broken).mul(sstep(0.0, 0.05, rock)).toVar();
+    if (wheel) {
+      // the waterwheel's paddles churn the water white where they dip, a trail of it downstream
+      const cy = Math.cos(wheel.yaw), sy = Math.sin(wheel.yaw), ax = vec2(cy, -sy), along = vec2(sy, cy);
+      const rel = vW.xz.sub(vec2(wheel.pos[0], wheel.pos[2]));
+      const a = dot(rel, ax), b = dot(rel, along).abs();
+      // (the trail runs down the current from the wheel; the current here flows +z)
+      const down = dot(rel, fl);
+      const churn = sstep(0.75, 0.25, a.abs()).mul(sstep(2.2, 1.2, b));
+      const trail = sstep(1.4, 0.4, a.abs()).mul(sstep(-0.5, 0.5, down)).mul(sstep(9.0, 1.0, down)).mul(streak.mul(0.8).add(0.3));
+      // broken into bubbles and streaks: the churn thick, the trail thinning into lines along the current
+      const bub = vnoise(vec2(p.x.mul(9.0), p.y.sub(U.uFlow.mul(1.6)).mul(7.0))).mul(0.5).add(foamN.mul(0.5));
+      // (the noise sits round 0.5: the cut falls as the churn rises, so the white covers more of it near the wheel)
+      const cutC = float(0.78).sub(churn.mul(0.3)), cutT = float(0.72).sub(trail.mul(0.12));
+      const white = max(sstep(cutC, cutC.add(0.06), bub).mul(churn), sstep(cutT, cutT.add(0.05), streak.mul(0.6).add(bub.mul(0.4))).mul(trail));
+      foam.assign(max(foam, white.mul(clamp(uniforms.uSpeed.mul(0.6).add(0.4), 0.0, 1.0))));
+    }
     col.assign(mix(col, vec3(0.85, 0.85, 0.82).mul(U.uSunVis.mul(0.6).add(0.4)).add(U.uSunColor.mul(0.12)), foam.mul(0.55)));
     const alpha = mix(0.35, 0.96, sstep(0.0, 1.1, depth)).toVar();
     alpha.assign(max(alpha, fres));
