@@ -511,18 +511,6 @@ export async function create(canvas, opts = {}) {
   // (not the woods' impostors: cards turned to the camera; their trees' lighter models cast for them, lods.js)
   if (forest.userData.impostors) forest.userData.impostors.mesh.layers.disable(FAR_LAYER);
 
-  // WebGPU: the scenery that never moves in one render bundle, its draws recorded once per pass and replayed (three
-  // re-records it when `needsUpdate` is set: when a level of detail re-sorts its instances). A bundle keeps the culling
-  // of when it was recorded, so only what is never frustum culled anyway goes in (the instanced models span the valley;
-  // with the temple, bridge, walls and farmland too, the GPU drew them behind the camera: +17% GPU in cine750).
-  const scenery = [terrain, fuji, cliffs, rocks, pebbles, village, bamboo, shrubs, lamps, forest];
-  const bundle = renderer.backend.isWebGPUBackend && opts.bundles !== false ? new THREE.BundleGroup() : null;
-  if (bundle) {
-    bundle.name = 'scenery';
-    for (const o of scenery) { o.traverse((c) => { c.frustumCulled = false; }); bundle.add(o); }
-    scene.add(bundle);
-  }
-
   for (const n of opts.hide || []) scene.getObjectsByProperty('name', n).forEach((o) => { o.visible = false; }); // bench: isolate objects
   mark('assembled');
   await yieldTask();
@@ -827,16 +815,21 @@ export async function create(canvas, opts = {}) {
     camera.updateMatrixWorld();
     sky.mesh.position.copy(camera.position);
     grass.userData.update(camera, warming); // warm-up draws every tile
-    let resorted = false;
-    for (const o of [forest, cliffs, rocks, pebbles, bamboo, village, lamps, shrubs]) resorted = o.userData.lod(camera.position) || resorted;
-    if (bundle && resorted) bundle.needsUpdate = true;
+    forest.userData.lod(camera.position);
+    cliffs.userData.lod(camera.position);
+    rocks.userData.lod(camera.position);
+    pebbles.userData.lod(camera.position);
     walls.userData.lod(camera.position);
+    bamboo.userData.lod(camera.position);
+    village.userData.lod(camera.position);
+    lamps.userData.lod(camera.position);
     if (wheel.children.length) {
       // a turn every ~9 s at the river's usual speed; the far model beyond 90 m
       const far = camera.position.distanceTo(wheel.position) > 90;
       wheel.children[0].visible = warming || !far; wheel.children[1].visible = warming || far;
       for (const sp of wheel.children) sp.rotation.x -= dt * 0.7 * (0.3 + S.river / 2.2);
     }
+    shrubs.userData.lod(camera.position);
     if (nearFlowers) nearFlowers.update(camera.position, warming);
 
     // sun light / shadow frustum anchored on the tree

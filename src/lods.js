@@ -47,9 +47,8 @@ export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null,
   }
   group.userData.impostors = imp;
   const last = new THREE.Vector3(Infinity, 0, 0);
-  // returns true when the draws changed (a render bundle holding them must be recorded again)
   group.userData.lod = (cam) => {
-    if (cam.distanceToSquared(last) < STEP * STEP) return false;
+    if (cam.distanceToSquared(last) < STEP * STEP) return;
     last.copy(cam);
     if (imp) imp.reset();
     for (const [k, { l, level, lod, leaves }] of sets.entries()) {
@@ -79,7 +78,6 @@ export async function makeLods(url, kinds, lists, mat, ranges, leavesMat = null,
       }
     }
     if (imp) imp.commit();
-    return true;
   };
   return group;
 }
@@ -124,15 +122,12 @@ export async function makeMerged(url, kind, lists, mat, range) {
     return { centre, levels, far: false };
   });
   group.userData.lod = (cam) => {
-    let changed = false;
     for (const s of sets) {
-      const d = cam.distanceTo(s.centre), was = s.far;
+      const d = cam.distanceTo(s.centre);
       s.far = s.far ? d > range - HYST : d > range + HYST;
       s.levels[0].visible = !s.far;
       s.levels[1].visible = s.far;
-      changed ||= was !== s.far;
     }
-    return changed;
   };
   return group;
 }
