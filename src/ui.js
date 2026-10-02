@@ -41,6 +41,13 @@ import { WEATHERS, TIMES } from './weather.js';
     $('times').appendChild(b);
     return b;
   });
+  // a random half hour at least two hours from now, reached like a preset (forward, through the night if need be)
+  $('t-random').addEventListener('click', function () {
+    if (!engine) return;
+    var now = engine.timeOfDay(), h;
+    do { h = Math.floor(Math.random() * 48) / 2; } while (Math.abs(((h - now + 36) % 24) - 12) < 2);
+    engine.setTimeOfDay(h); day.value = h;
+  });
   day.addEventListener('input', function () { dragged = +this.value; showTime(); });
   // straight to the chosen half hour, back if it is earlier (presets go forward through the night)
   day.addEventListener('change', function () { dragged = null; if (engine) { engine.setTimeOfDay(+this.value, true, false); showTime(); } });
