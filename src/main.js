@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter, setLightMap } from './tsl.js';
 import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
-import { CLOUD, setCloudNoise, bakeClouds, makeClouds } from './clouds.js';
+import { CLOUD, setCloudNoise, makeCloudSky } from './clouds.js';
 import { lightMap, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
@@ -49,9 +49,9 @@ import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], turf: 2900, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, far: 4096, impostorCell: 128, clouds: 512, cloudCount: 320, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
-  medium: { pr: 1.5, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, far: 2048, impostorCell: 96, clouds: 384, cloudCount: 260, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
-  low: { pr: 1.25, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, far: 1024, impostorCell: 64, clouds: 256, cloudCount: 200, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
+  high: { pr: 2.0, terrain: [420, 440], turf: 2900, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, far: 4096, impostorCell: 128, clouds: [3584, 896], cloudSteps: 56, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
+  medium: { pr: 1.5, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, far: 2048, impostorCell: 96, clouds: [3072, 768], cloudSteps: 48, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
+  low: { pr: 1.25, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, far: 1024, impostorCell: 64, clouds: [2048, 512], cloudSteps: 40, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -173,12 +173,11 @@ export async function create(canvas, opts = {}) {
 
   // ---------- sky + terrain ----------
   setCloudNoise(G.cloudNoise);
-  const sky = makeSky();
+  // the clouds: raymarched into a panorama a slice at a time (updated before each render), read by the sky
+  const cloudSky = makeCloudSky(renderer, { size: Q.clouds, steps: Q.cloudSteps }, U.uSunDir);
+  const sky = makeSky({ clouds: cloudSky.texture });
   sky.mesh.name = 'sky';
   scene.add(sky.mesh);
-  // the cumulus round the horizon: pictures baked now, cards drawn over the sky
-  const clouds = makeClouds(bakeClouds(renderer, Q.clouds), Q.cloudCount, sky.uniforms, U);
-  scene.add(clouds.mesh);
   const terrainGeo = G.terrain.geo;
   const terrain = new THREE.Mesh(terrainGeo, M.terrainMaterial({ sky }));
   terrain.receiveShadow = true;
@@ -783,7 +782,6 @@ export async function create(canvas, opts = {}) {
     sky.uniforms.uCloud.value.y -= dt * (0.003 + S.wind * 0.005);
     // the clouds' shadows drift with the sky's clouds (sunshadow.js)
     CLOUD.uDrift.value.copy(sky.uniforms.uCloud.value); CLOUD.uCover.value = S.clouds; CLOUDS.uSun.value.copy(U.uSunDir.value);
-    clouds.update(camera.position, CLOUD.uDrift.value, S.clouds);
     U.uFogDensity.value = 0.0006 + Math.pow(S.fog, 1.5) * 0.013;
     U.uFogFalloff.value = 0.028;
     U.uAerial.value = (0.7 + 1.2 * S.fog) / 2400; // hazier air with the weather's haze
@@ -872,6 +870,7 @@ export async function create(canvas, opts = {}) {
     if (probe) probe.beginFrame();
     sun.shadow.needsUpdate = frameNo % shadowEvery === 0 || frameNo < 3;
     farShadow.update(scene, U.uSunDir.value, { every: timeTween ? 4 : 15, force: frameNo < 3 || opts.farEveryFrame });
+    cloudSky.update(camera.position, U.uSunDir.value, S.clouds);
     // the reflector skips when the camera is below the water plane; fall back to the analytic sky then
     reflSkip = !(frameNo % reflEvery === 0 || frameNo < 3);
     water.uniforms.uHasRefl.value = reflector && reflEvery < 1e9 && camera.position.y > 0.02 ? 1 : 0;
