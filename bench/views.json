@@ -10,7 +10,8 @@
     { "id": "cine625", "cine": 0.625 },
     { "id": "cine750", "cine": 0.75 },
     { "id": "cine875", "cine": 0.875 },
-    { "id": "crown", "pos": [-20, 3, 0], "target": [-17, 4.5, 2.5] }
+    { "id": "crown", "pos": [-20, 3, 0], "target": [-17, 4.5, 2.5] },
+    { "id": "walk", "pos": [-21.2, 2.84, -20], "target": [-21.4, 2.5, -40] }
   ],
   "settings": [
     { "id": "default", "set": {} },
