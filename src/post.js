@@ -3,7 +3,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, vec4, uniform, uv, rtt, mix, max, min, dot, sqrt, clamp, length, exp, fract, select, Loop, renderOutput, toneMappingExposure,
-  pass,
+  pass, floor, abs, sin,
 } from 'three/tsl';
 import { hashSin, sstep } from './tsl.js';
 
@@ -150,10 +150,45 @@ export function grade(input) {
   return { node, uniforms: u };
 }
 
-// scene pass -> shafts -> bloom -> tone map / sRGB -> grade
-// shaftScale: light-shaft buffer size relative to the drawing buffer
-export function buildPipeline(renderer, scene, camera, { raySamples, bloomStrength = 0.4, msaa = 4, shaftScale = 0.5 }) {
+// Supersampling's resolve: `input` (the tone-mapped image, up to `maxRatio` times the drawing buffer each way) filtered
+// down to the drawing buffer by a Lanczos-2 kernel over every input texel it reaches (36 taps at 1.5x). Compared on
+// crops with a single bilinear tap (as the browser would scale a larger canvas), an area-weighted box and a tent:
+// bilinear aliases (it reads 4 of the ~2.25 x 2.25 texels under a pixel), box and tent are softer. After tone mapping,
+// so a bright highlight's edge does not spread into its neighbours.
+export function downsample(input, maxRatio) {
+  const u = { inRes: uniform(new THREE.Vector2(1, 1)), outRes: uniform(new THREE.Vector2(1, 1)) };
+  const A = 2; // lobes
+  const lanczos = (d) => {
+    const x = max(abs(d), 1e-4), px = x.mul(Math.PI);
+    return select(x.lessThan(A), sin(px).mul(sin(px.div(A))).mul(A).div(px.mul(px)), float(0.0));
+  };
+  const node = Fn(() => {
+    const ratio = u.inRes.div(u.outRes);
+    const p = uv().mul(u.inRes).sub(0.5).toVar(); // the output pixel's middle, in input texels
+    const base = floor(p).toVar();
+    const sum = vec3(0.0).toVar(), wsum = float(0.0).toVar();
+    const R = Math.ceil(A * maxRatio); // the kernel's reach in input texels
+    for (let j = 1 - R; j <= R; j++) {
+      for (let i = 1 - R; i <= R; i++) {
+        const t = base.add(vec2(i, j));
+        const d = t.sub(p).div(ratio); // in output pixels
+        const w = lanczos(d.x).mul(lanczos(d.y));
+        sum.addAssign(input.sample(t.add(0.5).div(u.inRes)).rgb.mul(w));
+        wsum.addAssign(w);
+      }
+    }
+    return vec4(clamp(sum.div(wsum), 0.0, 1.0), 1.0);
+  })();
+  return { node, uniforms: u };
+}
+
+// scene pass -> shafts -> bloom -> tone map / sRGB -> (supersampling: downsample) -> grade
+// shaftScale: light-shaft buffer size relative to the drawing buffer; ss: the scene's render scale over the drawing
+// buffer (above 1 it is supersampled: the scene and the tone-mapped image at ss times the drawing buffer each way,
+// filtered down before the grade; setScale lowers it where the device's texture limit requires)
+export function buildPipeline(renderer, scene, camera, { raySamples, bloomStrength = 0.4, msaa = 4, shaftScale = 0.5, ss = 1 }) {
   const scenePass = pass(scene, camera, { samples: msaa });
+  scenePass.setResolutionScale(ss);
   const color = scenePass.getTextureNode('output');
   const shafts = lightShafts(color, raySamples, shaftScale);
   const hdr = Fn(() => {
@@ -162,10 +197,25 @@ export function buildPipeline(renderer, scene, camera, { raySamples, bloomStreng
     return vec4(min(c.rgb.add(r.mul(shafts.uniforms.tint).mul(shafts.uniforms.intensity).mul(0.4)), vec3(24.0)), 1.0);
   })();
   const bl = unrealBloom(hdr, { strength: bloomStrength, radius: 0.55, threshold: 2.2 });
-  const ldr = rtt(renderOutput(vec4(aces170(hdr.rgb.add(bl.node), toneMappingExposure), 1.0), THREE.NoToneMapping, THREE.SRGBColorSpace));
+  const ldr = rtt(renderOutput(vec4(aces170(hdr.rgb.add(bl.node), toneMappingExposure), 1.0), THREE.NoToneMapping, THREE.SRGBColorSpace), null, null, { resolutionScale: ss });
   ldr.name = 'Output';
-  const g = grade(ldr);
+  let down = null, resolved = ldr;
+  if (ss > 1) {
+    down = downsample(ldr, ss);
+    resolved = rtt(down.node);
+    resolved.name = 'Downsample';
+  }
+  const g = grade(resolved);
   const pipeline = new THREE.RenderPipeline(renderer, g.node);
   pipeline.outputColorTransform = false;
-  return { pipeline, scenePass, shafts, bloom: bl, grade: g };
+  return {
+    pipeline, scenePass, shafts, bloom: bl, grade: g,
+    // the scene's render scale for a drawing buffer of w x h (no more than the ss it was built with)
+    setScale(s, w, h) {
+      if (!down) return;
+      scenePass.setResolutionScale(s); ldr.setResolutionScale(s);
+      down.uniforms.inRes.value.set(Math.floor(w * s), Math.floor(h * s));
+      down.uniforms.outRes.value.set(w, h);
+    },
+  };
 }

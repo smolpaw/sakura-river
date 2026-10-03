@@ -25,7 +25,7 @@ import shrubsUrl from './models/shrubs.glb?url&inline';
 import lampsUrl from './models/lamps.glb?url&inline';
 import { LAMP_KINDS } from './lanterns.js';
 import { VILLAGE_KINDS } from './village.js';
-import { makeSky, skyState, moonState } from './sky.js';
+import { makeSky, skyState, moonState, uStarPx } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
 import { makeGpuPetals } from './petalsgpu.js';
@@ -47,10 +47,15 @@ import { runJobs } from './gen/pool.js';
 import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 
+// pr: cap on the device pixel ratio; ss: the scene's render scale over the drawing buffer (supersampling, resolved by
+// the post chain's downsample, post.js); lodScale: the model LODs' and the impostors' switch distances multiplied
+// (lods.js); nearModels: extra near-detail models (lods.js). Ultra is only ever picked by hand (detectTier never
+// returns it): it ignores the frame budget and is sized for ~4 GB of GPU memory at 1080p.
 const TIERS = {
-  high: { pr: 2.0, terrain: [420, 440], turf: 2900, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, far: 4096, impostorCell: 128, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5 },
-  medium: { pr: 1.5, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, far: 2048, impostorCell: 96, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4 },
-  low: { pr: 1.25, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, far: 1024, impostorCell: 64, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0 },
+  ultra: { pr: 3, ss: 1.5, terrain: [600, 630], turf: 4500, flowers: 4000, petals: 5400, fallen: 5600, motes: 800, shadow: 8192, far: 8192, impostorCell: 192, refl: 1, msaa: 4, rays: 64, forest: 2600, bloomRes: 1, koi: 16, rain: 36000, near: 9, atlas: 2048, lodScale: 1.7, nearModels: true },
+  high: { pr: 2.0, ss: 1, terrain: [420, 440], turf: 2900, flowers: 2600, petals: 3600, fallen: 3800, motes: 500, shadow: 4096, far: 4096, impostorCell: 128, refl: 0.5, msaa: 4, rays: 48, forest: 2600, bloomRes: 1, koi: 12, rain: 24000, near: 5, atlas: 1024, lodScale: 1, nearModels: false },
+  medium: { pr: 1.5, ss: 1, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, shadow: 2048, far: 2048, impostorCell: 96, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4, atlas: 512, lodScale: 1, nearModels: false },
+  low: { pr: 1.25, ss: 1, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, shadow: 1024, far: 1024, impostorCell: 64, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0, atlas: 512, lodScale: 1, nearModels: false },
 };
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
@@ -150,8 +155,8 @@ export async function create(canvas, opts = {}) {
     treeMain: { name: 'trees', args: { list: trees.slice(0, 1), tier: tierName, triMul } },
     treesA: { name: 'trees', args: { list: trees.slice(1, 4), tier: tierName, triMul } },
     treesB: { name: 'trees', args: { list: trees.slice(4), tier: tierName, triMul } },
-    atlas: { name: 'atlas', args: { size: tierName === 'high' ? 1024 : 512 } },
-    leafAtlas: { name: 'leafAtlas', args: { size: tierName === 'high' ? 1024 : 512 } },
+    atlas: { name: 'atlas', args: { size: Q.atlas } },
+    leafAtlas: { name: 'leafAtlas', args: { size: Q.atlas } },
     bark: { name: 'bark' },
     fuji: { name: 'fuji' },
     props: { name: 'props', args: { triMul } },
@@ -182,7 +187,8 @@ export async function create(canvas, opts = {}) {
   // ---------- lights ----------
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(Q.shadow, Q.shadow);
+  const shadowSize = Math.min(Q.shadow, maxTex);
+  sun.shadow.mapSize.set(shadowSize, shadowSize);
   const sc = sun.shadow.camera;
   sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 320;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0; // applied per receiver (SHADOW_NORMAL_BIAS in tsl.js)
@@ -205,7 +211,8 @@ export async function create(canvas, opts = {}) {
   const atlas = atlasTexture(G.atlas);
   if (opts.debug) window.__sakuraDebug = { bark, atlas };
   const maxAniso = renderer.getMaxAnisotropy();
-  atlas.anisotropy = Math.min(16, maxAniso); bark.map.anisotropy = Math.min(16, maxAniso); bark.bump.anisotropy = Math.min(8, maxAniso);
+  const aniso = (n) => Math.min(tierName === 'ultra' ? 16 : n, maxAniso); // ultra: the most the device filters
+  atlas.anisotropy = aniso(16); bark.map.anisotropy = aniso(16); bark.bump.anisotropy = aniso(8);
   const barkMat = M.barkMaterial(bark.map, bark.bump);
   const a2c = msaa > 0;
   const blossomMat = M.blossomMaterial(atlas, a2c);
@@ -392,7 +399,7 @@ export async function create(canvas, opts = {}) {
   scene.add(flowers);
   const leafAtlas = atlasTexture(G.leafAtlas);
   leafAtlas.colorSpace = THREE.NoColorSpace; // painted near white as a shade, not a colour
-  leafAtlas.anisotropy = Math.min(8, maxAniso);
+  leafAtlas.anisotropy = aniso(8);
   // beyond IMPOSTOR_FROM metres the woods' trees are impostors (impostors.js), baked from their full models now
   const impostor = {
     from: 1,
@@ -501,7 +508,7 @@ export async function create(canvas, opts = {}) {
   }
 
   // the valley's shadow map (sunshadow.js): the ground, the woods and the buildings cast into it
-  const farShadow = makeFarShadow(renderer, Q.far);
+  const farShadow = makeFarShadow(renderer, Math.min(Q.far, maxTex));
   // (the cherries by their trunks and their flowers' shadow proxies, layer 2: a low sun throws their shadows far
   // beyond the sharp map's square)
   const cherries = [main, ...smallTrees].flatMap((t) => t.group.children.filter((c) => c.name === 'bark' || c.layers.isEnabled(2)));
@@ -516,7 +523,7 @@ export async function create(canvas, opts = {}) {
   await yieldTask();
   // ---------- post ----------
   // light shafts per CSS pixel: 0.25 of the drawing buffer at DPR 2 is ~7x below sub-pixel A/A noise (dpr_parity)
-  const post = buildPipeline(renderer, scene, camera, { raySamples: Q.rays, msaa, shaftScale: opts.shaftScale ?? 0.5 / dpr });
+  const post = buildPipeline(renderer, scene, camera, { raySamples: Q.rays, msaa, shaftScale: opts.shaftScale ?? 0.5 / dpr, ss: Q.ss });
   const rays = post.shafts.uniforms;
 
   // ---------- camera / controls ----------
@@ -644,10 +651,18 @@ export async function create(canvas, opts = {}) {
     const g = post.grade.uniforms;
     renderer.getDrawingBufferSize(g.res.value);
     post.bloom.setSize(g.res.value.x, g.res.value.y);
-    g.sharp.value = pr >= 1.75 ? 0.3 : pr >= 1.2 ? 0.45 : 0.6;
+    // supersampling (ultra): the scene at ss times the drawing buffer, within the device's texture limit
+    const ss = Math.max(1, Math.min(Q.ss, maxTex / Math.max(g.res.value.x, g.res.value.y)));
+    post.setScale(ss, g.res.value.x, g.res.value.y);
+    // sharpening by the scene's pixel density: less where pixels are small (high DPR) or supersampled (the Lanczos
+    // downsample sharpens a little itself)
+    const spr = pr * ss;
+    g.sharp.value = spr >= 1.75 ? 0.3 : spr >= 1.2 ? 0.45 : 0.6;
+    uStarPx.value = ss;
     rays.aspect.value = w / h;
-    motes.uPx.value = pr * (h / 900) * 1.3;
-    lanterns.uFocal.value = (h * pr) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    // (sprite sizes in the scene pass's pixels)
+    motes.uPx.value = pr * ss * (h / 900) * 1.3;
+    lanterns.uFocal.value = (h * pr * ss) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   }
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);

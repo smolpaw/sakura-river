@@ -102,7 +102,7 @@ import { WEATHERS, TIMES } from './weather.js';
 
   // ---------- quality: a fixed tier, or auto (detected tier + adaptive resolution); changing it reloads ----------
   var quality = load('sr.quality');
-  if (['high', 'medium', 'low'].indexOf(quality) < 0) quality = 'auto';
+  if (['ultra', 'high', 'medium', 'low'].indexOf(quality) < 0) quality = 'auto';
   $('quality').value = quality;
   $('quality').addEventListener('change', function () { save('sr.quality', this.value); location.reload(); });
 

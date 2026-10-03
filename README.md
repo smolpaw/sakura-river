@@ -22,7 +22,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/world.js`: height field, river path, the village's farmland (paddies stepped into the land along its contours, rectangular on the valley floor), lanes and building pads, terrain mesh (with the grass grown at each vertex) and the finer mesh over the farmland and the village, river ribbon, water-depth map and the finer map of rocks in the water (with the white water where the current breaks on them).
 - `src/tree.js`: procedural cherry tree (Somei Yoshino form) in full bloom, single-flower blossoms, bark and flower textures; its trunk and main limbs are a Blender model grown from the same skeleton (`trunkSkeleton`).
 - `src/blossoms.js`: the main tree's flowers near the camera drawn as a modelled flower instead of the painted card.
-- `src/grass.js`: the meadow's grass, placed on the GPU around the camera out to 240 m: blades on world-fixed cells in levels of coarser cells and thinner density with distance, standing on the terrain mesh's own grid (heights and the grass grown there, from `world.js`), the ground under them coloured to match.
+- `src/grass.js`: the meadow's grass, placed on the GPU around the camera out to 240 m (300 m on ultra): blades on world-fixed cells in levels of coarser cells and thinner density with distance, standing on the terrain mesh's own grid (heights and the grass grown there, from `world.js`), the ground under them coloured to match.
 - `src/vegetation.js`: the deer's turf, wildflowers, rocks, the rock walls lining the gorge where the river cuts through the temple's knoll, the bamboo groves behind the temple, and where the woods on the hills grow: groves of cedar, cypress, oak and wild cherry, and black pines on the cliff rims.
 - `src/impostors.js`: the woods' trees beyond 140 m as impostors: their full models baked at start-up into views from a hemisphere of directions (colour and normals), drawn as cards turned to the camera, blending the four nearest views.
 - `src/lods.js`: the Blender-built models (the woods' trees, the gorge's walls, the bamboo, the river's boulders, the village's buildings), instanced, a full model and lighter ones for each kind switched by distance; and many copies of one small model merged (the village's stone walls).
@@ -44,7 +44,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/petalsgpu.js`: on WebGPU, the falling petals simulated in a compute pass, from every cherry.
 - `src/petals.js`: simulated falling petals (on the CPU: the WebGL fallback), the fallen-petal carpet and the petal rafts on the water.
 - `src/fx.js`: petal, pollen-mote and lantern materials, the temple's and the stone lanterns' glows.
-- `src/post.js`: light shafts pass and final grade (sharpening, local contrast, vignette).
+- `src/post.js`: light shafts pass, final grade (sharpening, local contrast, vignette) and, on ultra, the supersampled image's downsample.
 - `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera, thunder, bird songs, the evening bell.
 - `public/audio/`: the sound files, built by `tools/audio.mjs` (`node tools/audio.mjs`, needs ffmpeg) from the sources below.
 - `src/tsl.js`: shared uniforms, noise, wind, height fog, the lamps' light on their surroundings (read from the light map) and the lit material (TSL: compiles to WGSL and GLSL).
@@ -69,7 +69,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
     scene.resetCamera();
     scene.dispose();
 
-`quality` is optional ('high', 'medium' or 'low'). When it's left out, the quality level is picked from the device. With `fixedQuality` the adaptive resolution controller is off (the page does this when a quality is chosen by hand). `hour` is the starting clock hour. `set('time', t)` takes the old 0..1 scale (05:00..19:00; -0.08..1.08 reaches into the night).
+`quality` is optional ('ultra', 'high', 'medium' or 'low'). When it's left out, the quality level is picked from the device, never ultra: ultra supersamples the scene and raises the detail beyond high with no regard for frame rate, for strong GPUs (docs/performance.md, Ultra). With `fixedQuality` the adaptive resolution controller is off (the page does this when a quality is chosen by hand). `hour` is the starting clock hour. `set('time', t)` takes the old 0..1 scale (05:00..19:00; -0.08..1.08 reaches into the night).
 
 ## Sound
 

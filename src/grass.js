@@ -5,7 +5,7 @@
 // (level k holds ranks 4^-(k+1) .. 4^-k, the last level everything below). A blade is kept while its rank is under
 // keep(d) = (D0 / d)^2 times the ground's density, and shrinks into the ground as keep(d) falls past it, so the
 // grass thins smoothly with distance; level k is only needed out to D0 * 2^(k+1), so every level costs about the
-// same and the grass reaches MAXD metres for a few levels' worth of blades. Far blades are wider and turn to face
+// same and the grass reaches maxd metres for a few levels' worth of blades. Far blades are wider and turn to face
 // the camera. Each level is one instanced draw over the tiles of its grid that are in view (culled on the CPU).
 import * as THREE from 'three/webgpu';
 import {
@@ -18,13 +18,14 @@ import { sunShadow } from './sunshadow.js';
 import { TERRAIN_GRID, terrainSMaxZ } from './world.js';
 
 // c0: finest cell (m), d0: full density out to here (m), wide: blade width (fewer blades, wider), segs: blade
-// segments per level. Blades drawn go with (d0 / c0)^2: medium 67% of high, low 25%.
+// segments per level, maxd: the grass ends here (m; the terrain's colour carries on, materials.js terrainMaterial).
+// Blades drawn go with (d0 / c0)^2: ultra 2x high, medium 67% of high, low 25%.
 export const GRASS_TIERS = {
-  high: { c0: 0.17, d0: 12, wide: 1, segs: [4, 3, 2, 1, 1] },
-  medium: { c0: 0.19, d0: 11, wide: 1.1, segs: [3, 2, 2, 1, 1] },
-  low: { c0: 0.27, d0: 9.5, wide: 1.4, segs: [2, 2, 1, 1] },
+  ultra: { c0: 0.14, d0: 14, wide: 0.85, segs: [5, 4, 3, 2, 1], maxd: 300 },
+  high: { c0: 0.17, d0: 12, wide: 1, segs: [4, 3, 2, 1, 1], maxd: 240 },
+  medium: { c0: 0.19, d0: 11, wide: 1.1, segs: [3, 2, 2, 1, 1], maxd: 240 },
+  low: { c0: 0.27, d0: 9.5, wide: 1.4, segs: [2, 2, 1, 1], maxd: 240 },
 };
-export const MAXD = 240; // the grass ends here; the terrain's colour carries on (materials.js terrainMaterial)
 const SIDE = 8; // tiles per side of a level's grid, centred on the camera
 const MAXT = 40; // tiles drawn per level at most (a level's range circle covers ~28-36 of its 64)
 
@@ -113,7 +114,7 @@ const fineMask = (maskTex, b) => Fn(([p]) => {
 });
 
 export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
-  const T = GRASS_TIERS[tier];
+  const T = GRASS_TIERS[tier], MAXD = T.maxd;
   const nLev = T.segs.length;
   const gridTex = new THREE.DataTexture(grid, segX + 1, segZ + 1, THREE.RGBAFormat, THREE.FloatType);
   gridTex.minFilter = gridTex.magFilter = THREE.NearestFilter;

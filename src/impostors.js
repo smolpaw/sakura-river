@@ -27,6 +27,10 @@ const decodeGrid = (g) => {
 
 // Bake: `models[k]` = [geometry, matrix] parts (the full model and its leaf cards, in the kind's own frame).
 export function bakeImpostors(renderer, models, leafAtlas, cell) {
+  // (the atlas within the device's texture limit: 4096 on WebGPU compatibility mode, 8192 core)
+  const b = renderer.backend, gl = b.gl;
+  const maxTex = b.isWebGPUBackend ? b.device.limits.maxTextureDimension2D : Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+  cell = Math.min(cell, Math.floor(maxTex / (COLS * N)));
   const W = COLS * N * cell, H = ROWS * N * cell;
   const target = () => {
     const rt = new THREE.RenderTarget(W, H, { depthBuffer: true });

@@ -23,6 +23,9 @@ const POLE = new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(35)), Math.c
 // the galactic plane in the stars' frame: in April it stands low in the west after dusk (the winter Milky Way)
 const MILKY_N = new THREE.Vector3(0.62, 0.55, -0.56).normalize();
 const MILKY_U = new THREE.Vector3(0, 1, 0).cross(MILKY_N).normalize(), MILKY_V = MILKY_N.clone().cross(MILKY_U);
+// the scene pass's pixels per output pixel each way (above 1 when supersampled, main.js): a star keeps its size on
+// screen instead of shrinking into the downsample
+export const uStarPx = uniform(1);
 const starField = Fn(([s]) => {
   const a = abs(s).toVar();
   const m = max(a.x, max(a.y, a.z)).toVar();
@@ -31,7 +34,7 @@ const starField = Fn(([s]) => {
   const c = floor(q).add(dot(ax.mul(sign(s)), vec3(1000.0, 2000.0, 3000.0))).toVar(); // cell id, per face
   const o = vec2(hash12(c.add(17.3)), hash12(c.add(41.7))).mul(0.5).add(0.25);
   // distance in pixels: the pixel's angle from fwidth of the direction (continuous across the cube's seams)
-  const px = length(fwidth(s)).div(m).mul(STAR_N * 0.6);
+  const px = length(fwidth(s)).div(m).mul(STAR_N * 0.6).mul(uStarPx);
   const r = length(fract(q).sub(o)).div(px);
   const k = hash12(c.add(5.1)).toVar();
   const b = pow(hash12(c.add(9.7)), 14.0).mul(3.2).add(0.004); // many faint stars, a few bright ones

@@ -11,7 +11,8 @@ export const FAR_LAYER = 3;
 // the valley's box: everything the camera can come near, and the hills round it
 const BOX = new THREE.Box3(new THREE.Vector3(-480, -12, -640), new THREE.Vector3(480, 260, 330));
 
-const rt = new THREE.RenderTarget(1, 1, { depthBuffer: true });
+// (only its depth is read: the colour target it must have is one byte per texel: 192 MB less than RGBA at 8192)
+const rt = new THREE.RenderTarget(1, 1, { depthBuffer: true, format: THREE.RedFormat });
 rt.depthTexture = new THREE.DepthTexture(1, 1);
 rt.depthTexture.compareFunction = THREE.LessEqualCompare;
 rt.depthTexture.minFilter = rt.depthTexture.magFilter = THREE.LinearFilter;
