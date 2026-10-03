@@ -224,15 +224,16 @@ export function makeWalk(world, { canvas, obstacles = [], onEscape = null } = {}
   s.x = c0.x; s.z = c0.z; s.y = net.ground(s.x, s.z).y;
   // input: held keys, the debug hooks' injected input, the touch sticks
   const keys = new Set(), inj = { forward: 0, strafe: 0, hurry: false }, stick = { forward: 0, strafe: 0, hurry: false };
-  let on = false, locked = false, unlockedAt = -1e9;
+  let on = false, locked = false, unlockedAt = -1e9, active = false;
   const look = (dx, dy) => {
+    if (!active) return; // (not during the flight into the eye, which is aimed where the eye looked when it began)
     s.yaw -= dx * WALK.look;
     s.pitch = clamp(s.pitch - dy * WALK.look, -WALK.pitch, WALK.pitch);
   };
   const MOVE = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
   const typing = (e) => { const t = e.target; return t && (t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)); };
   const onKey = (e) => {
-    if (!on || typing(e)) return;
+    if (!on || (e.type === 'keydown' && typing(e))) return; // (a key let go in a control still lets go)
     if (MOVE.has(e.code)) {
       if (e.type === 'keydown') keys.add(e.code); else keys.delete(e.code);
       if (e.code.startsWith('Arrow')) e.preventDefault();
@@ -278,6 +279,7 @@ export function makeWalk(world, { canvas, obstacles = [], onEscape = null } = {}
       t.x = e.clientX; t.y = e.clientY;
       stickFromTouches();
     } else if (drag && !locked && e.pointerType !== 'touch') {
+      if (!(e.buttons & 1)) { drag = null; return; } // (let go over the page's controls: no pointerup here)
       look(e.clientX - drag.x, e.clientY - drag.y);
       drag.x = e.clientX; drag.y = e.clientY;
     }
@@ -321,7 +323,8 @@ export function makeWalk(world, { canvas, obstacles = [], onEscape = null } = {}
       s.x = c.x; s.z = c.z; s.y = net.ground(s.x, s.z).y; s.vx = s.vz = s.speed = 0;
       if (yaw !== undefined) s.yaw = yaw;
     },
-    update(dt, active) {
+    update(dt, act) {
+      active = act;
       let f = 0, st = 0;
       if (active) {
         f = clamp(k('KeyW', 'ArrowUp') - k('KeyS', 'ArrowDown') + inj.forward + stick.forward, -1, 1);

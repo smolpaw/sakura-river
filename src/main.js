@@ -347,9 +347,9 @@ export async function create(canvas, opts = {}) {
   scene.add(templeGlows);
   // the Blender models' levels of detail (lods.js): on the Ultra tier they reach further (lodScale) and, near the
   // camera, far more detailed models take over (tools/<name>.py's `_near` meshes, fetched from public/models/)
-  const lodScale = Q.lodScale ?? opts.lodScale ?? 1;
+  const lodScale = opts.lodScale ?? Q.lodScale; // (opts: the bench's, to try them on any tier)
   // (the pebbles are 5 cm stones, and a grove has dozens of stands within 30 m: their near models only close by)
-  const nearOf = (name, range = NEAR_RANGE) => ((Q.nearModels ?? opts.nearModels) ? { nearUrl: ultraUrl(name), nearRange: range } : {});
+  const nearOf = (name, range = NEAR_RANGE) => ((opts.nearModels ?? Q.nearModels) ? { nearUrl: ultraUrl(name), nearRange: range } : {});
   // (all their files fetched at once, not one after another as the groups below are built)
   for (const n of ['lamps', 'rocks', 'forest', 'cliffs', 'bamboo', 'shrubs', 'village']) if (nearOf(n).nearUrl) loadModel(ultraUrl(n)).catch(() => {});
   // the lantern lines' posts, the bonbori along the banks, the fire baskets by the cherry tree; the flames, their
@@ -595,11 +595,15 @@ export async function create(canvas, opts = {}) {
   function startTween(toPos, toTarget, dur, fov = ORBIT_FOV) {
     tween = { fp: camera.position.clone(), ft: controls.target.clone(), tp: toPos.clone(), tt: toTarget.clone(), ff: camera.fov, tf: fov, t: 0, dur, walk: false, lift: 0 };
   }
+  // the lanterns' halos are sized in the scene pass's pixels: the canvas height times the pixel ratio and, on ultra,
+  // the supersampling (ssNow: set by resize)
+  let ssNow = 1;
+  const focal = (f) => (H * renderer.getPixelRatio() * ssNow) / (2 * Math.tan(THREE.MathUtils.degToRad(f / 2)));
   function setFov(f) {
     if (Math.abs(camera.fov - f) < 1e-4) return;
     camera.fov = f;
     camera.updateProjectionMatrix();
-    lanterns.uFocal.value = (H * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(f / 2))); // as resize()
+    lanterns.uFocal.value = focal(f);
   }
   // settle the default view under the controls' limits (it looks up past maxPolarAngle), so the intro and reset
   // flights end exactly where the camera then rests instead of jumping on the first controls update
@@ -659,7 +663,9 @@ export async function create(canvas, opts = {}) {
         w.onStep(({ foot }) => { if (walking && sound.footstep) sound.footstep({ surface: walk.state.surface, hurry: walk.state.hurry, foot }); });
         walker = w;
         return w;
-      });
+      })
+      // (a failed fetch is tried again on the next entry; walking goes on without the body meanwhile)
+      .catch((e) => { console.warn('traveller not loaded', e); walkerLoad = null; return null; });
     return walkerLoad;
   }
   // Into walk mode: the camera flies into the walker's eye (cinematic and auto-orbit off), then the body is in
@@ -754,7 +760,7 @@ export async function create(canvas, opts = {}) {
     renderer.getDrawingBufferSize(g.res.value);
     post.bloom.setSize(g.res.value.x, g.res.value.y);
     // supersampling (ultra): the scene at ss times the drawing buffer, within the device's texture limit
-    const ss = Math.max(1, Math.min(Q.ss, maxTex / Math.max(g.res.value.x, g.res.value.y)));
+    const ss = ssNow = Math.max(1, Math.min(Q.ss, maxTex / Math.max(g.res.value.x, g.res.value.y)));
     post.setScale(ss, g.res.value.x, g.res.value.y);
     // sharpening by the scene's pixel density: less where pixels are small (high DPR) or supersampled (the Lanczos
     // downsample sharpens a little itself)
@@ -764,7 +770,7 @@ export async function create(canvas, opts = {}) {
     rays.aspect.value = w / h;
     // (sprite sizes in the scene pass's pixels)
     motes.uPx.value = pr * ss * (h / 900) * 1.3;
-    lanterns.uFocal.value = (h * pr * ss) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    lanterns.uFocal.value = focal(camera.fov);
   }
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);

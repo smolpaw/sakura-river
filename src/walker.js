@@ -165,8 +165,8 @@ export async function loadWalker(ctx = {}) {
       const p0 = phase;
       phase = (phase + (dt * Math.max(speed, 0.0)) / len) % 1;
       if (go > 0.3 && dt > 0) {
-        if (phase < p0) for (const cb of steps) cb({ foot: 'l' }); // past 0: the left heel down
-        else if (p0 < 0.5 && phase >= 0.5) for (const cb of steps) cb({ foot: 'r' });
+        if (phase < p0) for (const cb of steps) cb({ foot: 'left' }); // past 0: the left heel down
+        else if (p0 < 0.5 && phase >= 0.5) for (const cb of steps) cb({ foot: 'right' });
       }
       idleT = (idleT + dt) % A.idle.getClip().duration;
       A.idle.time = idleT;
