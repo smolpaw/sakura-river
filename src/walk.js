@@ -1,10 +1,10 @@
 // First-person walking (main.js walk mode): the paths the walker is kept on, and the body's movement along them.
 // The network: the lanes (world.js LANES), each a corridor CORRIDOR metres either side of its middle; the bridge's
-// deck between its railings; the temple's stone steps and the front of its terrace; and a path over the grass from
-// the approach to the foot of the steps (the approach's lane runs on past them to the terrace wall). The walker
-// moves where the keys (or walkInput) push it, slides along a corridor's edge and round what stands on the path
-// (lamp posts, stone lanterns, trunks, the torii's pillars, the bridge's corner posts and railings), and stands on
-// the ground there: the deck's arch on the bridge, a slope through the treads' middles on the steps.
+// deck between its railings; the temple's stone steps (the approach's lane ends at their foot) and the front of its
+// terrace. The walker moves where the keys (or walkInput) push it, slides along a corridor's edge and round what
+// stands on the path (lamp posts, stone lanterns, trunks, the torii's pillars, the bridge's corner posts and
+// railings), and stands on the ground there: the deck's arch on the bridge, a slope through the treads' middles on
+// the steps.
 import * as THREE from 'three/webgpu';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { bridgeFrame, BRIDGE_Z, CORNER, cornerOff, RAIL_OFF } from './props.js';
@@ -16,11 +16,10 @@ export const WALK = {
   eye: 1.55, // the eye above the feet, when the walker's model doesn't give it
   fov: 60, // degrees (the orbit camera's is 42)
   look: 0.0022, // radians per pixel of mouse movement
-  pitch: THREE.MathUtils.degToRad(80),
+  pitch: THREE.MathUtils.degToRad(85), // looking down far enough to see the geta step out (main.js EYE_AHEAD)
 };
 const BODY = 0.3; // how close the walker's middle comes to what stands by the path
 const CORRIDOR = 1.2; // half-width of a lane the walker keeps to
-const LINK = 1.0; // half-width of the paths over the grass that join the network up
 const START = { x: -22, z: -4.6, yaw: Math.atan2(0.5, -6) }; // the footpath's end beside the cherry tree, facing down it to the bridge
 
 // smooth maximum (polynomial, k wide)
@@ -121,19 +120,8 @@ export function makeNetwork(world, obstacles = []) {
   const toL = (x, z) => { const dx = x - tf.x, dz = z - tf.z; return [dx * tf.c - dz * tf.s, dx * tf.s + dz * tf.c]; };
   const ways = [];
 
-  // the lanes, each cut short where it runs into the temple terrace's wall (2 m out from its foot)
-  for (const [k, L] of world.LANES.entries()) {
-    const pts = [L[0]];
-    for (let i = 1; i < L.length; i++) {
-      const [ax, az] = L[i - 1], [bx, bz] = L[i];
-      if (world.templeDist(bx, bz) >= 2) { pts.push(L[i]); continue; }
-      let lo = 0, hi = 1;
-      for (let j = 0; j < 30; j++) { const m = (lo + hi) / 2; if (world.templeDist(ax + (bx - ax) * m, az + (bz - az) * m) >= 2) lo = m; else hi = m; }
-      pts.push([ax + (bx - ax) * lo, az + (bz - az) * lo]);
-      break;
-    }
-    ways.push(corridor(`lane${k}`, pts, CORRIDOR));
-  }
+  // the lanes
+  for (const [k, L] of world.LANES.entries()) ways.push(corridor(`lane${k}`, L, CORRIDOR));
 
   // the bridge's deck, between its railings, on past its ends onto the banks (where the lanes pass)
   const B = bridgeFrame(world, BRIDGE_Z), bc = B.center, ba = B.across, bl = B.along;
@@ -160,11 +148,6 @@ export function makeNetwork(world, obstacles = []) {
   ways.push(corridor('steps', [toW(STAIR.x, D - 0.9), toW(STAIR.x, footZ + 0.4)], STAIR.hw - BODY));
   // the front of the terrace, from the steps' head to past the pagoda, short of the bell tower and the hall's steps
   ways.push(area('terrace', tf, SITES.belfry[0] + 2.8 + BODY + 0.1, T.hw - 0.9, SITES.hall[2] + 8.9, D - 0.7));
-  // round the foot's stone lanterns to the approach (a path over the grass)
-  const outZ = footZ + 2.9, bend = toW(STAIR.x + 5.5, outZ);
-  const lane1 = ways.find((w) => w.name === 'lane1'), join = { x: 0, z: 0 };
-  lane1.near(bend[0], bend[1], join);
-  ways.push(corridor('stepsLink', [toW(STAIR.x, footZ + 0.2), toW(STAIR.x, outZ), bend, [join.x, join.z]], LINK));
 
   // what stands in the way: the given obstacles, the bridge's corner posts and railings, the terrace's buildings
   const obs = obstacles.map((o) => post(o.x, o.z, o.r + BODY));

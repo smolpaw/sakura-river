@@ -181,7 +181,7 @@ export async function create(canvas, opts = {}) {
   sky.mesh.name = 'sky';
   scene.add(sky.mesh);
   const terrainGeo = G.terrain.geo;
-  const terrain = new THREE.Mesh(terrainGeo, M.terrainMaterial({ sky }));
+  const terrain = new THREE.Mesh(terrainGeo, M.terrainMaterial({ sky, lanes: world.LANES }));
   terrain.receiveShadow = true;
   terrain.name = 'terrain';
   scene.add(terrain);
@@ -202,7 +202,7 @@ export async function create(canvas, opts = {}) {
   scene.add(hemi);
   // the village's farmland: rice paddies, flooded or dry, terraced up the slopes (world.js buildFields)
   const fieldParts = fieldJobs.map((_, k) => G[`fields${k}`]);
-  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky, paddies: true }));
+  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky, paddies: true, lanes: world.LANES }));
   fields.receiveShadow = true;
   fields.name = 'fields';
   scene.add(fields);
@@ -636,7 +636,7 @@ export async function create(canvas, opts = {}) {
   // the eye in the world: the model's (walker.eye, after its update), a little ahead along the facing so a look
   // down shows the hem and the geta stepping out and not only the robe's front; before the model has loaded,
   // walk.js's eye height over the feet
-  const EYE_AHEAD = 0.12;
+  const EYE_AHEAD = 0.26;
   function eyeAt(out) {
     if (!walker) return walk.eye(null, out);
     const s = walk.state;
@@ -822,6 +822,7 @@ export async function create(canvas, opts = {}) {
   const timer = new THREE.Timer();
   const tmpV = new THREE.Vector3(), sdl = new THREE.Vector3(), camDir = new THREE.Vector3();
   const lightR = new THREE.Vector3(), lightU = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  let figureAnchor = false; // the sun's sharp shadow round the walker's figure, out of walk mode (see step)
   let running = true;
   let frameNo = 0, warming = false;
   const sunScreen = new THREE.Vector3();
@@ -973,20 +974,34 @@ export async function create(canvas, opts = {}) {
     shrubs.userData.lod(camera.position);
     if (nearFlowers) nearFlowers.update(camera.position, warming);
 
-    // sun light / shadow frustum anchored on the tree, or ahead of the walker while walking (snapped to the map's
-    // texels in the light's frame, so its shadows hold still as the anchor moves)
+    // sun light / shadow frustum: anchored on the tree; ahead of the walker while walking; on the figure where it
+    // was left while the camera is nearer to it than to the tree or looks at it from close by (the orbit target
+    // within ~20 m), so it keeps its sharp shadow (the valley's map has none of it). Always snapped to the map's
+    // texels in the light's frame: its shadows hold still as the anchor moves, and a switch between anchors keeps
+    // the same texel grid (only what leaves the map's square changes, far from the camera)
     const sd = U.uSunDir.value;
     sdl.copy(sd); if (sdl.y < 0.08) sdl.y = 0.08; sdl.normalize();
     const anchor = tmpV.set(TX + 4, 3, TZ + 2);
+    // (the tree's square already holds a figure within 20 m of the tree's anchor)
+    if (walker && !walking && Math.hypot(walk.state.x - anchor.x, walk.state.z - anchor.z) > 20) {
+      const s = walk.state, cp = camera.position;
+      const dF = Math.hypot(cp.x - s.x, cp.y - s.y, cp.z - s.z), dT = Math.hypot(cp.x - TX, cp.y - 3, cp.z - TZ);
+      const tF = Math.hypot(controls.target.x - s.x, controls.target.z - s.z);
+      // (a little hysteresis, so an orbit about the midway point doesn't flip it to and fro)
+      figureAnchor = figureAnchor ? dF < dT * 1.05 || tF < 22 : dF < dT * 0.95 || tF < 20;
+    } else figureAnchor = false;
     if (walking) {
       const s = walk.state;
       anchor.set(s.x + Math.sin(s.yaw) * 10, s.y + 1, s.z + Math.cos(s.yaw) * 10);
-      // the shadow camera's axes as its lookAt builds them
-      lightR.crossVectors(UP, sdl); if (lightR.lengthSq() < 1e-6) lightR.set(1, 0, 0); lightR.normalize();
-      lightU.crossVectors(sdl, lightR);
-      const tex = (sc.right - sc.left) / sun.shadow.mapSize.x, a = Math.round(anchor.dot(lightR) / tex) * tex, b = Math.round(anchor.dot(lightU) / tex) * tex;
-      anchor.copy(lightR).multiplyScalar(a).addScaledVector(lightU, b).addScaledVector(sdl, anchor.dot(sdl));
+    } else if (figureAnchor) {
+      const s = walk.state;
+      anchor.set(s.x, s.y + 1, s.z);
     }
+    // the shadow camera's axes as its lookAt builds them
+    lightR.crossVectors(UP, sdl); if (lightR.lengthSq() < 1e-6) lightR.set(1, 0, 0); lightR.normalize();
+    lightU.crossVectors(sdl, lightR);
+    const tex = (sc.right - sc.left) / sun.shadow.mapSize.x, a = Math.round(anchor.dot(lightR) / tex) * tex, b = Math.round(anchor.dot(lightU) / tex) * tex;
+    anchor.copy(lightR).multiplyScalar(a).addScaledVector(lightU, b).addScaledVector(sdl, anchor.dot(sdl));
     sun.target.position.copy(anchor);
     sun.position.copy(anchor).addScaledVector(sdl, 150);
     sun.target.updateMatrixWorld();

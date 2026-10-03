@@ -17,14 +17,12 @@ function routes(net) {
   const L = world.LANES, [e0, e1] = net.bridgeEnds.map((p) => [p[0], p[2]]);
   const A = [e1[0] - e0[0], e1[1] - e0[1]], al = Math.hypot(...A), F = [A[1] / al, -A[0] / al]; // across, and along -flow
   const off = (p, k, s = 0) => [p[0] + (A[0] / al) * k - F[0] * s, p[1] + (A[1] / al) * k - F[1] * s];
-  const link = net.ways.find((w) => w.name === 'stepsLink').pts; // foot, out, bend, join
-  const lane1 = L[1].slice(1).filter((p) => world.templeDist(...p) > 2 && p[1] > link[3][1] + 1);
   return {
     // from the footpath's end by the cherry tree down the west bank, round the corner post onto the deck
     tree: [[-22, -4.6], ...L[0].slice().reverse().slice(1, -2), off(e0, -2.2), e0],
     bridge: [e0, e1, off(e1, 2.2)],
-    // the approach to the foot of the temple's steps, up them and along the terrace
-    temple: [off(e1, 2.2), ...lane1, link[3], link[2], link[1], link[0], toW(-7, 11), toW(0, 10.6), toW(14, 10.6)],
+    // the approach to the foot of the temple's steps (where its lane ends), up them and along the terrace
+    temple: [off(e1, 2.2), ...L[1].slice(1), toW(-7, 11), toW(0, 10.6), toW(14, 10.6)],
     // back over the bridge's west landing, round the corner post, along the valley lane to the village's end
     village: [off(e0, -2.2), off(e0, -2.4, -2.6), ...L[3]],
     // from the approach along the lane over the terraces to the hamlet
@@ -65,7 +63,13 @@ const { server, url } = await startServer();
 const { browser } = await launch({ scale: 1, profile: 'look', headless: true });
 const page = await openHarness(browser, url);
 const call = (name, ...a) => page.evaluate((n, a) => H.call(n, ...a), name, a);
-const shot = async (name) => { await call('tick', 2, 1 / 60); await page.evaluate((o) => H.capture(o, 1 / 60), `${prefix}-${name}.png`); };
+// (one rendered frame per browser frame before the capture: three updates a skinned mesh's bones once per browser
+// frame, so further renders in the same frame, and the sun's shadow map drawn in them, pose the walker where that
+// frame's first render had him)
+const shot = async (name) => {
+  for (let i = 0; i < 3; i++) await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => { H.call('tick', 1, 1 / 60); r(); })));
+  await page.evaluate((o) => H.capture(o, 1 / 60), `${prefix}-${name}.png`);
+};
 try {
   await page.evaluate((p) => H.setup(p), { engine: `./builds/${build}/engine.js`, cssW: 1280, cssH: 720, quality: process.env.QUALITY || 'high', backend: process.env.LOOK_BACKEND ?? 'webgl', settings: {} });
   await call('setWeather', 'clear', 0);
@@ -101,7 +105,7 @@ try {
       // one looking down, half way over the bridge and along the first lane
       if (!downShot && ((name === 'bridge' && travelled > 10) || (name === 'tree' && travelled > 25))) {
         downShot = true;
-        await call('walkInput', { forward: 0, strafe: 0, pitch: -70 * Math.PI / 180 });
+        await call('walkInput', { forward: 0, strafe: 0, pitch: -85 * Math.PI / 180 }); // (the clamp: the hem and the geta's toes)
         await call('advance', 40, 1 / 60);
         await shot(`${name}-down`);
         st = await call('walkInfo');

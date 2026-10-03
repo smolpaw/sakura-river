@@ -90,7 +90,10 @@ export function createWorld(seed = 7) {
   const LANES = [
     // the footpath from the bridge along the west bank to the cherry tree, outside the lantern line
     lane([[-33, -60], [-32, -50], [-27, -40], [-22, -30], [-20, -20], [-21, -10], [-22, -4]]),
-    lane([[-13, -61], [-8, -74], [-2, -92], [3, -112], [5, -132], [9, -152], [13, -170], [15, -182]]),
+    // the temple's approach, from the torii by the bridge up the knoll; it bends round onto the line of the temple's
+    // steps and ends at their foot, between the stone lanterns there (temple.js STAIR: the steps' foot is where the
+    // ground meets them, about (2.5, -175.8), their line running out towards (-0.565, 0.825))
+    lane([[-13, -61], [-8, -74], [-2, -92], [3, -112], [5, -132], [-1.6, -163.4], [-1.8, -166.1], [-1.3, -169.5], [0.3, -172.6], [2.5, -175.9]]),
     // from the temple's approach across the terraces to the hamlet on the eastern slope
     lane([[5, -117], [16, -114], [28, -112], [37, -112.5], [44, -118], [45, -126], [44.5, -131]]),
     lane([[-33, -60], [-42, -64], [-55, -73], [-70, -84], [-84, -96], [-89, -115], [-91, -140], [-93, -165], [-95, -190], [-93, -215], [-90, -240]]),

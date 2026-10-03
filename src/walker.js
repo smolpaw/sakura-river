@@ -10,8 +10,8 @@
 // here from the bind pose (so they move with the cloth); the vertex colours carry the base colours and the baked
 // occlusion, their alpha which pattern goes where (1 kasuri, 0.5 obi, 0 none).
 // First person: `eye` is where the eyes are, and the robe's front is ahead of them, so a camera there looking down
-// sees the chest, the obi, the sleeves and the swinging hands; about 0.12 m ahead of it (along the facing) it sees the
-// hem and the geta stepping out as well. The hidden part is cut level at the chest (tools/human.py Z_CUT), closed by
+// sees the chest, the obi, the sleeves and the swinging hands; a quarter metre ahead of it (along the facing, main.js
+// EYE_AHEAD), looking down past 80 degrees, it sees the hem and the geta stepping out as well. The hidden part is cut level at the chest (tools/human.py Z_CUT), closed by
 // a solid inside the robe so the view down never looks into it.
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec2, vec3, mix, abs, floor, fract, max, pow, dot, normalize, length, uniform, attribute, positionGeometry, normalGeometry, positionWorld, normalWorld, cameraPosition, diffuseColor } from 'three/tsl';

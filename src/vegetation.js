@@ -389,14 +389,15 @@ export function shrubData(world, trees) {
   // the temple's approach: clipped azaleas both sides, every few metres, magenta and white by turns in runs, clear
   // of its stone lanterns
   for (const t of toroSites(world)) placed.push([t.x, t.z, 0.5]);
-  const ap = world.LANES[1];
+  // (and clear of the temple's own pair, where the approach ends at the foot of its steps)
+  const ap = world.LANES[1], [ex, ez] = ap[ap.length - 1];
   for (let i = 1; i < ap.length; i++) {
     const [ax, az] = ap[i - 1], [bx, bz] = ap[i], len = Math.hypot(bx - ax, bz - az);
     for (let t = 0; t < len; t += 3.2) {
       const x0 = ax + (bx - ax) * t / len, z0 = az + (bz - az) * t / len, nx = -(bz - az) / len, nzz = (bx - ax) / len;
       for (const side of [-1, 1]) {
         const x = x0 + nx * side * 2.7, z = z0 + nzz * side * 2.7;
-        if (world.zoneAt(x, z) || world.templeDist(x, z) < 2 || world.riverInfo(x, z).t < 1.7 || flat(x, z) < 0.8) continue;
+        if (world.zoneAt(x, z) || world.templeDist(x, z) < 2 || Math.hypot(x - ex, z - ez) < 3.5 || world.riverInfo(x, z).t < 1.7 || flat(x, z) < 0.8) continue;
         if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 1.6)) continue;
         put(nz.noise2(x * 0.05, z * 0.05) > 0 ? AZ : AZW, x, z, 0.75 + rng() * 0.2, 1.1);
       }

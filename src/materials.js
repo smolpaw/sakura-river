@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
-  transformNormalToView, faceDirection,
+  transformNormalToView, faceDirection, exp, sign,
 } from 'three/tsl';
 import { U, vnoise, hash12, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
@@ -13,9 +13,119 @@ import { sunShadow } from './sunshadow.js';
 const wp = positionWorld;
 const viewDir = () => normalize(cameraPosition.sub(wp));
 
+// ---------- the lanes underfoot ----------
+// Close by (within LANE_NEAR m of the camera) the lanes' bare earth gains grit, small stones and two faint ruts worn
+// along them, with a touch of relief the sun grazes. The lanes (world.js LANES) reach the shader as a texture: per
+// 1 m texel the signed distance across the nearest lane's middle line (as world.js laneDist measures it, the sign
+// by its side) and that lane's direction. Beyond LANE_NEAR the ground is drawn exactly as without it.
+const LANE_NEAR = 20;
+const laneMaps = new WeakMap();
+function laneMap(lanes) {
+  if (laneMaps.has(lanes)) return laneMaps.get(lanes);
+  const segs = [];
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const L of lanes) for (let i = 0; i < L.length; i++) {
+    const [x, z] = L[i];
+    x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z);
+    if (!i) continue;
+    const [ax, az] = L[i - 1], vx = x - ax, vz = z - az, l = Math.hypot(vx, vz);
+    if (l > 1e-6) segs.push({ ax, az, vx, vz, l2: l * l, dx: vx / l, dz: vz / l });
+  }
+  const M = 6; // m of margin: the texture's edge texels lie well off every lane
+  x0 = Math.floor(x0 - M); z0 = Math.floor(z0 - M);
+  const nx = Math.ceil(x1 + M - x0) + 1, nz = Math.ceil(z1 + M - z0) + 1, data = new Uint16Array(nx * nz * 4), h = THREE.DataUtils.toHalfFloat;
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const px = x0 + i, pz = z0 + j;
+    let bd = Infinity, bs = 0, best = segs[0];
+    for (const g of segs) {
+      const t = Math.max(0, Math.min(1, ((px - g.ax) * g.vx + (pz - g.az) * g.vz) / g.l2));
+      const d = Math.hypot(px - g.ax - g.vx * t, pz - g.az - g.vz * t);
+      if (d < bd) { bd = d; best = g; bs = g.dx * (pz - g.az) - g.dz * (px - g.ax) < 0 ? -1 : 1; }
+    }
+    const k = (j * nx + i) * 4;
+    data[k] = h(bs * Math.min(bd, 8)); data[k + 1] = h(best.dx); data[k + 2] = h(best.dz); data[k + 3] = h(1);
+  }
+  const tex = new THREE.DataTexture(data, nx, nz, THREE.RGBAFormat, THREE.HalfFloatType);
+  tex.minFilter = tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  const map = { tex, x0, z0, nx, nz };
+  laneMaps.set(lanes, map);
+  return map;
+}
+// the lane at the fragment: x the distance across its middle line (signed, wavering a little along it), yz its
+// direction, w how much of the close-up detail applies (on the lane's bare earth, `earth`, faded out towards
+// LANE_NEAR)
+const laneFrame = (map, dist, earth) => Fn(() => {
+  const L = texture(map.tex, wp.xz.sub(vec2(map.x0, map.z0)).add(0.5).div(vec2(map.nx, map.nz)));
+  const dir = normalize(L.yz);
+  const along = dot(wp.xz, dir);
+  const s = L.x.add(vnoise(vec2(along.mul(0.18), 3.0)).sub(0.5).mul(0.22));
+  return vec4(s, dir, sstep(1.7, 1.0, L.x.abs()).mul(earth).mul(sstep(LANE_NEAR, LANE_NEAR * 0.6, dist)));
+})();
+// small stones: a jittered grid of cells (`scale` m), the share over `share` holding a stone; x: inside it (0 at its
+// edge), y: its tone, zw: the way out from its middle (the dome's slope)
+const laneStones = (p, scale, seed, share) => {
+  const q = p.div(scale).toVar(), id = floor(q).toVar(), f = fract(q).toVar();
+  const d1 = float(8.0).toVar(), tone = float(0).toVar(), off = vec2(0).toVar();
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+    const c = id.add(vec2(i, j));
+    const o = vec2(hash12(c.add(seed)), hash12(c.add(seed + 37.1))).mul(0.7).add(0.15);
+    const v = vec2(i, j).add(o).sub(f), d = dot(v, v);
+    If(d.lessThan(d1), () => { d1.assign(d); tone.assign(hash12(c.add(seed + 71.3))); off.assign(v.negate()); });
+  }
+  const r = tone.mul(0.3).add(0.12), d = d1.sqrt();
+  const has = sstep(share, float(share).add(0.05), tone.mul(7.31).fract());
+  return vec4(sstep(r, r.mul(0.55), d).mul(has), tone, off.div(r).mul(has).mul(sstep(r, r.mul(0.8), d)));
+};
+// the ruts: two shallow hollows 0.6 m either side of the middle (a height in m, and its slope across the lane)
+const rutDepth = 0.05, rutAt = 0.6, rutW = 0.2;
+const rut = (s) => exp(s.abs().sub(rutAt).div(rutW).pow(2.0).negate());
+const rutSlope = (s) => { const u = s.abs().sub(rutAt).div(rutW); return u.mul(rut(s)).mul(2.0 * rutDepth / rutW).mul(sign(s)); };
+// the lane's pebbles, a few centimetres across, their outlines warped so they aren't round: kicked to the verges and
+// the crown between the ruts, few in the ruts and down the middle where the feet go
+const lanePebbles = (s) => {
+  const p = wp.xz.add(vec2(vnoise(wp.xz.mul(31.0)), vnoise(wp.xz.mul(31.0).add(7.0))).sub(0.5).mul(0.035));
+  return laneStones(p, 0.09, 17.0, mix(0.5, 0.88, rut(s).max(sstep(0.35, 0.0, s.abs()).mul(0.7))));
+};
+// the colour of the lane's earth close by, over `c` (the vertex colour's dirt)
+const laneColor = (map, dist, earth, c) => Fn(() => {
+  const o = c.toVar();
+  const F = laneFrame(map, dist, earth);
+  If(F.w.greaterThan(0.0), () => {
+    const s = F.x, k = F.w, along = dot(wp.xz, F.yz);
+    // grit: specks a few centimetres across, lighter and darker, gone before they would shimmer
+    const grit = laneStones(wp.xz, 0.03, 5.0, vnoise(wp.xz.mul(2.3)).mul(0.5).add(0.3));
+    const speck = grit.x.mul(grit.y.sub(0.5)).mul(0.35).mul(sstep(12.0, 6.0, dist));
+    // the earth trodden in streaks along the lane, the ruts' packed earth a shade darker
+    const streak = vnoise(vec2(along.mul(0.6), s.mul(2.5))).sub(0.5).mul(0.2);
+    const ground = o.mul(speck.add(streak).add(1.0)).mul(float(1.0).sub(rut(s).mul(0.16)));
+    // the pebbles: greys and browns near the earth's own tone, most a little darker (the sun on their domes lights
+    // them)
+    const st = lanePebbles(s);
+    const stone = mix(o.mul(0.75), mix(vec3(0.15, 0.14, 0.13), vec3(0.33, 0.31, 0.27), st.y), 0.6);
+    o.assign(mix(o, mix(ground, stone, st.x.mul(0.8)), k));
+  });
+  return o;
+})();
+// the ground's normal in view space, tilted on the lanes close by by the ruts' sides and the pebbles' domes
+const laneNormal = (map, dist, earth) => Fn(() => {
+  const n = normalView.toVar();
+  If(dist.lessThan(LANE_NEAR), () => {
+    const F = laneFrame(map, dist, earth);
+    If(F.w.greaterThan(0.0), () => {
+      const s = F.x, across = vec2(F.z.negate(), F.y); // (the gradient of s)
+      const t = across.mul(rutSlope(s).negate()).add(lanePebbles(s).zw.mul(0.5)).mul(F.w);
+      n.assign(normalize(n.add(cameraViewMatrix.mul(vec4(t.x, 0.0, t.y, 0.0)).xyz)));
+    });
+  });
+  return n;
+})();
+
 // The ground, with puddles on the bare earth in the rain (mirroring `sky`, its uniforms). With `paddies` it draws the
-// farmland's and the village's mesh (world.js buildFields), where flooded paddies (aWater) are still water too.
-export function terrainMaterial({ sky, paddies = false }) {
+// farmland's and the village's mesh (world.js buildFields), where flooded paddies (aWater) are still water too. With
+// `lanes` (world.js LANES) the lanes close by gain their grit, stones and ruts.
+export function terrainMaterial({ sky, paddies = false, lanes = null }) {
   const n09 = vnoise(wp.xz.mul(0.9)), n012 = vnoise(wp.xz.mul(0.12));
   const dn = n09.mul(0.5).add(vnoise(wp.xz.mul(3.7)).mul(0.3)).add(n012.mul(0.45));
   // where grass grows (aGround: density, length, tint, as grass.js reads them) the ground takes the grass's colour:
@@ -25,6 +135,9 @@ export function terrainMaterial({ sky, paddies = false }) {
   const far = sstep(12.0, 40.0, dist);
   // (not under the reeds by the water, grass.js: their ground keeps its mud and sand)
   const cover = clamp(gr.x.mul(1.4), 0.0, 1.0).mul(sstep(0.02, 0.12, gr.y)).mul(sstep(-0.1, 0.0, gr.z));
+  const lane = lanes && laneMap(lanes);
+  // (the lanes' detail only where the ground shows bare earth: the vertex colour's dirt, redder than green)
+  const vcol = attribute('color', 'vec3'), earth = sstep(0.0, 0.035, vcol.r.sub(vcol.g)).mul(float(1.0).sub(cover));
   const colorNode = Fn(() => {
     // the blades' own patches; blade-scale streaks close by, faded out before they would shimmer
     const patch = patchFrom(n012, n09);
@@ -34,9 +147,13 @@ export function terrainMaterial({ sky, paddies = false }) {
     const c = mix(attribute('color', 'vec3').mul(dn.mul(0.42).add(0.7)), carpet, cover).toVar();
     // the river's bed: rounded stones and gravel, each stone its own grey-brown, sand between, close by only
     If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
+    // the lanes underfoot
+    if (lane) If(dist.lessThan(LANE_NEAR), () => { c.assign(laneColor(lane, dist, earth, c)); });
     return c;
   })();
-  return new LitMaterial({ roughness: 0.96, metalness: 0, colorNode }, (out) => Fn(() => {
+  const params = { roughness: 0.96, metalness: 0, colorNode };
+  if (lane) params.normalNode = laneNormal(lane, dist, earth);
+  return new LitMaterial(params, (out) => Fn(() => {
     // river-bed caustics and darkening under water: both are exactly zero / one above y = 0.03, so skip them there
     const y = wp.y;
     const o = out.toVar();
