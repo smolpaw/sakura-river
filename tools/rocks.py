@@ -5,11 +5,13 @@
 # ground (Blender: z up; glTF: y up). River boulders: granite rounded by the water, some with the broad faces where
 # they split, rounded off at the edges; lumpy, grained. Shading in the vertex colours: each stone its own grey,
 # mottled, lichen on what faces the sky, moss in patches on top, ambient occlusion in the hollows and under the base.
+# Each also has a `_near` model for the Ultra tier: the same stone on a finer sphere, grained and pitted, shaded as
+# the full one (forest.py colour_at).
 import bpy, bmesh, math, os, random, sys
 from mathutils import Vector, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from forest import smoothstep, lerp, link, evaluated, tris, vertex_ao
+from forest import smoothstep, lerp, link, evaluated, tris, vertex_ao, colour_at
 
 V = Vector
 GREYS = [(0.34, 0.33, 0.31), (0.3, 0.3, 0.29), (0.37, 0.35, 0.32), (0.28, 0.28, 0.28), (0.33, 0.31, 0.29)]
@@ -21,7 +23,7 @@ def smin(a, b, k):
     return min(a, b) - h * h * k * 0.25
 
 
-def stone(name, seed, target, *, splits, lumps, moss, grey):
+def stone(name, seed, target, *, splits, lumps, moss, grey, ref=None):
     rng = random.Random(seed)
     off = V((seed * 3.7, seed * 1.3, seed * 5.9))
     # the faces it split along: planes cutting the ball, their edges rounded off by the smooth minimum
@@ -30,8 +32,11 @@ def stone(name, seed, target, *, splits, lumps, moss, grey):
         n = V((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 0.6))).normalized()
         planes.append((n, rng.uniform(0.62, 0.85)))
     sx, sy = 1 + rng.uniform(-0.3, 0.3), 1 + rng.uniform(-0.25, 0.25)
+    # the near model's grain and chips: fine bumps, and small pits where flakes came away
+    grain = lambda d: 0.004 * noise.noise(d * 45 + off) + 0.002 * noise.noise(d * 90 + off)
+    pit = lambda d: smoothstep(0.45, 0.7, noise.noise(d * 28 + off * 1.7))
     bm = bmesh.new()
-    bmesh.ops.create_icosphere(bm, subdivisions=5, radius=1.0)
+    bmesh.ops.create_icosphere(bm, subdivisions=6 if ref else 5, radius=1.0)
     for v in bm.verts:
         d = v.co.normalized()
         r = 1 + lumps * (0.24 * noise.noise(d * 1.1 + off) + 0.09 * noise.noise(d * 2.4 + off * 1.3))
@@ -40,6 +45,8 @@ def stone(name, seed, target, *, splits, lumps, moss, grey):
             if c > 0.05:
                 r = smin(r, pd / c, 0.12)
         r += 0.035 * noise.noise(d * 4 + off) + 0.015 * noise.noise(d * 9 + off) + 0.006 * noise.noise(d * 19 + off)
+        if ref:
+            r += grain(d) - 0.008 * pit(d)
         p = d * r
         p = V((p.x * 1.25 * sx, p.y * 1.05 * sy, p.z * 0.72))
         if p.z < -0.18:
@@ -60,6 +67,7 @@ def stone(name, seed, target, *, splits, lumps, moss, grey):
     bm.normal_update()
     bm.verts.index_update()
     ao = vertex_ao(bm, 0.5)
+    full_at = ref and colour_at(ref)
     # how far each vertex stands out of its neighbours along the normal: edges catch the light, hollows hold dirt
     bulge = [sum((v.co - e.other_vert(v).co).dot(v.normal) for e in v.link_edges) / max(1, len(v.link_edges)) for v in bm.verts]
     bulge = [sum([bulge[v.index]] + [bulge[e.other_vert(v).index] for e in v.link_edges]) / (1 + len(v.link_edges)) for v in bm.verts]
@@ -75,6 +83,12 @@ def stone(name, seed, target, *, splits, lumps, moss, grey):
         m = smoothstep(0.35, 0.75, n.z + 0.5 * noise.noise(p * 1.6 + off * 0.7) + 0.2 * noise.noise(p * 7 + off)) * moss
         c = c.lerp(V(MOSS) * (0.8 + 0.4 * noise.noise(p * 9 + off)), m)
         c *= lerp(0.5, 1.0, a) * lerp(0.6, 1.0, smoothstep(-0.2, 0.25, p.z)) * (1 + 0.3 * edge if edge > 0 else 1 + 0.45 * edge)
+        full = ref and full_at(p)
+        if full:
+            # the full model's shading, and the fine detail: speckled grain, pits in shadow, lichen in small rosettes
+            d = V((p.x / (1.25 * sx), p.y / (1.05 * sy), p.z / 0.72)).normalized()
+            c = V(full[:3]) * (0.92 + 0.16 * noise.noise(p * 9 + off)) * (1 - 0.3 * pit(d))
+            c = c.lerp(V(LICHEN) * 0.9, 0.3 * smoothstep(0.5, 0.65, noise.noise(p * 11 + off * 3)) * smoothstep(0.0, 0.6, n.z))
         cols.append(c)
     for f in bm.faces:
         f.smooth = True
@@ -90,25 +104,35 @@ def stone(name, seed, target, *, splits, lumps, moss, grey):
     return me
 
 
-# five boulders, each near (`rockN`) and far (`rockN_far`), and one stone for the pebbles at the water's edge (and the
-# village's stone walls, with a far one)
+# five boulders, each full (`rockN`), far (`rockN_far`) and near (`rockN_near`), and one stone for the pebbles at the
+# water's edge (and the village's stone walls, with a far one), and its near one
 KINDS = [f'rock{i}' for i in range(5)]
-TARGET, FAR = 1200, 0.25
+TARGET, FAR, NEAR = 1200, 0.25, 4
 # split faces, lumpiness, moss
 LOOKS = [(3, 0.8, 0.6), (1, 1.0, 0.7), (4, 0.6, 0.4), (0, 1.1, 0.8), (2, 0.9, 0.55)]
 
 if __name__ == '__main__':
     out = sys.argv[sys.argv.index('--') + 1]
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    full = {}
     for i, kind in enumerate(KINDS):
         s, l, m = LOOKS[i]
         for far in (False, True):
             me = stone(kind + ('_far' if far else ''), 31 + i, TARGET * (FAR if far else 1), splits=s, lumps=l, moss=m, grey=GREYS[i])
+            full.setdefault(kind, me)
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
-    me = stone('pebble', 61, 90, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41))
+    me = full['pebble'] = stone('pebble', 61, 90, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41))
     print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     # the same stone, lighter, for the farmhouses' stone walls seen from further off
     me = stone('pebble_far', 61, 24, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41))
+    print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
+    # the near models (the Ultra tier's, which tools/blender.mjs puts in public/models/): the same stones on a finer
+    # sphere, grained and chipped, shaded as the full ones (forest.py colour_at)
+    for i, kind in enumerate(KINDS):
+        s, l, m = LOOKS[i]
+        me = stone(kind + '_near', 31 + i, TARGET * NEAR, splits=s, lumps=l, moss=m, grey=GREYS[i], ref=full[kind])
+        print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
+    me = stone('pebble_near', 61, 360, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41), ref=full['pebble'])
     print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=False, export_yup=True)

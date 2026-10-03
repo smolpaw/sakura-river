@@ -10,7 +10,7 @@ import bpy, bmesh, math, os, random, sys
 from mathutils import Vector, Matrix, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from forest import smoothstep, lerp, link, evaluated, tris, vertex_ao
+from forest import smoothstep, lerp, link, evaluated, tris, vertex_ao, colour_at, with_leaves
 
 V = Vector
 LEAN = 0.24  # the face's run back per unit of height
@@ -18,7 +18,9 @@ BEDS = [(0.5, 0.46, 0.41), (0.42, 0.4, 0.37), (0.54, 0.49, 0.43), (0.46, 0.43, 0
 MOSS, RIM = (0.07, 0.13, 0.035), (0.12, 0.2, 0.05)
 
 
-def cliff(name, seed, target, sharp):
+def cliff(name, seed, target, sharp, near=None):
+    """near: the full model, for the near one: the same wall decimated less, its joints' faces grained, shaded as
+    the full model (forest.py colour_at), moss in tufts on its ledges"""
     rng = random.Random(seed)
     bm = bmesh.new()
     beds, z = [], -0.14
@@ -70,6 +72,8 @@ def cliff(name, seed, target, sharp):
     for v in bm.verts:
         p = v.co + off
         v.co += v.normal * (noise.noise(p * 5) * 0.014 + noise.noise(p * 11) * 0.008 + noise.noise(p * 24) * 0.003)
+        if near:  # the grain of the joints' faces
+            v.co += v.normal * (noise.noise(p * 60) * 0.0015 + noise.noise(V((p.x * 140, p.y * 140, p.z * 30))) * 0.0008)
     bm.to_mesh(me)
     bm.free()
     ob = link(me, 'wall')
@@ -84,6 +88,7 @@ def cliff(name, seed, target, sharp):
     bm.normal_update()
     bm.verts.index_update()
     ao = vertex_ao(bm, 0.12)
+    full = near and colour_at(near)
     tint = [rng.choice(BEDS) for _ in beds]
     cols = []
     for v in bm.verts:
@@ -97,7 +102,11 @@ def cliff(name, seed, target, sharp):
         moss = smoothstep(0.55, 0.9, n.z + 0.35 * noise.noise(p * 14 + V((0, 3.3, 0)))) * smoothstep(0.05, 0.2, p.z)
         c = c.lerp(V(MOSS), moss * 0.7)
         c = c.lerp(V(RIM), smoothstep(0.93, 1.0, p.z) * smoothstep(0.2, 0.6, n.z))
-        cols.append(c * lerp(0.4, 1.0, a))
+        c = c * lerp(0.4, 1.0, a)
+        f = near and full(p, 0.01)
+        if f:
+            c = V(f[:3]) * (0.92 + 0.16 * noise.noise(p * 70 + off))
+        cols.append(c)
     for f in bm.faces:
         f.smooth = True
     me = bpy.data.meshes.new(name)
@@ -111,20 +120,31 @@ def cliff(name, seed, target, sharp):
         ca.data[i].color = (*c, 1.0)
     me.color_attributes.active_color = ca
     link(me, name)
+    if near:
+        orng = random.Random(seed + 7)
+        moss = lambda p: (*(V(MOSS) * orng.uniform(0.7, 1.3)), 1.0)
+        me = with_leaves(me, NEAR_MOSS, 0.01, seed + 500, shape=(0.7, 0.9), lift=(0.9, 1.4), tint=(1.0, 1.0), shade=moss,
+                         where=lambda p, nrm, t: nrm.z > 0.65 and p.z > 0.05)
     return me
 
 
-# three walls, each in two levels: `cliffN` near the camera, `cliffN_far` with FAR of its triangles (cliffs.js)
-FAR = 0.2
+# three walls, each in two levels: `cliffN` near the camera, `cliffN_far` with FAR of its triangles (cliffs.js), and
+# `cliffN_near` with NEAR times them for the Ultra tier
+FAR, NEAR, NEAR_MOSS = 0.2, 4, 900
 TARGET = 2000
 KINDS = [f'cliff{i}' for i in range(3)]
 
 if __name__ == '__main__':
     out = sys.argv[sys.argv.index('--') + 1]
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    full = {}
     for i, kind in enumerate(KINDS):
         for far in (False, True):
             me = cliff(kind + ('_far' if far else ''), 11 + i, TARGET * (FAR if far else 1), not far)
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
+            full.setdefault(kind, me)
+    for i, kind in enumerate(KINDS):  # the near models (the Ultra tier's, which tools/blender.mjs puts in public/models/)
+        me = cliff(kind + '_near', 11 + i, TARGET * NEAR, True, full[kind])
+        print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=False, export_yup=True)

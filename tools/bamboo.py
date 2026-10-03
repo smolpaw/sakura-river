@@ -4,21 +4,25 @@
 # fresh green (young) to yellowed grey (old), leaning a little and arching over at the top under sprays of leaves that
 # droop along short branches from their upper half (foliage clumps fused into one surface, as the woods' crowns are).
 # Shading in the vertex colours: ambient occlusion over the whole stand, the sprays' undersides darker.
+# The Ultra tier's `<kind>_near` model is the full one refined: rounder culms ringed at their nodes (the joint's ridge,
+# the pale bloom under it, the sheath's scar), the branches out to the sprays, the sprays fused on a finer grid with
+# single leaves standing out of them; shaded as the full model (forest.py colour_at).
 import bpy, bmesh, math, os, random, sys
 from mathutils import Vector, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from forest import smoothstep, lerp, link, tris, foliage, tube, vertex_ao, LEVELS, VOXEL
+from forest import smoothstep, lerp, link, tris, foliage, tube, vertex_ao, colour_at, with_leaves, LEVELS, VOXEL
 
 V = Vector
 CULM, YOUNG, OLD = (0.3, 0.34, 0.12), (0.2, 0.32, 0.08), (0.42, 0.4, 0.24)
 LEAF = (0.17, 0.27, 0.05)
 CROWN = (1, 0.22, 0.07)  # the sprays' triangles per level (far culms lose their nodes and a side too)
+NEAR = dict(voxel=0.6, crown=1.6, rings=24, sides=6, leaves=1400, leaf=0.014)  # the near model's (rings: nodes)
 
 
-def stand(name, seed, level, target):
+def stand(name, seed, level, target, near=None):
     rng = random.Random(seed)
-    culms, clumps = [], []
+    culms, clumps, branches = [], [], []
     for i in range(14):
         a, r = rng.uniform(0, math.tau), 0.13 * math.sqrt(rng.random())
         base = V((math.cos(a) * r, math.sin(a) * r, -0.03))
@@ -41,19 +45,48 @@ def stand(name, seed, level, target):
                 s = s0 * (1.15 - 0.3 * f)
                 q = p + V((math.cos(b), math.sin(b), 0)) * L * f - V((0, 0, L * 0.45 * f * f))
                 clumps.append((q, (s * 1.3, s * 1.3, s * 0.55)))
-    crown = foliage(clumps, VOXEL[level] * 0.007, 0.008, 60, target * CROWN[level], seed)
+            branches.append((p, p + V((math.cos(b), math.sin(b), 0)) * L * 0.75 - V((0, 0, L * 0.25))))
+    if near:
+        crown = foliage(clumps, VOXEL[0] * 0.007 * NEAR['voxel'], 0.008, 60, target * NEAR['crown'], seed)
+    else:
+        crown = foliage(clumps, VOXEL[level] * 0.007, 0.008, 60, target * CROWN[level], seed)
     bm = bmesh.new()
     rings = (14, 8, 5)[level]
     age = bm.verts.layers.float.new('age')
+    node = bm.verts.layers.float.new('node')  # near: 1 at a node's ridge, 0.5 on the bloom just under it
     for path, r, a in culms:
         n0 = len(bm.verts)
-        pts = [path(j / rings * 0.97) for j in range(rings + 1)]
-        tube(bm, pts, [r * lerp(1.0, 0.45, j / rings) for j in range(rings + 1)], (6, 4, 3)[level])
+        if near:
+            # three rings to each internode: plain just over the node below, the bloom a little under the next node,
+            # and the node itself (a slight ridge)
+            kinds = [0.0] + [kd for m in range(NEAR['rings']) for kd in (0.0, 0.5, 1.0)]
+            ts = [0.0] + [(m + d) / NEAR['rings'] for m in range(NEAR['rings']) for d in (0.06, 0.85, 1.0)]
+            pts = [path(t * 0.97) for t in ts]
+            radii = [r * lerp(1.0, 0.45, t) * (1.06 if kd == 1.0 else 1.0) for t, kd in zip(ts, kinds)]
+            tube(bm, pts, radii, NEAR['sides'])
+            bm.verts.ensure_lookup_table()
+            for k, kd in enumerate(kinds):
+                for v in bm.verts[n0 + k * NEAR['sides']:n0 + (k + 1) * NEAR['sides']]:
+                    v[node] = kd
+        else:
+            pts = [path(j / rings * 0.97) for j in range(rings + 1)]
+            tube(bm, pts, [r * lerp(1.0, 0.45, j / rings) for j in range(rings + 1)], (6, 4, 3)[level])
         bm.verts.ensure_lookup_table()
         for v in bm.verts[n0:]:
             v[age] = a
+    if near:
+        # the branches out to the sprays: thin, three-sided, darkening to their tips
+        for p0, p1 in branches:
+            n0 = len(bm.verts)
+            tube(bm, [p0, p0.lerp(p1, 0.5) + V((0, 0, 0.004)), p1], [0.0016, 0.0011, 0.0006], 3)
+            bm.verts.ensure_lookup_table()
+            for v in bm.verts[n0:]:
+                v[age] = 0.6
+                v[node] = -1.0
     ages = [v[age] for v in bm.verts]
+    nodes = [v[node] for v in bm.verts]
     bm.verts.layers.float.remove(age)
+    bm.verts.layers.float.remove(node)
     culm = bpy.data.meshes.new('culms')
     bm.to_mesh(culm)
     bm.free()
@@ -69,10 +102,13 @@ def stand(name, seed, level, target):
         for i, v in enumerate(bm.verts[n0:]):
             v[part] = k
             v[culm_age] = ages[i] if k else 0.0
+    n_crown = len(crown.vertices)
     bmesh.ops.triangulate(bm, faces=bm.faces)
     bm.normal_update()
     bm.verts.index_update()
     ao = vertex_ao(bm, 0.12, lambda a, b: a[part] == b[part])
+    # the full model's shading, looked up on its own sprays for the sprays and on its culms for the culms
+    full = near and (colour_at(near, lambda j: j < near['n_crown']), colour_at(near, lambda j: j >= near['n_crown']))
     cols, nors = [], []
     for v in bm.verts:
         n, a = v.normal, ao[v.index]
@@ -85,6 +121,17 @@ def stand(name, seed, level, target):
         else:
             c = V(LEAF) * lerp(0.4, 1.0, a) * lerp(0.6, 1.0, smoothstep(-0.6, 0.6, n.z)) * (0.85 + 0.3 * noise.noise(v.co * 12 + V((2.2, 0, 0))))
             nors.append(n.lerp(V((0, 0, 1)), 0.35).normalized())  # the sprays lit softly, as one mass
+        if full:
+            nd = nodes[v.index - n_crown] if v[part] else 0.0
+            f = full[v[part]](v.co, 0.01) if nd >= 0 else None
+            if f:
+                c = V(f[:3]) * (1.0 if v[part] else 0.92 + 0.16 * noise.noise(v.co * 300 + V((seed, 0, 0))))
+            elif nd < 0:
+                c = V(CULM) * 0.55 * lerp(0.5, 1.0, a)  # a branch
+            if nd == 1.0:
+                c = c * 0.78  # the node's ridge, where the sheath was
+            elif nd == 0.5:
+                c = c * 1.12  # the paler bloom of wax under it
         cols.append(c)
     bm.verts.layers.int.remove(part)
     bm.verts.layers.float.remove(culm_age)
@@ -99,20 +146,30 @@ def stand(name, seed, level, target):
     for i, c in enumerate(cols):
         ca.data[i].color = (*c, 1.0)
     me.color_attributes.active_color = ca
+    me['n_crown'] = n_crown  # (the sprays' vertices come first)
     link(me, name)
+    if near:
+        # single leaves, long and narrow, out of the sprays (the crown's faces: its vertices come first)
+        me = with_leaves(me, NEAR['leaves'], NEAR['leaf'], seed + 500, shape=(1.0, 0.18), lift=(0.2, 0.7),
+                         where=lambda p, nrm, t: max(t) < n_crown)
     return me
 
 
-# two stands, each in three levels (as the woods' trees: `bambooN`, `bambooN_far`, `bambooN_dist`)
+# two stands, each in three levels (as the woods' trees: `bambooN`, `bambooN_far`, `bambooN_dist`) and a near one
 KINDS = ['bamboo0', 'bamboo1']
 TARGET = 2600
 
 if __name__ == '__main__':
     out = sys.argv[sys.argv.index('--') + 1]
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    full = {}
     for i, kind in enumerate(KINDS):
         for level in range(len(LEVELS)):
             me = stand(kind + LEVELS[level], 21 + i, level, TARGET)
+            full.setdefault(kind, me)
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
+    for i, kind in enumerate(KINDS):  # (the Ultra tier's, which tools/blender.mjs puts in public/models/)
+        me = stand(kind + '_near', 21 + i, 0, TARGET, near=full[kind])
+        print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=False, export_yup=True)

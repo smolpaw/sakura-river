@@ -11,7 +11,7 @@ import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
 import { lightMap, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
-import { makeLods, makeMerged } from './lods.js';
+import { makeLods, makeMerged, loadModel, ultraUrl } from './lods.js';
 import { makeGrass } from './grass.js';
 import { bakeImpostors, makeImpostors } from './impostors.js';
 import { nearBlossoms } from './blossoms.js';
@@ -79,7 +79,8 @@ function detectTier(renderer) {
   return 'high';
 }
 
-const IMPOSTOR_FROM = 140; // the woods' full models (and leaf cards) to here, impostors beyond
+const IMPOSTOR_FROM = 140; // the woods' full models (and leaf cards) to here, impostors beyond (times the tier's lodScale)
+const NEAR_RANGE = 30; // the Ultra tier's near models (lods.js) to here (nearer for the pebbles and the bamboo: nearOf)
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export async function create(canvas, opts = {}) {
@@ -343,9 +344,16 @@ export async function create(canvas, opts = {}) {
   const templeGlows = makeGlows(new Float32Array([...fixed, ...G.lanterns.bonbori]), lanterns.uFocal);
   templeGlows.name = 'templeGlows';
   scene.add(templeGlows);
+  // the Blender models' levels of detail (lods.js): on the Ultra tier they reach further (lodScale) and, near the
+  // camera, far more detailed models take over (tools/<name>.py's `_near` meshes, fetched from public/models/)
+  const lodScale = Q.lodScale ?? opts.lodScale ?? 1;
+  // (the pebbles are 5 cm stones, and a grove has dozens of stands within 30 m: their near models only close by)
+  const nearOf = (name, range = NEAR_RANGE) => ((Q.nearModels ?? opts.nearModels) ? { nearUrl: ultraUrl(name), nearRange: range } : {});
+  // (all their files fetched at once, not one after another as the groups below are built)
+  for (const n of ['lamps', 'rocks', 'forest', 'cliffs', 'bamboo', 'shrubs', 'village']) if (nearOf(n).nearUrl) loadModel(ultraUrl(n)).catch(() => {});
   // the lantern lines' posts, the bonbori along the banks, the fire baskets by the cherry tree; the flames, their
   // glows (from the flames' middle) and their flickering light (tsl.js lanternLight)
-  const lamps = await makeLods(lampsUrl, LAMP_KINDS, G.lanterns.lists, M.lampMaterial(), [60]);
+  const lamps = await makeLods(lampsUrl, LAMP_KINDS, G.lanterns.lists, M.lampMaterial(), [60], { lodScale, ...nearOf('lamps') });
   lamps.name = 'lamps';
   lamps.traverse((o) => { o.castShadow = o.isMesh; });
   scene.add(lamps);
@@ -377,10 +385,10 @@ export async function create(canvas, opts = {}) {
   // ---------- ground cover ----------
   // boulders near and far, cast shadows; the stones at the water's edge in one level, no shadow
   const rockMat = M.rockMaterial();
-  const rocks = await makeLods(rocksUrl, ROCK_KINDS, G.rocks.boulders, rockMat, [45]);
-  const pebbles = await makeLods(rocksUrl, ['pebble'], [G.rocks.pebbles], rockMat, []);
+  const rocks = await makeLods(rocksUrl, ROCK_KINDS, G.rocks.boulders, rockMat, [45], { lodScale, ...nearOf('rocks') });
+  const pebbles = await makeLods(rocksUrl, ['pebble'], [G.rocks.pebbles], rockMat, [], { lodScale, ...nearOf('rocks', 8) });
   // the village's stone walls: merged, a group per few farmhouses (layer 1: far from the river, never in its reflection)
-  const walls = await makeMerged(rocksUrl, 'pebble', G.rocks.walls, rockMat, 70);
+  const walls = await makeMerged(rocksUrl, 'pebble', G.rocks.walls, rockMat, 70, lodScale);
   walls.traverse((o) => { if (o.isMesh) o.layers.set(1); });
   walls.name = 'stoneWalls';
   scene.add(walls);
@@ -409,30 +417,34 @@ export async function create(canvas, opts = {}) {
       return makeImpostors(bake, G.forest.reduce((n, l) => n + l.n, 0), { alphaToCoverage: a2c });
     },
   };
-  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [opts.impostorFrom ?? IMPOSTOR_FROM, 260], M.forestMaterial({ leaves: leafAtlas, alphaToCoverage: a2c }), impostor);
+  const impostorFrom = opts.impostorFrom ?? IMPOSTOR_FROM; // (times lodScale, as every range: makeLods)
+  const leavesMat = M.forestMaterial({ leaves: leafAtlas, alphaToCoverage: a2c, impostorFrom: impostorFrom * lodScale });
+  const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [impostorFrom, 260], { leavesMat, impostor, lodScale, ...nearOf('forest') });
   forest.name = 'forest';
   if (opts.debug) window.__sakuraDebug = { ...window.__sakuraDebug, renderer, impostors: forest.userData.impostors };
   scene.add(forest);
-  const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), [70]);
+  const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), [70], { lodScale, ...nearOf('cliffs') });
   cliffs.name = 'cliffs';
   scene.add(cliffs);
-  const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial(), [60, 160]);
+  const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial(), [60, 160], { lodScale, ...nearOf('bamboo', 15) });
   bamboo.name = 'bamboo';
   scene.add(bamboo);
-  const shrubs = await makeLods(shrubsUrl, SHRUB_KINDS, G.shrubs, M.shrubMaterial(), [35, 110]);
+  const shrubs = await makeLods(shrubsUrl, SHRUB_KINDS, G.shrubs, M.shrubMaterial(), [35, 110], { lodScale, ...nearOf('shrubs') });
   shrubs.name = 'shrubs';
   scene.add(shrubs);
   const villageMat = M.villageMaterial();
-  const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village.lists, villageMat, [90]);
+  const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village.lists, villageMat, [90], { lodScale, ...nearOf('village') });
   village.name = 'village';
   scene.add(village);
-  // the waterwheel, turned by the river (a full and a far model, switched as the village's)
+  // the waterwheel, turned by the river (a full and a far model, switched as the village's, and the near one)
   const wheel = new THREE.Group();
   if (G.village.wheel) {
-    const gl = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(villageUrl);
-    gl.scene.updateMatrixWorld(true);
-    for (const n of ['suisha_wheel', 'suisha_wheel_far']) {
-      const src = gl.scene.getObjectByName(n), m = new THREE.Mesh(src.geometry, villageMat);
+    const gl = await loadModel(villageUrl);
+    const near = nearOf('village').nearUrl && await loadModel(ultraUrl('village')).catch(() => null);
+    for (const [g, n] of [[gl, 'suisha_wheel'], [gl, 'suisha_wheel_far'], ...(near ? [[near, 'suisha_wheel_near']] : [])]) {
+      const src = g.scene.getObjectByName(n);
+      if (!src) continue;
+      const m = new THREE.Mesh(src.geometry, villageMat);
       m.applyMatrix4(src.matrixWorld);
       const spin = new THREE.Group();
       spin.add(m);
@@ -839,9 +851,11 @@ export async function create(canvas, opts = {}) {
     village.userData.lod(camera.position);
     lamps.userData.lod(camera.position);
     if (wheel.children.length) {
-      // a turn every ~9 s at the river's usual speed; the far model beyond 90 m
-      const far = camera.position.distanceTo(wheel.position) > 90;
-      wheel.children[0].visible = warming || !far; wheel.children[1].visible = warming || far;
+      // a turn every ~9 s at the river's usual speed; the far model beyond 90 m (times lodScale), the near one within
+      // NEAR_RANGE when there is one
+      const d = camera.position.distanceTo(wheel.position), far = d > 90 * lodScale, near = !!wheel.children[2] && d < NEAR_RANGE;
+      wheel.children[0].visible = warming || (!far && !near); wheel.children[1].visible = warming || far;
+      if (wheel.children[2]) wheel.children[2].visible = warming || near;
       for (const sp of wheel.children) sp.rotation.x -= dt * 0.7 * (0.3 + S.river / 2.2);
     }
     shrubs.userData.lod(camera.position);

@@ -135,6 +135,93 @@ for i in range(32):  # cosine-weighted hemisphere about +z (Fibonacci spiral)
     DIRS.append(V((r * math.cos(a), r * math.sin(a), math.sqrt(max(0.0, 1 - r * r)))))
 
 
+def colour_at(me, use=None):
+    """The colour of mesh `me` (its 'Color' point attribute) at the point of its surface nearest p: f(p, reach) ->
+    (r, g, b, a), or None beyond reach. A near model (`<kind>_near`, the Ultra tier's) takes its full model's shading
+    so, and adds only the fine detail its own vertices can carry: the full model's occlusion and colour come from far
+    fewer vertices, and computed afresh on the finer surface they would differ, which shows when the levels switch."""
+    cos = [v.co.copy() for v in me.vertices]
+    tri = [(p.vertices[0], p.vertices[i], p.vertices[i + 1]) for p in me.polygons for i in range(1, len(p.vertices) - 1)]
+    tri = [t for t in tri if not use or all(use(j) for j in t)]  # (use: which vertices' surface counts)
+    bvh = BVHTree.FromPolygons(cos, tri)
+    col = [tuple(d.color) for d in me.color_attributes['Color'].data]
+
+    def f(p, reach=0.1):
+        loc, nrm, i, d = bvh.find_nearest(p, reach)
+        if loc is None:
+            return None
+        a, b, c = (cos[j] for j in tri[i])
+        e0, e1, e2 = b - a, c - a, loc - a
+        d00, d01, d11, d20, d21 = e0.dot(e0), e0.dot(e1), e1.dot(e1), e2.dot(e0), e2.dot(e1)
+        den = d00 * d11 - d01 * d01 or 1e-12
+        wb, wc = (d11 * d20 - d01 * d21) / den, (d00 * d21 - d01 * d20) / den
+        wb, wc = clamp(wb, 0, 1), clamp(wc, 0, 1)
+        wa = max(0.0, 1 - wb - wc)
+        return tuple(wa * x + wb * y + wc * z for x, y, z in zip(col[tri[i][0]], col[tri[i][1]], col[tri[i][2]]))
+    return f
+
+
+def with_leaves(me, n, size, seed, *, shape=(1.0, 0.45), lift=(0.3, 0.9), where=lambda p, nrm, t: True, tint=(0.85, 1.2),
+                shade=None):
+    """Mesh `me` (smooth, custom normals set per vertex, a 'Color' point attribute) with n leaves added over its
+    surface (spread by area, on the triangles `where(centre, normal, vertex indices)` allows): each a pointed blade
+    `size` long (times 0.75..1.3; shape: length and width as parts of it) rooted on the surface, pointing a random way
+    along it and lifted out of it by `lift` (radians), its two faces back to back. Each takes the colour under it (or
+    shade(p) -> rgba), tinted by `tint`, and the surface's normal, so the leaves light as the mass they stand on and
+    only add the broken edge and flicker of real foliage. Returns a new mesh in its place (same name, same object)."""
+    rng = random.Random(seed)
+    cos = [v.co.copy() for v in me.vertices]
+    nors = [V((0, 0, 0)) for _ in me.vertices]
+    for loop in me.loops:
+        nors[loop.vertex_index] = V(me.corner_normals[loop.index].vector)
+    corner = [V(c.vector) for c in me.corner_normals]  # kept per corner: sharp edges stay sharp
+    ca = me.color_attributes['Color']
+    cols = [tuple(d.color) for d in ca.data]
+    polys = [tuple(p.vertices) for p in me.polygons]
+    tri = [(p[0], p[i], p[i + 1]) for p in polys for i in range(1, len(p) - 1)]
+    ok = [t for t in tri if where(sum((cos[j] for j in t), V()) / 3, (cos[t[1]] - cos[t[0]]).cross(cos[t[2]] - cos[t[0]]).normalized(), t)]
+    cum = list(itertools.accumulate(((cos[b] - cos[a]).cross(cos[c] - cos[a])).length / 2 for a, b, c in ok))
+    for _ in range(n if ok else 0):
+        a, b, c = ok[bisect.bisect_left(cum, rng.random() * cum[-1])]
+        u, w = rng.random(), rng.random()
+        if u + w > 1:
+            u, w = 1 - u, 1 - w
+        p = cos[a] + (cos[b] - cos[a]) * u + (cos[c] - cos[a]) * w
+        nrm = (nors[a] * (1 - u - w) + nors[b] * u + nors[c] * w).normalized()
+        col = shade(p) if shade else tuple(x * (1 - u - w) + y * u + z * w for x, y, z in zip(cols[a], cols[b], cols[c]))
+        k = rng.uniform(*tint)
+        col = (col[0] * k, col[1] * k, col[2] * k, col[3])
+        t = Matrix.Rotation(rng.uniform(0, math.tau), 3, nrm) @ nrm.orthogonal().normalized()
+        up = rng.uniform(*lift)
+        d = t * math.cos(up) + nrm * math.sin(up)  # along the blade
+        s = size * rng.uniform(0.75, 1.3)
+        side = d.cross(nrm).normalized() * s * shape[1] / 2
+        root = p - nrm * s * 0.05
+        quad = [root, root + d * s * 0.45 + side, root + d * s * shape[0], root + d * s * 0.45 - side]
+        o = len(cos)
+        cos += quad + quad  # the back face on vertices of its own
+        nors += [nrm] * 8
+        cols += [col] * 8
+        polys += [(o, o + 1, o + 2), (o, o + 2, o + 3), (o + 4, o + 6, o + 5), (o + 4, o + 7, o + 6)]
+    out = bpy.data.meshes.new(me.name)
+    out.from_pydata(cos, [], polys)
+    for p in out.polygons:
+        p.use_smooth = True
+    out.normals_split_custom_set(corner + [nors[l.vertex_index] for l in out.loops[len(corner):]])
+    oc = out.color_attributes.new('Color', 'FLOAT_COLOR', 'POINT')
+    for i, c in enumerate(cols):
+        oc.data[i].color = c
+    out.color_attributes.active_color = oc
+    # in place of `me` on its object
+    for ob in bpy.data.objects:
+        if ob.data == me:
+            ob.data = out
+    name = me.name
+    bpy.data.meshes.remove(me)
+    out.name = name
+    return out
+
+
 def vertex_ao(bm, reach, same=lambda a, b: True):
     """Ambient occlusion per vertex of a triangulated bmesh (normals updated, verts indexed): rays over the hemisphere
     about each vertex's normal, then blurred twice over the neighbours that are `same` part (decimated meshes are
@@ -221,6 +308,7 @@ def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0
     bm = bmesh.new()
     kind = bm.verts.layers.int.new('kind')  # -1 bark, else index into crowns
     parts = [(me, i) for i, (me, _) in enumerate(crowns)] + ([(bark, -1)] if bark else [])
+    n_crown = sum(len(me.vertices) for me, _ in crowns)
     for me, k in parts:
         n0 = len(bm.verts)
         bm.from_mesh(me)
@@ -262,12 +350,61 @@ def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0
     for i, c in enumerate(cols):
         ca.data[i].color = (*c, 1.0)
     me.color_attributes.active_color = ca
+    me['n_crown'] = n_crown  # (the crowns' vertices come first: near_refine tells them from the bark so)
     link(me, name)
     return me
 
 
+# ---------- the near models (the Ultra tier's `<kind>_near`) ----------
+# The full model's crown fused on a finer grid, shaded as the full one (colour_at), with leaves standing out of it;
+# the trunk and limbs rounder and longer-ringed, their bark split into plates by fissures.
+NEAR = dict(voxel=0.6, crown=3.0, seg=10, step=0.012, leaves=0.5, leaf=0.016)  # leaves: per full model's triangle
+
+
+def fissures(p):
+    """how deep in a bark fissure p is (0..1): plates split along the trunk, a little twisted"""
+    return smoothstep(-0.05, -0.35, noise.noise(V((p.x * 140 + p.z * 6, p.y * 140, p.z * 14)) + V((5.3, 1.1, 7.7))))
+
+
+def near_limbs(paths, twigs=()):
+    """limbs() for a near model: the paths' points closer together (rings every NEAR['step']), rounder tubes,
+    the bark's fissures cut into them"""
+    def dense(pts):
+        out = [pts[0]]
+        for a, b in zip(pts, pts[1:]):
+            n = max(1, math.ceil((b - a).length / NEAR['step']))
+            out += [a.lerp(b, i / n) for i in range(1, n + 1)]
+        return out
+    me = limbs([(dense(pts), r0, r1) for pts, r0, r1 in paths], NEAR['seg'], [(dense(pts), r0, r1) for pts, r0, r1 in twigs])
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.normal_update()
+    for v in bm.verts:
+        v.co -= v.normal * 0.0012 * fissures(v.co)
+    bm.to_mesh(me)
+    bm.free()
+    return me
+
+
+def near_refine(me, full, seed, leaf_shape=(1.0, 0.45)):
+    """a near model `me` (assemble()d) shaded as the full model `full`: the crown's colour looked up on the full
+    crown, the bark's on the full bark, then the fine detail added (the crown's flicker of light and shade, the bark's
+    fissures dark), and leaves over the crown"""
+    n = me['n_crown']
+    looks = (colour_at(full, lambda j: j < full['n_crown']), colour_at(full, lambda j: j >= full['n_crown']))
+    ca = me.color_attributes['Color']
+    for i, v in enumerate(me.vertices):
+        bark = i >= n
+        f = looks[bark](v.co, 0.02)
+        if not f:
+            continue
+        k = (1 - 0.45 * fissures(v.co)) if bark else 0.92 + 0.16 * noise.noise(v.co * 60 + V((seed, 0, 0)))
+        ca.data[i].color = (f[0] * k, f[1] * k, f[2] * k, f[3])
+    return with_leaves(me, int(NEAR['leaves'] * tris(full)), NEAR['leaf'], seed + 500, shape=leaf_shape, where=lambda p, nrm, t: max(t) < n)
+
+
 # ---------- the kinds ----------
-def conifer(name, seed, *, w, base, n, taper, droop, size, col, target, level=0, leaves=(420, 0.045)):
+def conifer(name, seed, *, w, base, n, taper, droop, size, col, target, level=0, leaves=(420, 0.045), near=None):
     """sugi / hinoki: a straight trunk under a crown of tufts, spiralling up, each tier widest at its foot."""
     rng = random.Random(seed)
     R = lambda t: w * (0.55 + 0.45 * smoothstep(0, 0.12, t)) * (1 - t) ** taper
@@ -285,14 +422,17 @@ def conifer(name, seed, *, w, base, n, taper, droop, size, col, target, level=0,
     # the leader, reaching down into the top tier; the lighter levels' is a solid spire, as their small tufts at the
     # top decimate to floating shards
     clumps.append((V((0, 0, 0.95)), (0.016, 0.016, 0.06)) if not level else (V((0, 0, 0.88)), (smin, smin, 0.1)))
-    crown = foliage(clumps, (0.0065, 0.0065, 0.014)[level], 0.005, 18, target * (1, 0.25, 0.09)[level], seed)
-    bark = limbs([([V((0, 0, -0.04)), V((0, 0, base + 0.1)), V((0, 0, 0.84))], 0.024, 0.006)], (6, 4, 3)[level])
-    return assemble(name + LEVELS[level], [(crown, col)], bark, lambda p: V((0, 0, p.z - 0.5 * math.hypot(p.x, p.y))), 0.75, 0.5, 0.12,
-                    cards=None if level else dict(n=leaves[0], size=leaves[1], cell=1, seed=seed, width=lambda z: R(clamp((z - base) / (0.96 - base), 0, 1))))
+    crown = foliage(clumps, (0.0065, 0.0065, 0.014)[level] * (NEAR['voxel'] if near else 1), 0.005, 18,
+                    target * (1, 0.25, 0.09)[level] * (NEAR['crown'] if near else 1), seed)
+    trunk = [([V((0, 0, -0.04)), V((0, 0, base + 0.1)), V((0, 0, 0.84))], 0.024, 0.006)]
+    bark = near_limbs(trunk) if near else limbs(trunk, (6, 4, 3)[level])
+    me = assemble(name + ('_near' if near else LEVELS[level]), [(crown, col)], bark, lambda p: V((0, 0, p.z - 0.5 * math.hypot(p.x, p.y))), 0.75, 0.5, 0.12,
+                  cards=None if level or near else dict(n=leaves[0], size=leaves[1], cell=1, seed=seed, width=lambda z: R(clamp((z - base) / (0.96 - base), 0, 1))))
+    return near_refine(me, near, seed, (1.0, 0.3)) if near else me
 
 
 def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.4, n_limbs=4, mottle=None, flat=1.0, soft=0.85, ao_min=0.4, level=0,
-              leaves=(500, 0.075), cell=0):
+              leaves=(500, 0.075), cell=0, near=None):
     """A short trunk forking into limbs that carry clumps of leaves (or blossom) round an ellipsoidal crown."""
     rng = random.Random(seed)
     clumps = []
@@ -313,7 +453,7 @@ def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.
     for _ in range(n // 5):
         p = V((rng.uniform(-0.5, 0.5) * ex, rng.uniform(-0.5, 0.5) * ex, cz + rng.uniform(-0.1, 0.35) * ez))
         clumps.append((p, (size * 0.9,) * 2 + (size * 0.9 * flat,)))
-    crown = foliage(clumps, VOXEL[level] * 0.008, 0.01, 14, target * CROWN[level], seed)
+    crown = foliage(clumps, VOXEL[level] * 0.008 * (NEAR['voxel'] if near else 1), 0.01, 14, target * CROWN[level] * (NEAR['crown'] if near else 1), seed)
     # limbs: the trunk forks at `fork` into n_limbs, each carrying the clumps on its side, twigs to each clump
     top = V((rng.uniform(-0.02, 0.02), rng.uniform(-0.02, 0.02), fork))
     paths, twigs = [([V((0, 0, -0.04)), V((0.005, 0, fork * 0.5)), top], 0.03, 0.022)], []
@@ -330,12 +470,13 @@ def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.
         for c in mine:
             if not level and (c - end).length > 0.05 and c.z < cz + 0.15 * ez:  # twigs only where they can show, under the crown
                 twigs.append(([end, end.lerp(c, 0.5) + V((0, 0, 0.02)), end.lerp(c, 0.85)], 0.009, 0.004))
-    bark = limbs(paths, (5, 4, 3)[level], twigs)
-    return assemble(name + LEVELS[level], [(crown, col)], bark, lambda p: V((0, 0, cz)), soft, low, 0.18, mottle, ao_min,
-                    cards=None if level else dict(n=leaves[0], size=leaves[1], cell=cell, seed=seed))
+    bark = near_limbs(paths, twigs) if near else limbs(paths, (5, 4, 3)[level], twigs)
+    me = assemble(name + ('_near' if near else LEVELS[level]), [(crown, col)], bark, lambda p: V((0, 0, cz)), soft, low, 0.18, mottle, ao_min,
+                  cards=None if level or near else dict(n=leaves[0], size=leaves[1], cell=cell, seed=seed))
+    return near_refine(me, near, seed) if near else me
 
 
-def pine(name, seed, *, col, target, level=0, leaves=(450, 0.06)):
+def pine(name, seed, *, col, target, level=0, leaves=(450, 0.06), near=None):
     """A black pine leaning out over a drop (+x): a crooked trunk, its limbs holding thick cloud-shaped pads of
     needles in tiers, ragged at their edges and flatter underneath, as the gardeners' pines are pruned."""
     rng = random.Random(seed)
@@ -360,39 +501,46 @@ def pine(name, seed, *, col, target, level=0, leaves=(450, 0.06)):
         if (src - c).length > 0.05:
             m = src.lerp(c, 0.5) + V((0, 0, rng.uniform(-0.02, 0.04)))
             paths.append(([src, m, c - V((0, 0, 0.03))], 0.014, 0.007))
-    crown = foliage(clumps, VOXEL[level] * 0.006, 0.006, 30, target * CROWN[level], seed)
-    bark = limbs(paths, (6, 4, 3)[level])
+    crown = foliage(clumps, VOXEL[level] * 0.006 * (NEAR['voxel'] if near else 1), 0.006, 30, target * CROWN[level] * (NEAR['crown'] if near else 1), seed)
+    bark = near_limbs(paths) if near else limbs(paths, (6, 4, 3)[level])
     # pads bulge from just under their own middle
     mids = [V((x, y, z - 0.08)) for x, y, z, _ in pads]
-    return assemble(name + LEVELS[level], [(crown, col)], bark, lambda p: min(mids, key=lambda m: (m - p).length), 0.75, 0.35, 0.12,
-                    cards=None if level else dict(n=leaves[0], size=leaves[1], cell=2, seed=seed))
+    me = assemble(name + ('_near' if near else LEVELS[level]), [(crown, col)], bark, lambda p: min(mids, key=lambda m: (m - p).length), 0.75, 0.35, 0.12,
+                  cards=None if level or near else dict(n=leaves[0], size=leaves[1], cell=2, seed=seed))
+    return near_refine(me, near, seed, (1.0, 0.2)) if near else me
 
 
 # Each kind comes in three levels (lods.js switches them by distance): `name` for the trees near the camera, `name_far`
 # with a fifth of the crown's triangles (conifers: a quarter, from fewer tufts), the twigs left out and coarser limbs,
 # and `name_dist` for the far hills with 6% of them (conifers: 9%) on three-sided limbs, fused on a coarser grid first
-# (VOXEL) so that so few triangles still make a clean shape instead of shards.
+# (VOXEL) so that so few triangles still make a clean shape instead of shards. For the Ultra tier a fourth, `name_near`
+# (built from `name` after it: near_refine), goes in front of them all.
 LEVELS = ('', '_far', '_dist')
 CROWN = (1, 0.2, 0.06)
 VOXEL = (1, 1, 2)
 KINDS = {
-    'sugi': lambda level: conifer('sugi', 1, w=0.16, base=0.12, n=70, taper=0.85, droop=0.8, size=0.55, col=(0.045, 0.085, 0.05), target=1400, level=level),
-    'hinoki': lambda level: conifer('hinoki', 2, w=0.25, base=0.08, n=60, taper=0.7, droop=0.55, size=0.6, col=(0.06, 0.11, 0.05), target=1600, level=level),
-    'konara': lambda level: broadleaf('konara', 3, cz=0.62, ex=0.44, ez=0.36, fork=0.3, n=22, size=0.14, gap=0.75, col=(0.19, 0.3, 0.06), target=3000, level=level),
-    'kashi': lambda level: broadleaf('kashi', 4, cz=0.6, ex=0.46, ez=0.38, fork=0.26, n=30, size=0.15, gap=0.55, col=(0.07, 0.13, 0.045), target=2600, level=level),
-    'cherry': lambda level: broadleaf('cherry', 5, cz=0.6, ex=0.62, ez=0.34, fork=0.22, n=55, size=0.09, gap=0.6, col=(1.0, 0.7, 0.74), target=7000,
-                                    low=0.75, n_limbs=5, mottle=((0.6, 0.3, 0.22), 0.35), flat=0.8, soft=0.7, ao_min=0.72, level=level,
+    'sugi': lambda level, near=None: conifer('sugi', 1, w=0.16, base=0.12, n=70, taper=0.85, droop=0.8, size=0.55, col=(0.045, 0.085, 0.05), target=1400, level=level, near=near),
+    'hinoki': lambda level, near=None: conifer('hinoki', 2, w=0.25, base=0.08, n=60, taper=0.7, droop=0.55, size=0.6, col=(0.06, 0.11, 0.05), target=1600, level=level, near=near),
+    'konara': lambda level, near=None: broadleaf('konara', 3, cz=0.62, ex=0.44, ez=0.36, fork=0.3, n=22, size=0.14, gap=0.75, col=(0.19, 0.3, 0.06), target=3000, level=level, near=near),
+    'kashi': lambda level, near=None: broadleaf('kashi', 4, cz=0.6, ex=0.46, ez=0.38, fork=0.26, n=30, size=0.15, gap=0.55, col=(0.07, 0.13, 0.045), target=2600, level=level, near=near),
+    'cherry': lambda level, near=None: broadleaf('cherry', 5, cz=0.6, ex=0.62, ez=0.34, fork=0.22, n=55, size=0.09, gap=0.6, col=(1.0, 0.7, 0.74), target=7000,
+                                    low=0.75, n_limbs=5, mottle=((0.6, 0.3, 0.22), 0.35), flat=0.8, soft=0.7, ao_min=0.72, level=level, near=near,
                                     leaves=(900, 0.075), cell=3),  # light shade: the blossom glows (forestMaterial)
-    'pine': lambda level: pine('pine', 6, col=(0.05, 0.095, 0.045), target=5000, level=level),
+    'pine': lambda level, near=None: pine('pine', 6, col=(0.05, 0.095, 0.045), target=5000, level=level, near=near),
 }
 
 if __name__ == '__main__':
     args = sys.argv[sys.argv.index('--') + 1:]
     out = args[0]
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    full = {}
     for kind in args[1:] or KINDS:
         for level in range(len(LEVELS)):
             me = KINDS[kind](level)
+            full.setdefault(kind, me)
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
+    for kind in full:  # the near models (the Ultra tier's, which tools/blender.mjs puts in public/models/)
+        me = KINDS[kind](0, full[kind])
+        print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=True, export_yup=True)

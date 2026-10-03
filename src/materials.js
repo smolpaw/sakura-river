@@ -237,13 +237,13 @@ export function rockMaterial() {
 
 // the woods' trees (tools/forest.py, the bamboo too). With `leaves` (the leaf atlas, vegetation.js paintLeafAtlas) it
 // draws the near trees' leaf cards: cut out of the atlas, lit by the crown's normal on both faces (the cards are
-// tilted every way; their own would light them in patches), worn away between 120 and 140 m, where the trees turn to
-// impostors (main.js IMPOSTOR_FROM)
-export function forestMaterial({ leaves = null, alphaToCoverage = false } = {}) {
+// tilted every way; their own would light them in patches), worn away over the 20 m before `impostorFrom`, where the
+// trees turn to impostors (main.js IMPOSTOR_FROM, times the tier's lodScale)
+export function forestMaterial({ leaves = null, alphaToCoverage = false, impostorFrom = 140 } = {}) {
   const tone = vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8));
   const params = !leaves ? { colorNode: tone } : {
     colorNode: texture(leaves, uv()).mul(vec4(tone, 1.0)), side: THREE.DoubleSide, alphaToCoverage,
-    alphaTestNode: sstep(120.0, 140.0, wp.sub(cameraPosition).length()).mul(0.55).add(0.45),
+    alphaTestNode: sstep(impostorFrom - 20, impostorFrom, wp.sub(cameraPosition).length()).mul(0.55).add(0.45),
     normalNode: transformNormalToView(normalLocal).normalize(),
   };
   return new LitMaterial({ vertexColors: true, roughness: 1, ...params }, forestLight());

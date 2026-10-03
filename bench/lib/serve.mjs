@@ -33,7 +33,9 @@ export function startServer(port = 0) {
         out.on('error', (e) => { res.writeHead(500); res.end(String(e)); });
         return;
       }
-      const file = safe(decodeURIComponent(url.pathname));
+      let file = safe(decodeURIComponent(url.pathname));
+      // what the page fetches on demand from public/ (the Ultra tier's models, the sounds), as the site serves it
+      if (!fs.existsSync(file)) file = path.join(BENCH, '..', 'public', path.relative(BENCH, file));
       const st = fs.statSync(file);
       if (!st.isFile()) throw new Error('not a file');
       res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store',
