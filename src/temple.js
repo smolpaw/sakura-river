@@ -501,6 +501,6 @@ export function templeData(world) {
 
 export function makeTemple(d, mat) {
   const mesh = new THREE.Mesh(d.geo, mat);
-  mesh.castShadow = false; mesh.receiveShadow = false;
+  mesh.castShadow = false; mesh.receiveShadow = true;
   return mesh;
 }

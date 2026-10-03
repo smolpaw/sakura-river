@@ -82,11 +82,11 @@ const laneStones = (p, scale, seed, share) => {
 const rutDepth = 0.05, rutAt = 0.6, rutW = 0.2;
 const rut = (s) => exp(s.abs().sub(rutAt).div(rutW).pow(2.0).negate());
 const rutSlope = (s) => { const u = s.abs().sub(rutAt).div(rutW); return u.mul(rut(s)).mul(2.0 * rutDepth / rutW).mul(sign(s)); };
-// the lane's pebbles, a few centimetres across, their outlines warped so they aren't round: kicked to the verges and
-// the crown between the ruts, few in the ruts and down the middle where the feet go
+// the lane's pebbles, a few centimetres across, their outlines warped so they aren't round: a third of the cells hold
+// one, kicked to the verges and the crown between the ruts, few in the ruts and down the middle where the feet go
 const lanePebbles = (s) => {
   const p = wp.xz.add(vec2(vnoise(wp.xz.mul(31.0)), vnoise(wp.xz.mul(31.0).add(7.0))).sub(0.5).mul(0.035));
-  return laneStones(p, 0.09, 17.0, mix(0.5, 0.88, rut(s).max(sstep(0.35, 0.0, s.abs()).mul(0.7))));
+  return laneStones(p, 0.09, 17.0, mix(0.66, 0.9, rut(s).max(sstep(0.35, 0.0, s.abs()).mul(0.7))));
 };
 // the colour of the lane's earth close by, over `c` (the vertex colour's dirt)
 const laneColor = (map, dist, earth, c) => Fn(() => {
@@ -100,10 +100,11 @@ const laneColor = (map, dist, earth, c) => Fn(() => {
     // the earth trodden in streaks along the lane, the ruts' packed earth a shade darker
     const streak = vnoise(vec2(along.mul(0.6), s.mul(2.5))).sub(0.5).mul(0.2);
     const ground = o.mul(speck.add(streak).add(1.0)).mul(float(1.0).sub(rut(s).mul(0.16)));
-    // the pebbles: greys and browns near the earth's own tone, most a little darker (the sun on their domes lights
-    // them)
+    // the pebbles: the earth's own browns, some greyed, each its own shade: most a little darker than the earth, about
+    // one in eight lighter (the sun on their domes, laneNormal, does the rest)
     const st = lanePebbles(s);
-    const stone = mix(o.mul(0.75), mix(vec3(0.15, 0.14, 0.13), vec3(0.33, 0.31, 0.27), st.y), 0.6);
+    const shade = mix(0.5, 0.85, st.y).add(sstep(0.84, 0.9, st.y).mul(0.25));
+    const stone = mix(o, vec3(dot(o, vec3(0.3, 0.6, 0.1))), st.y.mul(13.7).fract().mul(0.35)).mul(shade);
     o.assign(mix(o, mix(ground, stone, st.x.mul(0.8)), k));
   });
   return o;
@@ -115,7 +116,7 @@ const laneNormal = (map, dist, earth) => Fn(() => {
     const F = laneFrame(map, dist, earth);
     If(F.w.greaterThan(0.0), () => {
       const s = F.x, across = vec2(F.z.negate(), F.y); // (the gradient of s)
-      const t = across.mul(rutSlope(s).negate()).add(lanePebbles(s).zw.mul(0.5)).mul(F.w);
+      const t = across.mul(rutSlope(s).negate()).add(lanePebbles(s).zw.mul(1.1)).mul(F.w);
       n.assign(normalize(n.add(cameraViewMatrix.mul(vec4(t.x, 0.0, t.y, 0.0)).xyz)));
     });
   });
@@ -245,6 +246,12 @@ const paddyWater = (sky) => Fn(() => {
 // light thrown back by the sunlit ground onto faces turned sideways or down, at full strength once the sun is a little
 // above the horizon: a wall in shade stays warm grey rather than going the blue of the sky light alone
 export const groundBounce = () => U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(float(0.5).sub(normalWorld.y.mul(0.5))).mul(vec3(0.34, 0.36, 0.24));
+// By day the hemisphere's sky light is the zenith's deep blue (main.js: uSkyAmb × 1.25 at about 0.77 strength by
+// day, so about uSkyAmb). A wall in shade mixes it with the ground's light and groundBounce; stone in shade facing up
+// sees nothing else and comes out navy. Added times the albedo, this pulls the sky's light on faces turned up most of
+// the way to its own grey, keeping its brightness and a hint of its blue.
+const skyToGrey = () => vec3(dot(U.uSkyAmb, vec3(0.3, 0.6, 0.1))).sub(U.uSkyAmb)
+  .mul(max(normalWorld.y, 0.0).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(0.8 / Math.PI));
 
 export function barkMaterial(map, bumpMap) {
   return new LitMaterial({
@@ -425,9 +432,15 @@ export function templeMaterial(d) {
     c.assign(mix(c, vec3(0.16, 0.2, 0.09).mul(vnoise(wp.xz.mul(9.0)).mul(0.6).add(0.7)), moss.mul(0.6)));
     return c;
   })();
+  // The temple's warm greys and whites (its stone, gravel, plaster, paper: warmer than blue and unsaturated; not the
+  // roofs' cool grey tiles, the wood or the bronze), as the vertex colours have them
+  const vc = attribute('color', 'vec3');
+  const neutral = sstep(1.0, 1.06, vc.r.div(max(vc.b, 1e-3))).mul(sstep(0.4, 0.3, vc.r.sub(vc.b).div(max(vc.r, 1e-3))));
   return new LitMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, colorNode }, (out) => Fn(() => {
     // the sunlit gravel and meadow light the walls and the eaves' undersides from below (as on rock)
     const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
+    // the paving and the treads in shade grey, not navy
+    o.addAssign(diffuseColor.rgb.mul(skyToGrey()).mul(neutral));
     If(U.uLights.greaterThan(0.0), () => {
       const near = float(0).toVar(), up = float(0).toVar();
       for (const c of lamps) { const v = wp.sub(c); near.addAssign(float(1.0).div(dot(v, v).mul(1.5).add(0.3))); }
