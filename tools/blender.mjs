@@ -1,6 +1,7 @@
-// Builds models in src/models/ with Blender and compresses them like the deer: each tools/<name>.py into
-// src/models/<name>.glb (the woods' trees, the gorge's rock walls, the bamboo, the river's boulders, the cherries'
-// trunks, the village's buildings, the shrubs, the riverside's lamps). A model built from the scene's own data gets it from tools/<name>.mjs, as a JSON file after the output.
+// Builds models with Blender and compresses them like the deer: each tools/<name>.py into src/models/<name>.glb (the
+// woods' trees, the gorge's rock walls, the bamboo, the river's boulders, the cherries' trunks, the village's
+// buildings, the shrubs, the riverside's lamps), inlined in the page, or (PUBLIC: the traveller) into
+// public/models/<name>.glb, fetched by the page when it needs it. A model built from the scene's own data gets it from tools/<name>.mjs, as a JSON file after the output.
 // The Ultra tier's near models (meshes named `<kind>_near`) go to public/models/<name>-ultra.glb instead: fetched on
 // demand (lods.js ultraUrl), not inlined in the page.
 //   node tools/blender.mjs [forest cliffs bamboo rocks ...]     (all by default; needs `blender` on PATH, or BLENDER=/path/to/blender)
@@ -13,10 +14,11 @@ import { prune, dedup, meshopt } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const MODELS = ['forest', 'cliffs', 'bamboo', 'rocks', 'cherry', 'village', 'shrubs', 'lamps'];
+const MODELS = ['forest', 'cliffs', 'bamboo', 'rocks', 'cherry', 'village', 'shrubs', 'lamps', 'human'];
+const PUBLIC = ['human'];
 // where a model's meshes go: [file, which meshes (by node name)]; a file no mesh goes to is not written
 const targets = (name) => [
-  [path.join(ROOT, 'src', 'models', `${name}.glb`), (n) => !n.endsWith('_near')],
+  [path.join(ROOT, PUBLIC.includes(name) ? 'public' : 'src', 'models', `${name}.glb`), (n) => !n.endsWith('_near')],
   [path.join(ROOT, 'public', 'models', `${name}-ultra.glb`), (n) => n.endsWith('_near')],
 ];
 

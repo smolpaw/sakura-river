@@ -22,8 +22,8 @@ const BRONZE = [0.5, 0.36, 0.12], LACQUER = [0.03, 0.025, 0.025], COPPER = [0.09
 export const BRIDGE_Z = -60;
 
 // the bridge's frame: pt(u, side, dy) is u 0..1 across the river (may run past the ends), side along the flow,
-// dy above the deck line
-function bridgeFrame(world, zc) {
+// dy above the deck line (walk.js walks the deck: its top is the deck line)
+export function bridgeFrame(world, zc) {
   const rx = world.riverX(zc), hw = world.riverHW(zc);
   const [fx, fz] = world.flowDir(zc);
   const across = new V(fz, 0, -fx).normalize(); // perpendicular to flow
@@ -40,8 +40,10 @@ function bridgeFrame(world, zc) {
   };
   return { center, across, along, half, endY, rise, width, pt };
 }
-const CORNER = 0.035; // corner lamp posts stand this far (in u) past the deck ends
-const cornerOff = (width) => width * 0.5 + 0.28;
+export const CORNER = 0.035; // corner lamp posts stand this far (in u) past the deck ends
+export const cornerOff = (width) => width * 0.5 + 0.28;
+// the railings stand this far either side of the deck's middle (walk.js keeps the walker inside them)
+export const RAIL_OFF = 1.22;
 
 // where the riverside lantern ropes tie on: the downstream corner post at each end (side -1: u = 0, +1: u = 1)
 export function bridgeRopeAnchors(world) {
@@ -132,7 +134,7 @@ export function bridgeData(world, zc) {
   // lanterns hang from brackets on every other post
   const POSTS = 10;
   for (const sd of [-1, 1]) {
-    const off = sd * 1.22;
+    const off = sd * RAIL_OFF;
     const us = Array.from({ length: POSTS + 1 }, (_, j) => uAt((j / POSTS) * L));
     us.forEach((u, j) => {
       const end = j === 0 || j === POSTS, r = end ? 0.12 : 0.08, h = end ? 1.3 : 1.18;

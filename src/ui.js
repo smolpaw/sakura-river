@@ -118,6 +118,25 @@ import { WEATHERS, TIMES } from './weather.js';
   $('btn-reset').addEventListener('click', function () {
     setPressed($('btn-cine'), false); if (engine) engine.resetCamera();
   });
+  // walk mode: first person along the lanes (the Walk button, Reset view or a second Esc leave it); a hint on the
+  // controls fades a few seconds after it starts
+  var walking = false, hintTimer = 0, hint = $('walk-hint');
+  if (window.matchMedia && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) {
+    hint.textContent = 'Left thumb walk · right thumb look';
+  }
+  $('btn-walk').addEventListener('click', function () {
+    var on = this.getAttribute('aria-pressed') !== 'true';
+    if (engine) engine.setWalk(on);
+    if (on) this.blur(); // the keys walk rather than press the button again
+  });
+  function showWalk(on) {
+    walking = on;
+    setPressed($('btn-walk'), on);
+    if (on) { setPressed($('btn-cine'), false); setPressed($('btn-orbit'), false); }
+    clearTimeout(hintTimer);
+    hint.classList.toggle('show', on);
+    if (on) hintTimer = setTimeout(function () { hint.classList.remove('show'); }, 5000);
+  }
   var fullBtn = $('btn-full');
   var canFull = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
   if (!canFull) fullBtn.hidden = true;
@@ -144,6 +163,8 @@ import { WEATHERS, TIMES } from './weather.js';
     document.body.classList.add('ui-idle');
   }
   function wake(e) {
+    // walking (keys held, the mouse looking round under pointer lock) is not activity on the controls
+    if (walking && e && (e.type === 'keydown' || (e.type === 'pointermove' && document.pointerLockElement))) return;
     if (e && e.pointerType) mouse = e.pointerType === 'mouse'; // a tapped control keeps :hover on touch screens
     document.body.classList.remove('ui-idle');
     clearTimeout(idleTimer);
@@ -165,6 +186,7 @@ import { WEATHERS, TIMES } from './weather.js';
         if (!el.hidden) el.textContent = s.fps + ' fps';
       },
       onCinematicChange: function (on) { setPressed($('btn-cine'), on); },
+      onWalkChange: showWalk,
       onReady: function (r) { if (!fixed) $('quality').options[0].textContent = 'Auto · ' + r.quality; },
     }).then(function (e) {
       engine = e;

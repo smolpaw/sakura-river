@@ -56,6 +56,13 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .ui-idle :is(.panel, .quality, .actions .btn, .top-right > *) { opacity: 0; }
 .ui-idle #scene { cursor: none; }
 
+/* walk mode's controls, shown as walking starts and fading after a few seconds (ui.js) */
+.walk-hint { position: fixed; top: calc(22px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
+  max-width: calc(100vw - 32px); box-sizing: border-box; padding: 9px 16px; border-radius: 10px; text-align: center;
+  background: var(--glass); border: 1px solid var(--glass-edge); -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25);
+  font: 500 13px/1.35 var(--sans); letter-spacing: 0.04em; color: var(--washi); pointer-events: none; opacity: 0; transition: opacity 1.2s ease; }
+.walk-hint.show { opacity: 1; transition-duration: 0.35s; }
+
 .group { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .label { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 22px;
   font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--washi-dim); }

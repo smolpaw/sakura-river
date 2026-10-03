@@ -368,6 +368,12 @@ function tsuiji(k, x0, z0, x1, z1) {
   });
 }
 
+// Where things stand in the temple's frame (walk.js walks the steps and the terrace round them): the steps down the
+// terrace's front, centred on x, from `first` past its edge down `rise` per tread `run` deep, `hw` half-wide between
+// low walls `wall` out from the middle; the buildings' centres on the terrace, [x, y, z].
+export const STAIR = { x: -7, first: 0.2, run: 0.42, rise: 0.2, hw: 1.7, wall: 1.92 };
+export const SITES = { hall: [-7, 0, -4], pagoda: [8.5, 0, 3], belfry: [-13.5, 0, 8.5] };
+
 // The compound in the temple's frame (+z faces the river side, y = 0 is the terrace top); ground(x, z) is the terrain
 // height in that frame. The terrace's stone walls (ishigaki) and the steps down from it run to the ground.
 function compound(k, T, ground) {
@@ -399,23 +405,23 @@ function compound(k, T, ground) {
     }
   }
   // stone steps down the front, lanterns at their foot
-  const sx = -7;
+  const { x: sx, first, run, rise } = STAIR;
   let zf = D + 0.4;
   for (let j = 0; j < 60; j++) {
-    const z = D + 0.2 + 0.42 * j + 0.21, y = -0.2 * (j + 1), g = Math.min(ground(sx, z), y) - 0.4;
-    k.box(3.4, y - g, 0.46, sx, (y + g) / 2, z, STONE.map((v) => v * (0.95 + rng() * 0.15)));
-    for (const s of [1, -1]) k.box(0.45, y - g + 0.25, 0.46, sx + s * 1.92, (y + g + 0.25) / 2, z, STONE);
-    zf = z + 0.21;
-    if (ground(sx, z + 0.42) >= y - 0.2) break;
+    const z = D + first + run * (j + 0.5), y = -rise * (j + 1), g = Math.min(ground(sx, z), y) - 0.4;
+    k.box(2 * STAIR.hw, y - g, run + 0.04, sx, (y + g) / 2, z, STONE.map((v) => v * (0.95 + rng() * 0.15)));
+    for (const s of [1, -1]) k.box(0.45, y - g + 0.25, run + 0.04, sx + s * STAIR.wall, (y + g + 0.25) / 2, z, STONE);
+    zf = z + run / 2;
+    if (ground(sx, z + run) >= y - rise) break;
   }
   for (const s of [1, -1]) toro(k, sx + s * 2.6, ground(sx + s * 2.6, zf + 0.9) - 0.05, zf + 0.9);
   // flagstone paths to the hall and to the pagoda
   for (let z = D - 0.6; z > 4.8; z -= 0.95) k.box(2.8, 0.1, 0.88, sx, 0.02, z, STONE.map((v) => v * (1.05 + rng() * 0.1)), (rng() - 0.5) * 0.03);
   for (let x = sx + 2.2; x < 8.5; x += 0.95) k.box(0.88, 0.1, 1.6, x, 0.02, 10.8, STONE.map((v) => v * (1.05 + rng() * 0.1)), (rng() - 0.5) * 0.03);
   for (const s of [1, -1]) { toro(k, sx + s * 2.6, 0, 8.2); toro(k, sx + s * 2.6, 0, 4.8); toro(k, 8.5 + s * 3.2, 0, 9.4); }
-  k.at(-7, 0, -4, 0, () => hall(k));
-  k.at(8.5, 0, 3, 0, () => k.paint([[WOOD, SHU], [WOOD_D, SHU_D]], () => pagoda(k)));
-  k.at(-13.5, 0, 8.5, 0, () => belfry(k));
+  k.at(...SITES.hall, 0, () => hall(k));
+  k.at(...SITES.pagoda, 0, () => k.paint([[WOOD, SHU], [WOOD_D, SHU_D]], () => pagoda(k)));
+  k.at(...SITES.belfry, 0, () => belfry(k));
   tsuiji(k, -W + 0.4, -D + 0.4, W - 0.4, -D + 0.4);
   for (const s of [1, -1]) tsuiji(k, s * (W - 0.4), -D + 0.4, s * (W - 0.4), -1);
   // floodlights hidden in the gravel round the pagoda

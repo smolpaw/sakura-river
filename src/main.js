@@ -46,6 +46,7 @@ import { tessellate, makeStressObjects } from './stress.js';
 import { runJobs } from './gen/pool.js';
 import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
+import { makeWalk, WALK } from './walk.js';
 
 // pr: cap on the device pixel ratio; ss: the scene's render scale over the drawing buffer (supersampling, resolved by
 // the post chain's downsample, post.js); lodScale: the model LODs' and the impostors' switch distances multiplied
@@ -561,7 +562,7 @@ export async function create(canvas, opts = {}) {
     const dx = p.x - TX, dz = p.z - TZ, d = Math.hypot(dx, dz);
     if (p.y < trunkTop && d < 1.8) { const k = 1.8 / Math.max(d, 1e-3); p.x = TX + dx * k; p.z = TZ + dz * k; }
     const t = controls.target;
-    t.x = clamp(t.x, -160, 160); t.z = clamp(t.z, -220, 90);
+    t.x = clamp(t.x, -160, 160); t.z = clamp(t.z, -250, 90); // (to the village's far end, where walk mode can leave the figure)
     t.y = clamp(t.y, Math.max(world.heightFast(t.x, t.z), 0) + 0.3, 40);
     const r = Math.hypot(p.x - TX, p.z - TZ);
     if (r > 260) { p.x = TX + (p.x - TX) * 260 / r; p.z = TZ + (p.z - TZ) * 260 / r; }
@@ -582,9 +583,18 @@ export async function create(canvas, opts = {}) {
   const posCurve = new THREE.CatmullRomCurve3(camKeys.map((k) => k.p), true, 'centripetal');
   const tgtCurve = new THREE.CatmullRomCurve3(camKeys.map((k) => k.t), true, 'centripetal');
   let cinematic = false, cineT = 0, autoOrbit = false;
-  let tween = null; // {from:{pos,target}, to:{pos,target}, t, dur}
-  function startTween(toPos, toTarget, dur) {
-    tween = { fp: camera.position.clone(), ft: controls.target.clone(), tp: toPos.clone(), tt: toTarget.clone(), t: 0, dur };
+  const ORBIT_FOV = camera.fov;
+  // a flight of the camera to a view: from fp/ft to tp/tt (position, target), the field of view from ff to tf;
+  // walk: into the walker's eye (no orbit limits on the way, lifted over what lies between by `lift` metres)
+  let tween = null; // { fp, ft, tp, tt, ff, tf, t, dur, walk, lift }
+  function startTween(toPos, toTarget, dur, fov = ORBIT_FOV) {
+    tween = { fp: camera.position.clone(), ft: controls.target.clone(), tp: toPos.clone(), tt: toTarget.clone(), ff: camera.fov, tf: fov, t: 0, dur, walk: false, lift: 0 };
+  }
+  function setFov(f) {
+    if (Math.abs(camera.fov - f) < 1e-4) return;
+    camera.fov = f;
+    camera.updateProjectionMatrix();
+    lanterns.uFocal.value = (H * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(f / 2))); // as resize()
   }
   // settle the default view under the controls' limits (it looks up past maxPolarAngle), so the intro and reset
   // flights end exactly where the camera then rests instead of jumping on the first controls update
@@ -595,10 +605,85 @@ export async function create(canvas, opts = {}) {
   startTween(DEFAULT.pos, DEFAULT.target, opts.introDuration ?? 6.5);
 
   canvas.addEventListener('pointerdown', () => {
+    if (walking) return; // (walk.js: a click locks the pointer)
     if (tween) tween = null;
     if (cinematic) { cinematic = false; controls.enabled = true; opts.onCinematicChange && opts.onCinematicChange(false); }
   });
-  canvas.addEventListener('wheel', () => { if (tween) tween = null; }, { passive: true });
+  canvas.addEventListener('wheel', () => { if (tween && !walking) tween = null; }, { passive: true });
+
+  // ---------- walking: first person along the lanes (walk.js); the walker's body (walker.js) loaded on first use ----------
+  // what stands by the paths for the walker to go round: the riverside's lamps, the stone lanterns (not the temple's
+  // hanging ones), the boulders, the trees' trunks (the woods' with room for their lowest boughs), the bamboo's
+  // stands, the torii's pillars (walk.js keeps those near a path)
+  const walkObstacles = [];
+  const instances = (l, r) => { for (let i = 0, m = l.matrix; i < l.n; i++) walkObstacles.push({ x: m[i * 16 + 12], z: m[i * 16 + 14], r: r * Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2]) }); };
+  G.lanterns.lists.forEach((l, k) => instances(l, [0.16, 0.3, 0.5][k])); // post, bonbori, kagaribi
+  for (const l of G.forest) instances(l, 0.05);
+  for (const l of G.bamboo) instances(l, 0.13); // (tools/bamboo.py: the culms' feet within 0.13 of the stand's height)
+  for (const a of [G.village.toro.lamps, G.props.temple.lamps]) for (let i = 0; i < a.length; i += 3) {
+    if (a[i + 1] - world.heightFast(a[i], a[i + 2]) < 2.5) walkObstacles.push({ x: a[i], z: a[i + 2], r: 0.55 });
+  }
+  for (const b of G.rocks.blockers) if (b.sc > 0.3) walkObstacles.push({ x: b.x, z: b.z, r: b.sc * 0.9 });
+  walkObstacles.push({ x: TX, z: TZ, r: 0.8 }, ...Lay.small.map((sp) => ({ x: sp.x, z: sp.z, r: 0.6 * sp.s })));
+  const toriiList = G.village.lists[VILLAGE_KINDS.indexOf('torii')], tm = new THREE.Matrix4();
+  for (let i = 0; i < toriiList.n; i++) {
+    tm.fromArray(toriiList.matrix, i * 16);
+    for (const sd of [-1, 1]) { const p = new THREE.Vector3(sd * 1.6, 0, 0).applyMatrix4(tm); walkObstacles.push({ x: p.x, z: p.z, r: 0.21 }); } // (tools/village.py)
+  }
+  const walk = makeWalk(world, { canvas, obstacles: walkObstacles, onEscape: () => setWalk(false) });
+  let walking = false, walker = null, walkerLoad = null, firstPerson = false;
+  const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3();
+  // the eye in the world: the model's (walker.eye, after its update), a little ahead along the facing so a look
+  // down shows the hem and the geta stepping out and not only the robe's front; before the model has loaded,
+  // walk.js's eye height over the feet
+  const EYE_AHEAD = 0.12;
+  function eyeAt(out) {
+    if (!walker) return walk.eye(null, out);
+    const s = walk.state;
+    return out.set(walker.eye.x + Math.sin(s.yaw) * EYE_AHEAD, walker.eye.y, walker.eye.z + Math.cos(s.yaw) * EYE_AHEAD);
+  }
+  function loadWalkerOnce() {
+    walkerLoad ??= import('./walker.js')
+      // (the hidden head keeps casting the sun's shadow and showing in the river: walker.js gives their cameras its layer)
+      .then((m) => m.loadWalker({ sun, reflector, camera }))
+      .then(async (w) => {
+        const s = walk.state;
+        w.setPose(s.x, s.y, s.z, s.yaw);
+        try { await renderer.compileAsync(w.group, camera, scene); } catch (e) { /* built on its first frame instead */ }
+        scene.add(w.group);
+        w.onStep(({ foot }) => { if (walking && sound.footstep) sound.footstep({ surface: walk.state.surface, hurry: walk.state.hurry, foot }); });
+        walker = w;
+        return w;
+      });
+    return walkerLoad;
+  }
+  // Into walk mode: the camera flies into the walker's eye (cinematic and auto-orbit off), then the body is in
+  // control. Out (fly false: at once, for the camera mode taking over): to an orbit view a few metres behind the
+  // figure, which stays standing where it was left.
+  function setWalk(on, fly = true) {
+    on = !!on;
+    if (on === walking) return on ? loadWalkerOnce() : Promise.resolve(walker);
+    walking = on;
+    walk.setActive(on);
+    if (on) {
+      if (cinematic) { cinematic = false; opts.onCinematicChange && opts.onCinematicChange(false); }
+      autoOrbit = false; controls.autoRotate = false; controls.enabled = false;
+      const eye = eyeAt(eyeV), to = lookV.copy(eye).addScaledVector(walk.dir(), 10);
+      const d = camera.position.distanceTo(eye);
+      startTween(eye, to, clamp(1.2 + d / 40, 1.4, 3.2), WALK.fov);
+      tween.walk = true; tween.lift = Math.min(8, d * 0.15);
+      walk.lock();
+    } else {
+      controls.enabled = true;
+      tween = null;
+      if (fly) {
+        const s = walk.state, target = new THREE.Vector3(s.x, s.y + 1.1, s.z);
+        startTween(target.clone().add(new THREE.Vector3(-Math.sin(s.yaw) * 6, 1.8, -Math.cos(s.yaw) * 6)), target, 1.8);
+      }
+    }
+    opts.onWalkChange && opts.onWalkChange(on);
+    return on ? loadWalkerOnce() : Promise.resolve(walker);
+  }
 
   // ---------- params ----------
   const P = { wind: 0.6, petals: 0.6, river: 1.0, fog: 0.25, bloom: 0.4, clouds: 0.35, rain: 0, lightning: 0 };
@@ -736,6 +821,7 @@ export async function create(canvas, opts = {}) {
   // ---------- loop ----------
   const timer = new THREE.Timer();
   const tmpV = new THREE.Vector3(), sdl = new THREE.Vector3(), camDir = new THREE.Vector3();
+  const lightR = new THREE.Vector3(), lightU = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
   let running = true;
   let frameNo = 0, warming = false;
   const sunScreen = new THREE.Vector3();
@@ -816,7 +902,20 @@ export async function create(canvas, opts = {}) {
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
     // camera
-    if (cinematic) {
+    walk.update(dt, walking && !tween); // (the body waits for the flight into its eye)
+    // the walker's body: walking, or standing where it was left (posed before the camera takes its eye)
+    if (walker) {
+      const s = walk.state;
+      walker.setPose(s.x, s.y, s.z, s.yaw);
+      walker.setMotion(walking ? s.speed : 0);
+      walker.update(dt);
+    }
+    if (walking && !tween) {
+      const s = walk.state;
+      eyeAt(camera.position);
+      camera.rotation.set(s.pitch, s.yaw + Math.PI, 0, 'YXZ'); // level horizon: no roll
+      controls.target.copy(camera.position).addScaledVector(walk.dir(lookV), 10);
+    } else if (cinematic) {
       cineT += dt / 95;
       const u = cineT % 1;
       const p = posCurve.getPointAt(u), t = tgtCurve.getPointAt(u);
@@ -829,9 +928,13 @@ export async function create(canvas, opts = {}) {
       const e = easeInOut(Math.min(1, tween.t));
       camera.position.lerpVectors(tween.fp, tween.tp, e);
       controls.target.lerpVectors(tween.ft, tween.tt, e);
-      controls.update(); // the flight stays within the controls' limits (and spends any leftover drag momentum)
-      clampCamera();
+      if (tween.walk) camera.position.y += Math.sin(Math.PI * e) * tween.lift;
+      else {
+        controls.update(); // the flight stays within the controls' limits (and spends any leftover drag momentum)
+        clampCamera();
+      }
       camera.lookAt(controls.target);
+      setFov(lerp(tween.ff, tween.tf, e));
       if (tween.t >= 1) tween = null;
     } else {
       controls.autoRotate = autoOrbit;
@@ -839,6 +942,15 @@ export async function create(canvas, opts = {}) {
       clampCamera();
       camera.lookAt(controls.target);
     }
+    // the mode's field of view (eased there when a flight was cut short)
+    const fovTo = walking ? WALK.fov : ORBIT_FOV;
+    if (!tween) setFov(Math.abs(camera.fov - fovTo) < 0.01 ? fovTo : lerp(camera.fov, fovTo, 1 - Math.exp(-dt * 4)));
+    // the head hidden while the camera is in it (it keeps its shadow and reflection)
+    if (walker) {
+      const fp = walking && camera.position.distanceTo(eyeAt(eyeV)) < 0.6;
+      if (fp !== firstPerson) { firstPerson = fp; walker.setFirstPerson(fp); }
+    }
+    if (sound.walking) sound.walking(walking ? walk.state.speed : 0, walk.state.surface);
     camera.updateMatrixWorld();
     sky.mesh.position.copy(camera.position);
     grass.userData.update(camera, warming); // warm-up draws every tile
@@ -861,11 +973,21 @@ export async function create(canvas, opts = {}) {
     shrubs.userData.lod(camera.position);
     if (nearFlowers) nearFlowers.update(camera.position, warming);
 
-    // sun light / shadow frustum anchored on the tree
+    // sun light / shadow frustum anchored on the tree, or ahead of the walker while walking (snapped to the map's
+    // texels in the light's frame, so its shadows hold still as the anchor moves)
     const sd = U.uSunDir.value;
-    const anchor = tmpV.set(TX + 4, 3, TZ + 2);
-    sun.target.position.copy(anchor);
     sdl.copy(sd); if (sdl.y < 0.08) sdl.y = 0.08; sdl.normalize();
+    const anchor = tmpV.set(TX + 4, 3, TZ + 2);
+    if (walking) {
+      const s = walk.state;
+      anchor.set(s.x + Math.sin(s.yaw) * 10, s.y + 1, s.z + Math.cos(s.yaw) * 10);
+      // the shadow camera's axes as its lookAt builds them
+      lightR.crossVectors(UP, sdl); if (lightR.lengthSq() < 1e-6) lightR.set(1, 0, 0); lightR.normalize();
+      lightU.crossVectors(sdl, lightR);
+      const tex = (sc.right - sc.left) / sun.shadow.mapSize.x, a = Math.round(anchor.dot(lightR) / tex) * tex, b = Math.round(anchor.dot(lightU) / tex) * tex;
+      anchor.copy(lightR).multiplyScalar(a).addScaledVector(lightU, b).addScaledVector(sdl, anchor.dot(sdl));
+    }
+    sun.target.position.copy(anchor);
     sun.position.copy(anchor).addScaledVector(sdl, 150);
     sun.target.updateMatrixWorld();
 
@@ -967,10 +1089,12 @@ export async function create(canvas, opts = {}) {
     },
     timeOfDay() { return clockH; },
     resetCamera() {
+      if (walking) { setWalk(false); return; } // out of walk mode, behind the figure
       cinematic = false; controls.enabled = true;
       startTween(DEFAULT.pos, DEFAULT.target, 1.8);
     },
     setCinematic(on) {
+      if (on && walking) setWalk(false, false);
       cinematic = !!on; controls.enabled = !cinematic;
       if (cinematic) {
         tween = null;
@@ -980,15 +1104,31 @@ export async function create(canvas, opts = {}) {
         cineT = best;
       } else controls.update();
     },
-    setAutoOrbit(on) { autoOrbit = !!on; },
+    setAutoOrbit(on) { if (on && walking) setWalk(false); autoOrbit = !!on; },
+    // walk mode: first person along the lanes (walk.js); resolves once the walker's body is in the scene
+    setWalk(on) { return setWalk(on); },
+    walking() { return walking; },
+    // debug: where the walker is (feet, ground under them, eye), how fast, on what; detail: the network too
+    walkInfo(detail = false) {
+      const s = walk.state, net = walk.net;
+      const out = {
+        walking, flying: !!(tween && tween.walk), walker: !!walker, firstPerson, pos: [s.x, s.y, s.z], ground: net.ground(s.x, s.z).y,
+        eye: eyeAt(new THREE.Vector3()).toArray(), camera: camera.position.toArray(), yaw: s.yaw, pitch: s.pitch,
+        speed: s.speed, hurry: s.hurry, surface: s.surface, off: net.outside(s.x, s.z), fov: camera.fov,
+      };
+      if (detail) Object.assign(out, { ways: net.ways.map((w) => ({ name: w.name, pts: w.pts, hw: w.hw })), stairFoot: net.stairFoot, steps: net.steps, bridgeEnds: net.bridgeEnds.map((p) => p.toArray()), obstacles: net.obstacles.map((o) => [o.x, o.z]) });
+      return out;
+    },
+    walkTo(x, z, yaw) { walk.moveTo(x, z, yaw); if (walking && tween && tween.walk) tween = null; }, // debug: stand there (on the network)
+    walkInput(o) { walk.input(o); }, // debug: { forward, strafe (-1..1), hurry, yaw, pitch (radians) }, held until changed
     // music and ambience; sound starts with the page's first click or key press if it has not had one yet
     setSound(on) { sound.setEnabled(on); },
     setVolume(which, v) { sound.setVolume(which, v); },
     soundWaiting() { return sound.waiting; }, // on, but held back by the browser until a click or key press
     soundInfo() { return sound.info(); },
-    cineView(u) { const p = posCurve.getPointAt(u), t = tgtCurve.getPointAt(u); tween = null; camera.position.copy(p); controls.target.copy(t); clampCamera(); controls.update(); },
-    setView(pos, target) { tween = null; camera.position.set(...pos); controls.target.set(...target); controls.update(); },
-    heroView() { cinematic = false; controls.enabled = true; tween = null; camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); },
+    cineView(u) { if (walking) setWalk(false, false); const p = posCurve.getPointAt(u), t = tgtCurve.getPointAt(u); tween = null; camera.position.copy(p); controls.target.copy(t); clampCamera(); controls.update(); },
+    setView(pos, target) { if (walking) setWalk(false, false); tween = null; camera.position.set(...pos); controls.target.set(...target); controls.update(); },
+    heroView() { if (walking) setWalk(false, false); cinematic = false; controls.enabled = true; tween = null; camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); },
     advance(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt, false); },
     bench: probe,
     hashScene: () => hashScene(scene, { heightCache: world.heightCacheData() }),
@@ -1015,7 +1155,7 @@ export async function create(canvas, opts = {}) {
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
     info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.levels.map((l) => l.range), verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
-    dispose() { running = false; ro.disconnect(); controls.dispose(); renderer.dispose(); sound.dispose(); },
+    dispose() { running = false; ro.disconnect(); controls.dispose(); walk.dispose(); if (walker) walker.dispose(); renderer.dispose(); sound.dispose(); },
   };
 }
 
