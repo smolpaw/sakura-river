@@ -123,8 +123,9 @@ export function bakeImpostors(renderer, models, leafAtlas, cell) {
   return { albedo: albedo.texture, normal: normal.texture, targets: [albedo, normal], kinds, cell, W, H };
 }
 
-// The cards: one draw for every kind. `add(k, matrix, offset, tint)` queues a tree (its instance matrix as the woods'
-// lists hold it), `commit()` uploads the queue.
+// The cards: one draw for every kind. `add(k, matrix, offset, colors, at)` queues a tree (its instance matrix as the
+// woods' lists hold it, its tint at colors[at..at+2]), `commit()` uploads the queue. lods.js queues only the trees in
+// view (the cards cast no shadow).
 export function makeImpostors(bake, capacity, { alphaToCoverage = false } = {}) {
   const { kinds, cell, W, H } = bake;
   // per tree: the linear part's xz terms (m0, m2, m8, m10); position and y scale; the sphere's middle (kind frame) and
@@ -218,12 +219,12 @@ export function makeImpostors(bake, capacity, { alphaToCoverage = false } = {}) 
   return {
     mesh, bake,
     reset() { n = 0; },
-    add(k, m, o, tint) {
+    add(k, m, o, tint, t) {
       const K = kinds[k], i = n++ * 16;
       data[i] = m[o]; data[i + 1] = m[o + 2]; data[i + 2] = m[o + 8]; data[i + 3] = m[o + 10];
       data[i + 4] = m[o + 12]; data[i + 5] = m[o + 13]; data[i + 6] = m[o + 14]; data[i + 7] = m[o + 5];
       data[i + 8] = K.c.x; data[i + 9] = K.c.y; data[i + 10] = K.c.z; data[i + 11] = K.r;
-      data[i + 12] = tint[0]; data[i + 13] = tint[1]; data[i + 14] = tint[2]; data[i + 15] = k;
+      data[i + 12] = tint[t]; data[i + 13] = tint[t + 1]; data[i + 14] = tint[t + 2]; data[i + 15] = k;
     },
     commit() { geo.instanceCount = n; ib.needsUpdate = true; },
   };

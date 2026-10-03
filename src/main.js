@@ -11,7 +11,7 @@ import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
 import { lightMap, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
-import { makeLods, makeMerged, loadModel, ultraUrl } from './lods.js';
+import { makeLods, makeMerged, makeView, loadModel, ultraUrl } from './lods.js';
 import { makeGrass } from './grass.js';
 import { bakeImpostors, makeImpostors } from './impostors.js';
 import { nearBlossoms } from './blossoms.js';
@@ -481,6 +481,11 @@ export async function create(canvas, opts = {}) {
     reflector.updateBefore = (frame) => (reflSkip ? false : upd(frame));
   }
   let reflSkip = false;
+  // what the camera and the river's reflection see: the Blender models' instances out of it are not drawn there
+  // (lods.js makeView; the shadow maps still draw them)
+  const view = makeView(camera, reflector ? reflector.target : null);
+  if (reflector) view.cameras.add(reflector.getVirtualCamera(camera));
+  const lodGroups = [forest, cliffs, rocks, pebbles, bamboo, village, lamps, shrubs];
 
   // ---------- petals ----------
   const sp3 = main.data.spawn, spawnPts = [];
@@ -955,14 +960,9 @@ export async function create(canvas, opts = {}) {
     camera.updateMatrixWorld();
     sky.mesh.position.copy(camera.position);
     grass.userData.update(camera, warming); // warm-up draws every tile
-    forest.userData.lod(camera.position);
-    cliffs.userData.lod(camera.position);
-    rocks.userData.lod(camera.position);
-    pebbles.userData.lod(camera.position);
+    view.update(warming); // (warm-up draws every instance)
+    for (const g of lodGroups) g.userData.lod(view);
     walls.userData.lod(camera.position);
-    bamboo.userData.lod(camera.position);
-    village.userData.lod(camera.position);
-    lamps.userData.lod(camera.position);
     if (wheel.children.length) {
       // a turn every ~9 s at the river's usual speed; the far model beyond 90 m (times lodScale), the near one within
       // NEAR_RANGE when there is one
@@ -971,7 +971,6 @@ export async function create(canvas, opts = {}) {
       if (wheel.children[2]) wheel.children[2].visible = warming || near;
       for (const sp of wheel.children) sp.rotation.x -= dt * 0.7 * (0.3 + S.river / 2.2);
     }
-    shrubs.userData.lod(camera.position);
     if (nearFlowers) nearFlowers.update(camera.position, warming);
 
     // sun light / shadow frustum: anchored on the tree; ahead of the walker while walking; on the figure where it
@@ -1147,14 +1146,14 @@ export async function create(canvas, opts = {}) {
     advance(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt, false); },
     bench: probe,
     hashScene: () => hashScene(scene, { heightCache: world.heightCacheData() }),
-    // bench: triangles per drawable (instances included), largest first
+    // bench: triangles per drawable (instances included; a model level's: those in the camera's view), largest first
     meshStats() {
       const out = [];
       scene.traverse((o) => {
         if (!o.isMesh && !o.isPoints && !o.isSprite) return;
         const g = o.geometry; if (!g) return;
         const tri = g.index ? g.index.count / 3 : g.attributes.position.count / 3;
-        const n = o.isInstancedMesh ? o.count : g.isInstancedBufferGeometry ? g.instanceCount : 1;
+        const n = o.userData.level ? o.userData.level.vis : o.isInstancedMesh ? o.count : g.isInstancedBufferGeometry ? g.instanceCount : 1;
         let a = o; while (a && !a.name) a = a.parent;
         out.push({ name: a && a !== scene ? a.name : o.material.type, layers: o.layers.mask, shadow: o.castShadow, tri, n, total: tri * n });
       });
@@ -1169,7 +1168,15 @@ export async function create(canvas, opts = {}) {
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
-    info() { return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.levels.map((l) => l.range), verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
+    // cull: the view culling (lods.js makeView): on, re-sorts so far and their mean main-thread ms, and per group the
+    // instances (impostor cards, the walls' merged groups) the camera draws, of those it would unculled, and triangles
+    info() {
+      const groups = Object.fromEntries([...lodGroups.map((g) => [g.name, g.userData.counts()]), [walls.name, walls.userData.counts(camera)]]);
+      const cull = { on: view.on, sorts: view.stats.sorts, sortMs: view.stats.ms / Math.max(1, view.stats.sorts), groups };
+      return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.levels.map((l) => l.range), verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, cull };
+    },
+    // debug: per-instance view culling of the Blender models and impostors on or off (on by default)
+    setCulling(on) { view.on = !!on; },
     dispose() { running = false; ro.disconnect(); controls.dispose(); walk.dispose(); if (walker) walker.dispose(); renderer.dispose(); sound.dispose(); },
   };
 }
