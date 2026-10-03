@@ -1,0 +1,1883 @@
+{
+ "date": "2026-10-03T19:33:36.545Z",
+ "workload": "1080p",
+ "backend": "webgpu",
+ "angle": "default",
+ "chromium": "Chrome/150.0.7871.128",
+ "flags": [
+  "--disable-frame-rate-limit",
+  "--disable-gpu-vsync",
+  "--disable-background-timer-throttling",
+  "--disable-renderer-backgrounding",
+  "--disable-backgrounding-occluded-windows",
+  "--force-device-scale-factor=1",
+  "--window-size=1280,800",
+  "--enable-webgpu-developer-features",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--disable-extensions"
+ ],
+ "env": {
+  "dpr": 1,
+  "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  "crossOriginIsolated": true,
+  "webgl": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL ES 3.2)",
+  "webglTimer": true,
+  "webgpu": {
+   "vendor": "nvidia",
+   "architecture": "turing",
+   "description": "NVIDIA GeForce RTX 2060",
+   "device": "0x1f08",
+   "features": [
+    "depth32float-stencil8",
+    "rg11b10ufloat-renderable",
+    "texture-formats-tier1",
+    "bgra8unorm-storage",
+    "texture-compression-bc",
+    "dual-source-blending",
+    "core-features-and-limits",
+    "float32-filterable",
+    "indirect-first-instance",
+    "float32-blendable",
+    "depth-clip-control",
+    "texture-compression-bc-sliced-3d",
+    "texture-formats-tier2",
+    "clip-distances",
+    "timestamp-query",
+    "primitive-index",
+    "texture-component-swizzle",
+    "subgroups"
+   ]
+  }
+ },
+ "runsPerArm": 3,
+ "frames": 300,
+ "warmup": 120,
+ "clockTolerance": 0.05,
+ "clockLock": false,
+ "clockAtStart": {
+  "gr": 1815,
+  "mem": 7000,
+  "pstate": "P0",
+  "reasons": 1,
+  "temp": 64,
+  "power": 47.58,
+  "powerLimit": 170
+ },
+ "idle": {
+  "procs": [
+   "Hyprland",
+   "Xwayland",
+   "/usr/bin/walker",
+   "/usr/bin/ghostty",
+   "hyprlock"
+  ],
+  "absorbed": []
+ },
+ "arms": {
+  "A": {
+   "label": "base",
+   "build": {
+    "label": "base",
+    "ref": "0d0c5a2",
+    "sha": "0d0c5a2ebf7d3be213cdf125c56416e9a77fa426",
+    "dirty": false,
+    "three": "0.186.1",
+    "builtAt": "2026-10-03T19:29:35.816Z",
+    "bytes": 3766148
+   }
+  },
+  "B": {
+   "label": "new",
+   "build": {
+    "label": "new",
+    "ref": "WORKTREE",
+    "sha": "f84ca0f34d2224fa4866399b4b8964ffba597a36",
+    "dirty": false,
+    "three": "0.186.1",
+    "builtAt": "2026-10-03T19:29:36.439Z",
+    "bytes": 3847020
+   }
+  }
+ },
+ "order": [
+  "A2",
+  "B0",
+  "B2",
+  "A1",
+  "A0",
+  "B1"
+ ],
+ "geomeanRatio": {
+  "gpu": 1.0082449217871265,
+  "cpu": 0.9592931076256221
+ },
+ "views": {
+  "hero": {
+   "gpuRatio": {
+    "ratio": 0.9849976194870926,
+    "lo": 0.818152319855661,
+    "hi": 1.1768412527790615
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.9798338544210735,
+    "lo": 0.8148318951289677,
+    "hi": 1.172937391996421
+   },
+   "cpuRatio": {
+    "ratio": 1.0125966852551498,
+    "lo": 0.7189969105719458,
+    "hi": 1.4138031825319743
+   },
+   "A": {
+    "gpu": {
+     "median": 6.695488,
+     "runMedians": [
+      6.687536,
+      6.736096,
+      6.773696
+     ],
+     "bimodality": 0.9991488076664597
+    },
+    "cpu": {
+     "median": 3.5099999997764826,
+     "min": 1.8949999995529652,
+     "runMedians": [
+      3.8725000005215406,
+      3.929999998770654,
+      3.5099999997764826
+     ],
+     "bimodality": 0.7261213539945774
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 6.621423999999999,
+     "runMedians": [
+      6.616336,
+      6.62592,
+      6.652064
+     ],
+     "bimodality": 0.9991851246134605
+    },
+    "cpu": {
+     "median": 3.727500000037253,
+     "min": 1.9450000021606684,
+     "runMedians": [
+      4.09499999973923,
+      3.5150000005960464,
+      3.8450000006705523
+     ],
+     "bimodality": 0.7923302843173387
+    }
+   },
+   "labelsA": {
+    "grade": 0.294688,
+    "output": 0.12156800000000001,
+    "scene": 3.706064,
+    "shafts": 0.397776,
+    "bloom": 0.159264,
+    "shadow": 0.334464,
+    "reflection": 1.008064
+   },
+   "labelsB": {
+    "grade": 0.296416,
+    "output": 0.121888,
+    "scene": 3.69088,
+    "shafts": 0.398208,
+    "bloom": 0.159296,
+    "shadow": 0.335824,
+    "reflection": 0.949792
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 242,
+     "triangles": 7654910,
+     "passes": 19,
+     "programs": 411,
+     "rtMemMB": 443.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 228,
+     "triangles": 6742430,
+     "passes": 19,
+     "programs": 414,
+     "rtMemMB": 395.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 1,
+       "bytes": 83886080
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    }
+   }
+  },
+  "cine250": {
+   "gpuRatio": {
+    "ratio": 0.987812230763159,
+    "lo": 0.817511966609439,
+    "hi": 1.1989135620971203
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.9904776586019837,
+    "lo": 0.8160474950724638,
+    "hi": 1.2033591436810347
+   },
+   "cpuRatio": {
+    "ratio": 0.9147268956949414,
+    "lo": 0.6642230223073917,
+    "hi": 1.245934228195149
+   },
+   "A": {
+    "gpu": {
+     "median": 6.25784,
+     "runMedians": [
+      6.25056,
+      6.391584,
+      6.411712
+     ],
+     "bimodality": 0.9114236879348409
+    },
+    "cpu": {
+     "median": 3.5350000001490116,
+     "min": 1.724999999627471,
+     "runMedians": [
+      3.5350000001490116,
+      3.699999999254942,
+      3.6124999998137355
+     ],
+     "bimodality": 0.7549667230675381
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 6.242528,
+     "runMedians": [
+      6.239504,
+      6.285472,
+      6.2966560000000005
+     ],
+     "bimodality": 0.9990908685727417
+    },
+    "cpu": {
+     "median": 3.422500000335276,
+     "min": 1.7799999993294477,
+     "runMedians": [
+      3.422500000335276,
+      3.2174999993294477,
+      3.2825000006705523
+     ],
+     "bimodality": 0.41966077822442677
+    }
+   },
+   "labelsA": {
+    "grade": 0.294688,
+    "output": 0.121664,
+    "scene": 3.407488,
+    "shafts": 0.37504,
+    "bloom": 0.160576,
+    "shadow": 0.334144,
+    "reflection": 0.979744
+   },
+   "labelsB": {
+    "grade": 0.296416,
+    "output": 0.122272,
+    "scene": 3.375008,
+    "shafts": 0.37336,
+    "bloom": 0.16064,
+    "shadow": 0.335904,
+    "reflection": 0.926208
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 224,
+     "triangles": 7343478,
+     "passes": 19,
+     "programs": 411,
+     "rtMemMB": 443.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 212,
+     "triangles": 6306890,
+     "passes": 19,
+     "programs": 414,
+     "rtMemMB": 395.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 1,
+       "bytes": 83886080
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    }
+   }
+  },
+  "cine750": {
+   "gpuRatio": {
+    "ratio": 0.9842626421719877,
+    "lo": 0.8101641308863335,
+    "hi": 1.2129190717849627
+   },
+   "gpuCyclesRatio": {
+    "ratio": 0.9842704724264875,
+    "lo": 0.8076780025916835,
+    "hi": 1.2104174339445093
+   },
+   "cpuRatio": {
+    "ratio": 0.9052081064569777,
+    "lo": 0.701676457440581,
+    "hi": 1.2710920311105747
+   },
+   "A": {
+    "gpu": {
+     "median": 6.573184,
+     "runMedians": [
+      6.570112,
+      6.626752,
+      6.63264
+     ],
+     "bimodality": 0.9990672726652674
+    },
+    "cpu": {
+     "median": 3.887499999254942,
+     "min": 2.0100000016391277,
+     "runMedians": [
+      3.9174999995157123,
+      3.527499998919666,
+      4.027499999850988
+     ],
+     "bimodality": 0.6785601738741461
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 6.493792,
+     "runMedians": [
+      6.486176,
+      6.508832,
+      6.522432
+     ],
+     "bimodality": 0.9989812520851912
+    },
+    "cpu": {
+     "median": 3.5225000008940697,
+     "min": 1.875,
+     "runMedians": [
+      3.5874999994412065,
+      3.2749999994412065,
+      3.5225000008940697
+     ],
+     "bimodality": 0.6691108292369905
+    }
+   },
+   "labelsA": {
+    "grade": 0.29648,
+    "output": 0.122208,
+    "scene": 3.466464,
+    "shafts": 0.44697600000000004,
+    "bloom": 0.15987200000000001,
+    "shadow": 0.334352,
+    "reflection": 1.06272
+   },
+   "labelsB": {
+    "grade": 0.297792,
+    "output": 0.122432,
+    "scene": 3.4176,
+    "shafts": 0.44579199999999997,
+    "bloom": 0.15939199999999998,
+    "shadow": 0.336096,
+    "reflection": 1.001888
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 240,
+     "triangles": 7243464,
+     "passes": 19,
+     "programs": 411,
+     "rtMemMB": 443.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 224,
+     "triangles": 6279794,
+     "passes": 19,
+     "programs": 414,
+     "rtMemMB": 395.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 1,
+       "bytes": 83886080
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    }
+   }
+  },
+  "walk": {
+   "gpuRatio": {
+    "ratio": 1.0790550245693613,
+    "lo": 0.8447302902851188,
+    "hi": 1.232802581940033
+   },
+   "gpuCyclesRatio": {
+    "ratio": 1.0787618258150669,
+    "lo": 0.8452797428238181,
+    "hi": 1.2311843981201531
+   },
+   "cpuRatio": {
+    "ratio": 1.0100175306405097,
+    "lo": 0.6755165129031748,
+    "hi": 1.2951770238804723
+   },
+   "A": {
+    "gpu": {
+     "median": 5.197184,
+     "runMedians": [
+      5.184127999999999,
+      5.25648,
+      4.374592
+     ],
+     "bimodality": 0.9455923754377602
+    },
+    "cpu": {
+     "median": 3.3374999994412065,
+     "min": 1.7949999999254942,
+     "runMedians": [
+      3.3374999994412065,
+      3.1800000006332994,
+      3.465000000782311
+     ],
+     "bimodality": 0.7386592809552566
+    }
+   },
+   "B": {
+    "gpu": {
+     "median": 5.32432,
+     "runMedians": [
+      5.311392,
+      5.330512000000001,
+      5.344512
+     ],
+     "bimodality": 0.9992007959654661
+    },
+    "cpu": {
+     "median": 3.3950000004842877,
+     "min": 1.6849999986588955,
+     "runMedians": [
+      3.355000000447035,
+      3.2774999998509884,
+      3.4500000001862645
+     ],
+     "bimodality": 0.6696844577011197
+    }
+   },
+   "labelsA": {
+    "grade": 0.295824,
+    "output": 0.119408,
+    "scene": 2.443728,
+    "shafts": 0.448256,
+    "bloom": 0.15193600000000002,
+    "shadow": 0.335488,
+    "reflection": 0.731456
+   },
+   "labelsB": {
+    "grade": 0.297232,
+    "output": 0.11952,
+    "scene": 2.634912,
+    "shadow": 0.337088,
+    "reflection": 0.658944,
+    "shafts": 0.45052800000000004,
+    "bloom": 0.153312
+   },
+   "counters": {
+    "A": {
+     "drawCalls": 216,
+     "triangles": 5548670,
+     "passes": 19,
+     "programs": 411,
+     "rtMemMB": 443.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    },
+    "B": {
+     "drawCalls": 192,
+     "triangles": 4505048,
+     "passes": 19,
+     "programs": 414,
+     "rtMemMB": 395.85247802734375,
+     "bandwidthMB": 300.03216552734375,
+     "renderTargets": [
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 1,
+       "bytes": 83886080
+      },
+      {
+       "px": 2073600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24883200
+      },
+      {
+       "px": 2073600,
+       "samples": 4,
+       "bpp": 8,
+       "bytes": 116121600
+      },
+      {
+       "px": 16777216,
+       "samples": 1,
+       "bpp": 4,
+       "bytes": 134217728
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 518400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 6220800
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 129600,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 1555200
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 32400,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 388800
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 8160,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 97920
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      },
+      {
+       "px": 2040,
+       "samples": 1,
+       "bpp": 8,
+       "bytes": 24480
+      }
+     ]
+    }
+   }
+  }
+ },
+ "runs": [
+  {
+   "arm": "A",
+   "i": 2,
+   "contended": null,
+   "createMs": 6879.089999999851,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 312,
+    "median": 1905,
+    "min": 300,
+    "p10": 300,
+    "p90": 1920,
+    "mean": 1484.5192307692307,
+    "bimodality": 0.8641073117741433
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 114,
+      "noClock": 0
+     },
+     "grMedian": 1920,
+     "n": 120,
+     "gpuMedian": 6.687536,
+     "cpuMedian": 3.8725000005215406,
+     "cpuTotalMedian": 4.855000001378357
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 89,
+      "noClock": 0
+     },
+     "grMedian": 1905,
+     "n": 120,
+     "gpuMedian": 6.25056,
+     "cpuMedian": 3.5350000001490116,
+     "cpuTotalMedian": 4.612499998882413
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 117,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.570112,
+     "cpuMedian": 3.9174999995157123,
+     "cpuTotalMedian": 4.684999999590218
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 54,
+      "noClock": 0
+     },
+     "grMedian": 1905,
+     "n": 120,
+     "gpuMedian": 5.184127999999999,
+     "cpuMedian": 3.3374999994412065,
+     "cpuTotalMedian": 3.8825000002980232
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 0,
+   "contended": null,
+   "createMs": 7193.535000000149,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 321,
+    "median": 1890,
+    "min": 300,
+    "p10": 300,
+    "p90": 1920,
+    "mean": 1503.6915887850466,
+    "bimodality": 0.8789274716248439
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 140,
+      "noClock": 0
+     },
+     "grMedian": 1905,
+     "n": 120,
+     "gpuMedian": 6.616336,
+     "cpuMedian": 4.09499999973923,
+     "cpuTotalMedian": 4.747499999590218
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 94,
+      "noClock": 0
+     },
+     "grMedian": 1905,
+     "n": 120,
+     "gpuMedian": 6.239504,
+     "cpuMedian": 3.422500000335276,
+     "cpuTotalMedian": 4.522499999962747
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 151,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.486176,
+     "cpuMedian": 3.5874999994412065,
+     "cpuTotalMedian": 4.595000001601875
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 114,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 5.311392,
+     "cpuMedian": 3.355000000447035,
+     "cpuTotalMedian": 4.0249999994412065
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 2,
+   "contended": null,
+   "createMs": 7332.265000000596,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 321,
+    "median": 1890,
+    "min": 300,
+    "p10": 300,
+    "p90": 1905,
+    "mean": 1488.8785046728972,
+    "bimodality": 0.8978739895366802
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 91,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.62592,
+     "cpuMedian": 3.5150000005960464,
+     "cpuTotalMedian": 4.802500000223517
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 189,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.285472,
+     "cpuMedian": 3.2174999993294477,
+     "cpuTotalMedian": 4.569999999366701
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 157,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.508832,
+     "cpuMedian": 3.2749999994412065,
+     "cpuTotalMedian": 4.582499999552965
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 122,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 5.330512000000001,
+     "cpuMedian": 3.2774999998509884,
+     "cpuTotalMedian": 3.832500002346933
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 1,
+   "contended": null,
+   "createMs": 6737.199999999255,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 321,
+    "median": 1875,
+    "min": 300,
+    "p10": 300,
+    "p90": 1905,
+    "mean": 1524.1121495327102,
+    "bimodality": 0.8792402271528271
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 93,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.736096,
+     "cpuMedian": 3.929999998770654,
+     "cpuTotalMedian": 4.8125
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 128,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.391584,
+     "cpuMedian": 3.699999999254942,
+     "cpuTotalMedian": 4.704999999143183
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 134,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.626752,
+     "cpuMedian": 3.527499998919666,
+     "cpuTotalMedian": 4.869999999180436
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 103,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 5.25648,
+     "cpuMedian": 3.1800000006332994,
+     "cpuTotalMedian": 3.975000001490116
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 0,
+   "contended": null,
+   "createMs": 6811.0250000003725,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 316,
+    "median": 1875,
+    "min": 300,
+    "p10": 300,
+    "p90": 1905,
+    "mean": 1495.870253164557,
+    "bimodality": 0.8652475530245588
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 205,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.773696,
+     "cpuMedian": 3.5099999997764826,
+     "cpuTotalMedian": 4.767500001005828
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 163,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.411712,
+     "cpuMedian": 3.6124999998137355,
+     "cpuTotalMedian": 4.747499997727573
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 153,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.63264,
+     "cpuMedian": 4.027499999850988,
+     "cpuTotalMedian": 4.7999999998137355
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 3,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 4.374592,
+     "cpuMedian": 3.465000000782311,
+     "cpuTotalMedian": 4.095000000670552
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 1,
+   "contended": null,
+   "createMs": 7202.964999999851,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 320,
+    "median": 1875,
+    "min": 300,
+    "p10": 300,
+    "p90": 1905,
+    "mean": 1491.796875,
+    "bimodality": 0.8930219536310076
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 115,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.652064,
+     "cpuMedian": 3.8450000006705523,
+     "cpuTotalMedian": 4.745000000111759
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 160,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.2966560000000005,
+     "cpuMedian": 3.2825000006705523,
+     "cpuTotalMedian": 4.362500000745058
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 145,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.522432,
+     "cpuMedian": 3.5225000008940697,
+     "cpuTotalMedian": 4.792500000447035
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 100,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 5.344512,
+     "cpuMedian": 3.4500000001862645,
+     "cpuTotalMedian": 4
+    }
+   }
+  }
+ ]
+}
