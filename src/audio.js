@@ -1,8 +1,10 @@
 // Sound: Japanese background music and the scene's ambience, mixed from the weather, the clock and the camera.
-// Loops (river, wind, rain, birds by day, water lapping under the bridge) play from decoded buffers, loaded when first heard and
-// dropped after a minute unheard; thunder follows each lightning strike after the sound's travel time; bush
-// warblers sing in short bouts by day; the temple's bell tolls as the lanterns come on at dusk. Music streams through a media element. Files: public/audio/, built by
-// tools/audio.mjs. Nothing is fetched or created until sound is turned on.
+// Loops (river, wind, rain, birds by day, water lapping under the bridge; close by: the waterwheel, frogs in the
+// paddies at night, wind in the bamboo groves) play from decoded buffers, loaded when first heard and dropped after a
+// minute unheard; thunder follows each lightning strike after the sound's travel time; bush warblers sing in short
+// bouts by day; the temple's bell tolls as the lanterns come on at dusk; the walker's geta sound on the ground under
+// them. Music streams through a media element. Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or
+// created until sound is turned on.
 import { clamp, lerp, smoothstep } from './noise.js';
 
 // loudness of each track (tools/audio.mjs prints it); music plays at MUSIC_LUFS at full volume, the loops are
@@ -11,19 +13,24 @@ const TRACKS = [['music-sakuya3', -9.1], ['music-oboro', -8.4], ['music-shizima4
 const MUSIC_LUFS = -20;
 const PAD = 0.5; // each loop file carries PAD s of wrap-around on both ends (tools/audio.mjs)
 const THUNDER_NEAR = 4, THUNDER_FAR = 3, SONGS = 4;
+// footsteps: variants per surface, and each surface's gain: a walk comes to about -28 LUFS (-30 on grass), a little
+// under a loop close by
+const STEPS = { stone: 8, wood: 8, earth: 8, grass: 8 };
+const STEP_GAIN = { stone: 0.9, wood: 0.95, earth: 0.65, grass: 0.45 };
 const SPEED_OF_SOUND = 343;
 const TICK = 0.1; // mix update interval, s
 
-// world: river and temple positions; bridge: the bridge's centre (a Vector3)
+// world: river, temple, village and farmland (src/world.js); bridge: the bridge's centre (a Vector3)
 export function createSound(world, bridge) {
   const base = new URL('audio/', document.baseURI);
   const url = (name) => new URL(name + '.mp3', base).href;
   let ctx = null, on = false;
-  let master, natureBus, musicBus, trackGain, el, riverLP, riverPan, lapLP, lapPan;
+  let master, natureBus, musicBus, trackGain, el, riverLP, riverPan, lapLP, lapPan, wheelLP, wheelPan, frogPan, bambooPan;
   const vol = { music: 0.75, nature: 0.4 };
   let order = [], ti = 0, nextTimer = 0;
   const beds = {};
-  const shots = { thunder: null, songs: null, bell: null };
+  const shots = { thunder: null, songs: null, bell: null, steps: null };
+  let walked = -Infinity; // when the walk last stepped or moved (performance.now() ms): keeps the footsteps loaded
   let lights = -1, toll = 0; // the lanterns' level at the last mix; a bell toll waiting for its file (s left)
   let since = TICK, bout = null, songWait = 4;
   const lv = { birds: 0, lightning: 0 };
@@ -86,7 +93,7 @@ export function createSound(world, bridge) {
 
   // a set of one-shots, loaded together while `wanted` and dropped after a minute without
   function shotSet(names) {
-    return { names, bufs: null, state: 'idle', idle: 0 };
+    return { names, bufs: null, state: 'idle', idle: 0, last: -1 };
   }
   function keepShots(set, wanted) {
     if (wanted) {
@@ -124,6 +131,14 @@ export function createSound(world, bridge) {
     lapLP = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 16000, Q: 0.5 });
     lapPan = new StereoPannerNode(ctx);
     bed('lapping', [lapLP, lapPan]);
+    wheelLP = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 16000, Q: 0.5 });
+    wheelPan = new StereoPannerNode(ctx);
+    bed('waterwheel', [wheelLP, wheelPan]);
+    frogPan = new StereoPannerNode(ctx);
+    bed('frogs', [frogPan]);
+    bambooPan = new StereoPannerNode(ctx);
+    bed('bamboo', [bambooPan]);
+    shots.steps = Object.fromEntries(Object.entries(STEPS).map(([s, n]) => [s, shotSet([...Array(n)].map((_, i) => `step-${s}-${i + 1}`))]));
     shots.thunder = shotSet([...Array(THUNDER_NEAR)].map((_, i) => `thunder-near-${i + 1}`).concat([...Array(THUNDER_FAR)].map((_, i) => `thunder-far-${i + 1}`)));
     shots.songs = shotSet([...Array(SONGS)].map((_, i) => `uguisu-${i + 1}`));
     shots.bell = shotSet(['bell']);
@@ -179,6 +194,38 @@ export function createSound(world, bridge) {
     const p = cam.position, e = cam.matrixWorld.elements;
     return ((x - p.x) * e[0] + (z - p.z) * e[2]) / ((Math.hypot(e[0], e[2]) || 1) * (Math.hypot(x - p.x, z - p.z) || 1));
   }
+  // the waterwheel's hub (src/village.js puts it 2.9 m out along the mill's axle, 1.6 m up)
+  const mill = world.BUILDINGS.find((b) => b.kind === 'suisha');
+  const wheel = mill && { x: mill.x + 2.9 * mill.c, y: mill.y + 1.55, z: mill.z - 2.9 * mill.s };
+  // the nearest point of a box [x0, z0, x1, z1] shrunk by `inset` (the point itself inside it) and its distance
+  function nearestIn(b, p, inset) {
+    const x = clamp(p.x, b[0] + inset, b[2] - inset), z = clamp(p.z, b[1] + inset, b[3] - inset);
+    return { x, z, d: Math.hypot(x - p.x, z - p.z) };
+  }
+  // the paddies: the farmland zones' boxes, less their fading edges
+  const fields = world.ZONES.filter((Z) => !Z.village).map((Z) => Z.box);
+  function fieldPlace(cam) {
+    let best = { d: Infinity, x: 0, z: 0 };
+    for (const b of fields) { const n = nearestIn(b, cam.position, 8); if (n.d < best.d) best = n; }
+    return best;
+  }
+  // the bamboo (vegetation.js bambooData): groves behind the temple, about 6-34 m out from its terrace, and a stand
+  // behind each farmhouse; the distance to the nearest, and a point in it to pan towards
+  const T = world.temple, tc = Math.cos(T.yaw), ts = Math.sin(T.yaw);
+  const houses = world.BUILDINGS.filter((b) => b.kind.startsWith('minka'));
+  function bambooPlace(cam) {
+    const p = cam.position, lz = (p.x - T.x) * ts + (p.z - T.z) * tc, td = world.templeDist(p.x, p.z);
+    let best = { d: Math.hypot(Math.max(0, 6 - td, td - 34), Math.max(0, lz + 6)), x: T.x - 22 * ts, z: T.z - 22 * tc };
+    for (const b of houses) {
+      if (Math.abs(p.x - b.x) > 80 || Math.abs(p.z - b.z) > 80) continue;
+      // in the house's frame (world.padDist's): the stand spans the house's width and 3.2-12 m behind it
+      const hx = p.x - b.x, hz = p.z - b.z, lx = hx * b.c - hz * b.s, hlz = hx * b.s + hz * b.c;
+      const d = Math.hypot(Math.max(0, Math.abs(lx) - b.hw - 4), Math.max(0, hlz + b.hd + 3.2, -b.hd - 12 - hlz));
+      const gz = -b.hd - 7.6;
+      if (d < best.d) best = { d, x: b.x + gz * b.s, z: b.z + gz * b.c };
+    }
+    return best;
+  }
   function riverPlace(cam) {
     // nearest point of the river (its centre line, less the half-width) along the camera's stretch of it
     const p = cam.position;
@@ -211,6 +258,27 @@ export function createSound(world, bridge) {
     setBed(beds.lapping, 1.5 * bn * (0.7 + 0.5 * st.river));
     lapLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, bn * 1.6)), ctx.currentTime, 0.3);
     lapPan.pan.setTargetAtTime(clamp(panTo(st.camera, bridge.x, bridge.z) * 0.7 * (1 - bn * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
+    // the waterwheel's paddles and churn, heard within about 25 m; it turns faster with the river
+    if (wheel) {
+      const p = st.camera.position, wd = Math.hypot(p.x - wheel.x, p.y - wheel.y, p.z - wheel.z);
+      const wn = Math.max(0, 1 / (1 + (wd / 7) ** 2) - 0.073) / 0.927;
+      setBed(beds.waterwheel, 1.4 * wn * (0.6 + 0.6 * st.river));
+      wheelLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, wn * 1.6)), ctx.currentTime, 0.3);
+      wheelPan.pan.setTargetAtTime(clamp(panTo(st.camera, wheel.x, wheel.z) * 0.7 * (1 - wn * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
+    }
+    // frogs in the flooded paddies from dusk (18:00) to dawn (05:00), loud among the fields and carrying a long way;
+    // quiet in the rain and in a gale
+    const fp = fieldPlace(st.camera), fn = 1 / (1 + (fp.d / 30) ** 2);
+    const night = smoothstep(17.6, 18.6, h) + 1 - smoothstep(4.5, 5.4, h);
+    setBed(beds.frogs, 0.8 * fn * night * (1 - smoothstep(0.1, 0.5, rain)) * (1 - 0.6 * gale));
+    frogPan.pan.setTargetAtTime(clamp(panTo(st.camera, fp.x, fp.z) * 0.5 * (1 - fn), -0.5, 0.5), ctx.currentTime, 0.3);
+    // wind in the bamboo, close to the groves; louder with the wind, a little rustle even in calm air
+    const bp = bambooPlace(st.camera), bnear = Math.max(0, 1 / (1 + (bp.d / 12) ** 2) - 0.03) / 0.97;
+    setBed(beds.bamboo, 1.4 * bnear * (0.3 + 0.9 * smoothstep(0.05, 0.8, wind)) * (1 - 0.5 * gale));
+    bambooPan.pan.setTargetAtTime(clamp(panTo(st.camera, bp.x, bp.z) * 0.6 * (1 - bnear * 0.6), -0.6, 0.6), ctx.currentTime, 0.3);
+    // the footsteps stay loaded while the walk goes on (and drop a minute after it stops)
+    const walking = performance.now() - walked < 5000;
+    for (const set of Object.values(shots.steps)) keepShots(set, walking);
     // the evening bell: three strikes from the temple when the lanterns come on
     keepShots(shots.bell, h > 15 && h < 21.5);
     if (lights >= 0 && lights < 0.5 && st.lights >= 0.5) toll = 10;
@@ -261,6 +329,29 @@ export function createSound(world, bridge) {
       since = 0;
       mix(st);
     },
+    // One footstep of the walker's geta: `surface` 'earth' (lanes, paths), 'wood' (the bridge), 'stone' (the temple's
+    // steps and paving) or 'grass'; `hurry` a little louder; `foot` 'left' | 'right' (or -1 | 1) pans it a touch.
+    // A variant at random, never the same twice running. Silent until sound runs and the set has loaded (a step
+    // starts loading all four sets, so only the walk's very first steps can go unheard).
+    footstep({ surface = 'earth', hurry = false, foot = 0 } = {}) {
+      walked = performance.now();
+      if (!this.active) return;
+      const set = shots.steps[surface] || shots.steps.earth;
+      for (const s of Object.values(shots.steps)) keepShots(s, true);
+      if (set.state !== 'ready') return;
+      const n = set.bufs.length;
+      let k = Math.floor(Math.random() * (set.last < 0 ? n : n - 1));
+      if (set.last >= 0 && k >= set.last) k++;
+      set.last = k;
+      const side = foot === 'left' ? -1 : foot === 'right' ? 1 : Math.sign(+foot || 0);
+      play(set.bufs[k], { gain: (STEP_GAIN[surface] ?? STEP_GAIN.earth) * (hurry ? 1.3 : 1) * (0.9 + Math.random() * 0.15), pan: side * 0.12, rate: 0.94 + Math.random() * 0.14 });
+    },
+    // walking(speed, surface): the walk's pace (m/s, 0 standing), every frame or on change. It plays nothing (no
+    // recording of cloth in motion was clean enough for a kimono's rustle, so the surface goes unused); while the walker
+    // moves it keeps the footsteps loaded.
+    walking(speed) {
+      if (speed > 0) walked = performance.now();
+    },
     // a lightning strike at world x, z, `dist` metres away; a visible bolt or only a flash in the clouds
     thunder(x, z, dist, bolt, camera) {
       if (!this.active || shots.thunder.state !== 'ready') return;
@@ -277,7 +368,7 @@ export function createSound(world, bridge) {
     // debug: the context's state and each loop's load state and level
     // sound is on but the browser holds it back until the page gets a click or key press
     get waiting() { return on && !document.hidden && (!ctx || ctx.state !== 'running' || (vol.music > 0 && el.paused && !nextTimer)); },
-    info() { return { state: ctx ? ctx.state : 'none', on, waiting: this.waiting, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state, bell: shots.bell && shots.bell.state, lights }; },
+    info() { return { state: ctx ? ctx.state : 'none', on, waiting: this.waiting, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state, bell: shots.bell && shots.bell.state, steps: shots.steps && Object.fromEntries(Object.entries(shots.steps).map(([k, v]) => [k, v.state])), lights }; },
     dispose() { on = false; removeUnlock(); clearTimeout(nextTimer); document.removeEventListener('visibilitychange', apply); if (el) el.pause(); if (ctx) ctx.close(); ctx = null; },
   };
 }

@@ -45,7 +45,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 - `src/petals.js`: simulated falling petals (on the CPU: the WebGL fallback), the fallen-petal carpet and the petal rafts on the water.
 - `src/fx.js`: petal, pollen-mote and lantern materials, the temple's and the stone lanterns' glows.
 - `src/post.js`: light shafts pass, final grade (sharpening, local contrast, vignette) and, on ultra, the supersampled image's downsample.
-- `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera, thunder, bird songs, the evening bell.
+- `src/audio.js`: music and ambience (Web Audio): loops mixed from the weather, the clock and the camera (the river, wind, rain, birds, and close by the bridge's lapping water, the waterwheel, frogs in the paddies at night and wind in the bamboo), thunder, bird songs, the evening bell, and the walker's geta on earth, boards, stone and grass.
 - `public/audio/`: the sound files, built by `tools/audio.mjs` (`node tools/audio.mjs`, needs ffmpeg) from the sources below.
 - `public/models/`: the Ultra tier's near models (`<name>-ultra.glb`), built with the inlined ones by `node tools/blender.mjs` (Models) and fetched only on that tier.
 - `src/tsl.js`: shared uniforms, noise, wind, height fog, the lamps' light on their surroundings (read from the light map) and the lit material (TSL: compiles to WGSL and GLSL).
@@ -92,6 +92,15 @@ Ambience:
 - Water under the bridge: "easy lapping of waves on the rocks-birds, White Sea, Russia" by Nikolaj Terent'ev, radio aporee, CC BY 3.0. https://archive.org/details/aporee_24924_28918
 - Temple bell: "Mii-dera" (the evening bell of Mii-dera, Ōtsu), radio aporee, Public Domain Mark 1.0. https://archive.org/details/aporee_31518_36212
 - Bush warbler: XC993079, Japanese Bush Warbler (*Horornis diphone*), Karuizawa, by Xavier Riera, xeno-canto, CC BY-NC-SA 4.0. https://xeno-canto.org/993079
+- Waterwheel: "Watermill" by Pierre Sibanarco, BigSoundBank, CC0. https://bigsoundbank.com/mill-wheel-bladed-s2768.html
+- Frogs: "1586 Dōbaru, Kokuraminami Ward, Kitakyushu, Fukuoka 803-0266, Japan - Frogs" (frogs in the rice fields) by thomasmartinnutt, radio aporee, Public Domain Mark 1.0. https://archive.org/details/aporee_65287_75404
+- Bamboo: "Bamboo grove in Tsuji, Rittō City, Shiga Prefecture, Japan - Wind in Bamboo" by Greg Peterson, radio aporee, CC BY-SA 3.0. https://archive.org/details/aporee_43162_49194
+
+Footsteps (the `step-*` files: every one carries the geta recording's knock, so all of them are CC BY-SA 3.0):
+- Geta: "Kamigyo Ward, Kyoto - wooden clogs" by OR poiesis, radio aporee, CC BY-SA 3.0. https://archive.org/details/aporee_25634_29691
+- Boards: "Walk on Pontoon" by Joseph Sardin, BigSoundBank, CC0. https://bigsoundbank.com/walk-on-pontoon-s1845.html
+- Earth: "Footsteps on Gravels #4" by Joseph Sardin and Axeline T., BigSoundBank, CC0. https://bigsoundbank.com/footsteps-on-gravels-4-s3216.html
+- Grass: "Steps in the short grass" by Joseph Sardin, BigSoundBank, CC0. https://bigsoundbank.com/steps-in-the-short-grass-s0854.html
 
 ## Models
 
