@@ -43,6 +43,7 @@ import { makeKoi, koiClearing } from './koi.js';
 import { makeTouches } from './touches.js';
 import { makeBirds } from './birds.js';
 import { makeButterflies } from './butterflies.js';
+import { makePerched } from './perched.js';
 import { makeDeer } from './deer.js';
 import { makeHerons } from './heron.js';
 import { makeFigures } from './figures.js';
@@ -552,6 +553,8 @@ export async function create(canvas, opts = {}) {
   scene.add(birds.group);
   const butterflies = makeButterflies(world, { tree: [TX, TZ], flowers: G.flowers, posts: G.lanterns.lists[0], small: Lay.small, tier: tierName });
   scene.add(butterflies.mesh);
+  const perched = makePerched(world, { lantern: G.lanterns, tree: [TX, TZ] }); // sparrows on the lantern ropes and the bridge's rails, a crow on the torii
+  scene.add(perched.mesh);
   const deer = await makeDeer(world, Lay.graze);
   scene.add(deer.group);
   const herons = await makeHerons(world);
@@ -961,6 +964,7 @@ export async function create(canvas, opts = {}) {
     smoke.uAmount.value = (0.3 + 0.7 * Math.min(1, cook)) * (1 - 0.6 * S.rain);
     birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     butterflies.update({ hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, warming });
+    perched.update({ hour: clockH, rain: S.rain, wind: S.wind / 1.6, camera, walker: walker && walk.state, warming });
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
     // camera
@@ -1222,6 +1226,7 @@ export async function create(canvas, opts = {}) {
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
     backend: backendName,
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
+    perchInfo(o) { return perched.info(o); }, // the perched birds: where each sits, the crow's state; { calm: true } keeps the crow put
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     heronInfo() { return herons.info(); }, // the heron and the egrets: where each stands, its heading, its clip
     figureInfo() { return figures.info(); }, figureAct(name) { figures.act(name); }, // the fisherman and the planter; start one's second clip (lift, stretch)
