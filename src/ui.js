@@ -10,7 +10,7 @@ import { WEATHERS, TIMES } from './weather.js';
   function setPressed(btn, on) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
 
   // ---------- weather ----------
-  var wi = WEATHERS.findIndex(function (w) { return w.id === 'fubuki'; }); // opens in a petal storm
+  var wi = WEATHERS.findIndex(function (w) { return w.id === 'clear'; }); // opens in clear weather
   var wBtns = WEATHERS.map(function (w, i) {
     var b = document.createElement('button');
     b.type = 'button'; b.title = w.name; b.setAttribute('aria-label', w.name);
