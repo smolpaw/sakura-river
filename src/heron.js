@@ -12,7 +12,8 @@
 // water. The egrets leave for their roost in the evening and come back in the morning. Lit by the scene's own
 // material, as the deer are (the sun's shadows, fog, the lamps' light, the ground's bounce); both cast shadows.
 // The heron's marks are drawn over its vertex colours from the bind pose: the black stripe from the eye back to the
-// crest, the yellow eye, the streaks down the neck's front.
+// crest, the yellow eye, the streaks down the neck's front. The heron's legs leave a wake in the current and each
+// step of its stalk sends out rings (touches.js: `wakes`, `splashes`).
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec2, vec3, mix, abs, fract, length, max, pow, dot, normalize, uniform, attribute, positionGeometry, normalGeometry, positionWorld, normalWorld, cameraPosition, diffuseColor } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -34,6 +35,8 @@ const PADDY = [-67, -90.5]; // the egrets' paddy, by the valley lane
 const FAR = { heron: 30, egret: 18 }; // m: the lighter models beyond
 const ROOST = [5.3, 18.7]; // the clock hours the egrets are in their paddy
 const PAUSE = [15, 40]; // s of idling between a stalk or a preen
+const FOOT_X = 0.032; // tools/heron.py FOOT: each foot this far to its side of the middle
+const STEPS = [[-1, 0.9, 2.5], [1, 2.6, 4.2]]; // tools/heron.py stalk_pose: each foot's step (side, lifted, set down, s)
 
 const smooth = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -186,9 +189,28 @@ export async function makeHerons(world) {
   }
   const birds = [heron, ...egrets];
   const fwd = new THREE.Vector3();
+  // the heron's legs in the current, the rings of its steps (touches.js)
+  const wakes = STEPS.map(() => ({ x: 0, z: 0, r: 0.012, len: 0.9, amp: 0.85, lambda: 0.045 })), splashes = [];
+  let stalkT = 0;
+  const legs = () => {
+    const t = heron.act === 'stalk' ? heron.A.stalk.time : 0;
+    const c = Math.cos(heron.yaw), s = Math.sin(heron.yaw), p = heron.root.position;
+    for (let i = 0; i < STEPS.length; i++) {
+      const [side, t0, t1] = STEPS[i];
+      const lx = side * FOOT_X * heron.scale, lz = STALK * heron.scale * (heron.act === 'stalk' ? smooth((t - t0) / (t1 - t0)) : 0);
+      // (three's yaw: local x -> (cos, -sin), local z -> (sin, cos))
+      const w = wakes[i];
+      w.x = p.x + lx * c + lz * s; w.z = p.z - lx * s + lz * c;
+      if (heron.act === 'stalk') {
+        if (stalkT < t0 && t >= t0) splashes.push({ x: w.x, z: w.z, amp: 0.45, r: 0.01 });
+        if (stalkT < t1 && t >= t1) splashes.push({ x: w.x, z: w.z, amp: 0.9, r: 0.01 });
+      }
+    }
+    stalkT = t;
+  };
 
   return {
-    group,
+    group, wakes, splashes,
     info: () => birds.map((b) => ({ kind: b.kind, x: +b.root.position.x.toFixed(2), y: +b.root.position.y.toFixed(3), z: +b.root.position.z.toFixed(2), yaw: +b.root.rotation.y.toFixed(2), act: b.act, visible: b.root.visible })),
     // warming: the warm-up shows every bird and both its models, so their pipelines are built behind the loading veil,
     // not when one first comes into view
@@ -237,6 +259,7 @@ export async function makeHerons(world) {
         }
         b.mixer.update(dt);
       }
+      legs();
     },
   };
 }

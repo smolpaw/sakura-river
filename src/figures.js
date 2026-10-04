@@ -6,7 +6,8 @@
 // casting into the sun's sharp map and the valley's (FAR_LAYER), with two clips whose times are set here each frame.
 // The fisherman sits on a stone on the bank's top, facing across the river, his float on the water below (the model's
 // float is moved to the river's surface); he plays `sit` and every 30-90 s `lift`. His paper lantern lights after
-// dusk: its light is in the light map (figureLamps, before the map is built) and a glow sprite marks it.
+// dusk: its light is in the light map (figureLamps, before the map is built) and a glow sprite marks it. His float
+// leaves a little wake in the current and sends out rings when it dips, is lifted out and lands again (touches.js).
 // The planter plants three seedlings across her row and steps back a row each 12 s loop (`plant`): she works strips
 // across the paddy from its north end, turning at its end to the next strip, the seedlings she has planted standing in rows in front of
 // her (one instanced draw, as many as she has planted: how far she has got follows the clock, from none at 08:00 to
@@ -30,6 +31,7 @@ const FAR = 40; // m: the lighter models beyond
 // when each goes in
 const LAMP = new THREE.Vector3(0.5, 0.47, -0.2);
 const WATER = -1.37;
+const NIBBLE = 6.2, OUT = 0.5, BACK = 5.0; // s into `sit`: the float dips; into `lift`: it leaves the water, lands again
 const SINK = 0.13, STEP = 0.27, ROW = 0.366, PLANT_X = [0.19, 0, -0.19], PLANT_AT = [1.95, 4.55, 7.15];
 const FISHER = { z: -31.6, inland: 1.75 }; // on the west bank: where along it, how far up from the water's edge
 const PADDY = [-61.5, -112]; // the planter's paddy (a point in it), by the valley lane, south of the egrets'
@@ -152,6 +154,9 @@ export function makeFigures(world, { uFocal } = {}) {
   const seedlings = paddy ? makeSeedlings(paddy, rng) : null;
   if (seedlings) group.add(seedlings);
   const figs = {};
+  // the float on the water: its wake and its rings (touches.js)
+  const wakes = [{ x: 0, z: 0, r: 0.012, len: 0.5, amp: 0, lambda: 0.045 }], splashes = [];
+  const fpos = new THREE.Vector3();
 
   loadModel(new URL('models/figures.glb', document.baseURI).href).then((gltf) => {
     const src = gltf.scene;
@@ -211,7 +216,7 @@ export function makeFigures(world, { uFocal } = {}) {
   };
 
   return {
-    group,
+    group, wakes, splashes,
     lamps: figureLamps(world),
     info: () => Object.fromEntries(Object.entries(figs).map(([k, f]) => [k, { pos: f.root.position.toArray().map((v) => +v.toFixed(2)), yaw: +f.root.rotation.y.toFixed(2), visible: f.root.visible, clip: f.A[f.act].getClip().name, t: +f.t[f.act].toFixed(2), row: f.row, planted: seedlings ? seedlings.count : 0 }])),
     // debug: start the second clip now
@@ -223,6 +228,7 @@ export function makeFigures(world, { uFocal } = {}) {
       if (fi) {
         level(fi, camera);
         const [sit, lift] = fi.A;
+        const t0 = fi.t[0], t1 = fi.t[1], act = fi.act;
         fi.t[0] = (fi.t[0] + dt) % sit.getClip().duration;
         if (fi.act === 0 && (fi.next -= dt) <= 0) { fi.act = 1; fi.t[1] = 0; }
         let wl = 0;
@@ -236,7 +242,16 @@ export function makeFigures(world, { uFocal } = {}) {
         sit.setEffectiveWeight(1 - wl); lift.setEffectiveWeight(wl);
         fi.mixer.update(0);
         // the float on the river's surface where the bank is not where the model was built for
-        if (fi.float) fi.float.position.y += (-fi.root.position.y - WATER) * (1 - wl);
+        if (fi.float) {
+          fi.float.position.y += (-fi.root.position.y - WATER) * (1 - wl);
+          fi.float.getWorldPosition(fpos);
+          const w = wakes[0], lifted = fi.act === 1 && fi.t[1] > OUT && fi.t[1] < BACK;
+          w.x = fpos.x; w.z = fpos.z; w.amp = lifted ? 0 : 0.7;
+          const crossed = (a, b, at) => a < at && b >= at;
+          if (act === 0 && fi.act === 0 && crossed(t0, fi.t[0], NIBBLE)) splashes.push({ x: w.x, z: w.z, amp: 0.7, r: 0.012 });
+          if (fi.act === 1 && crossed(act === 1 ? t1 : 0, fi.t[1], OUT)) splashes.push({ x: w.x, z: w.z, amp: 0.5, r: 0.012 });
+          if (fi.act === 1 && crossed(act === 1 ? t1 : 0, fi.t[1], BACK)) splashes.push({ x: w.x, z: w.z, amp: 1, r: 0.012 });
+        }
       }
       const p = figs.planter;
       if (p && paddy) {

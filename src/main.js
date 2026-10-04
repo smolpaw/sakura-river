@@ -40,6 +40,7 @@ import { clamp, lerp, smoothstep } from './noise.js';
 import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
 import { makeKoi, koiClearing } from './koi.js';
+import { makeTouches } from './touches.js';
 import { makeBirds } from './birds.js';
 import { makeButterflies } from './butterflies.js';
 import { makeDeer } from './deer.js';
@@ -487,7 +488,9 @@ export async function create(canvas, opts = {}) {
   scene.add(koi.mesh);
   // reflection buffer per CSS pixel above DPR 1.4 (0.35 at DPR 2 passes against sub-pixel A/A, 0.25 does not;
   // bench/dpr_parity.py); the light shafts are per CSS pixel at every DPR (see buildPipeline below)
-  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr), clearing: koiClearing(koi.state, koi.count), wheel: G.village.wheel });
+  // where things touch the water (touches.js): the heron's legs, the boat, the fisherman's float, a koi rising
+  const touches = makeTouches();
+  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr), clearing: koiClearing(koi.state, koi.count), wheel: G.village.wheel, touches });
   water.mesh.name = 'water';
   scene.add(water.mesh);
   const mist = makeMist(G.river);
@@ -952,6 +955,7 @@ export async function create(canvas, opts = {}) {
     lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = sparks.visible = warming || U.uLights.value > 0.001;
     fireflies.update({ lights: U.uLights.value, elev: skyNow.elev, rain: S.rain, wind: S.wind / 1.6, warming });
     figures.update(dt, { hour: clockH, rain: S.rain, lights: U.uLights.value, camera, warming });
+    touches.update(U.uTime.value, [herons, boats, figures, koi]);
     // the hearths' smoke: thickest when the rice is on, morning and evening; thinned by rain
     const cook = Math.exp(-(((clockH - 6.8) / 1.3) ** 2)) + Math.exp(-(((clockH - 17.8) / 1.4) ** 2));
     smoke.uAmount.value = (0.3 + 0.7 * Math.min(1, cook)) * (1 - 0.6 * S.rain);
@@ -1221,6 +1225,7 @@ export async function create(canvas, opts = {}) {
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     heronInfo() { return herons.info(); }, // the heron and the egrets: where each stands, its heading, its clip
     figureInfo() { return figures.info(); }, figureAct(name) { figures.act(name); }, // the fisherman and the planter; start one's second clip (lift, stretch)
+    touchInfo() { return touches.info(); }, touchRing(x, z, amp = 1, r, hx, hz) { touches.ring(x, z, amp, r, hx, hz); }, // the water's touch points; a ring at (x, z) now
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
     // cull: the view culling (lods.js makeView): on, re-sorts so far and their mean main-thread ms, and per group the
     // instances (impostor cards, the walls' merged groups) the camera draws, of those it would unculled, and triangles

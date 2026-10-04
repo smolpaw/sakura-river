@@ -1,4 +1,5 @@
-// Flowing river: planar reflection (reflector()), flow-aligned ripples, depth-based colour, shore foam, sun glints
+// Flowing river: planar reflection (reflector()), flow-aligned ripples, depth-based colour, shore foam, sun glints, the
+// wakes and rings of what touches it (touches.js)
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, vec4, uniform, texture, attribute, mix, max, min, pow, dot, normalize, clamp, length, reflect, sin, cos, abs, floor, fract,
@@ -7,8 +8,9 @@ import {
 import { U, vnoise, hash12, sstep, applyFog, fogTint } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
 
-// wheel: the waterwheel's hub and its axle's direction ({ pos: [x, y, z], yaw }), where it churns the water white
-export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null, wheel = null } = {}) {
+// wheel: the waterwheel's hub and its axle's direction ({ pos: [x, y, z], yaw }), where it churns the water white;
+// touches: what stands in the water or disturbs it (touches.js makeTouches), its wakes and rings
+export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, clearing = null, wheel = null, touches = null } = {}) {
   const uniforms = { uHasRefl: uniform(0), uSpeed: uniform(1) };
   const { uZenith, uHorizon } = sky.uniforms;
   const uHB = uniform(depthMap.bounds), uRB = uniform(depthMap.rockBounds);
@@ -85,6 +87,13 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     If(U.uRain.greaterThan(0.0), () => {
       gw.addAssign(ripples(vW.xz).mul(U.uRain.mul(0.15).add(0.2)).mul(sstep(30.0, 6.0, dist)));
     });
+    const tg = vec2(0.0).toVar(); // the touches' share of the slope
+    if (touches) {
+      If(dist.lessThan(30.0), () => {
+        tg.assign(touches.slope(vW.xz, fl, uniforms.uSpeed).mul(sstep(30.0, 12.0, dist)));
+        gw.addAssign(tg);
+      });
+    }
     const N = normalize(vec3(gw.x.negate(), 1.0, gw.y.negate())).toVar();
     const V = normalize(cameraPosition.sub(vW)).toVar();
     // calm distant water to avoid aliasing
@@ -109,6 +118,10 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     // subsurface glow when looking toward the sun
     body.addAssign(U.uSunColor.mul(U.uSunVis).mul(sunShadow).mul(pow(max(dot(V.negate(), U.uSunDir), 0.0), 4.0)).mul(0.08).mul(float(1.0).sub(sstep(0.0, 1.5, depth))));
     const col = mix(body, reflCol, clamp(fres.mul(1.1), 0.0, 1.0)).toVar();
+    // the touches' ripples, shown more strongly than their slope alone does through the fresnel (in shallow, clear
+    // water it hardly does): a face rising towards the eye shows more of the reflection, one falling away more of the bed
+    const tk = touches ? clamp(dot(tg, normalize(V.xz.add(1e-4))).mul(1.5), -0.25, 0.25).toVar() : float(0.0);
+    if (touches) col.assign(mix(col, reflCol, max(tk, 0.0)).mul(min(tk, 0.0).add(1.0)));
     // sun glints
     const sd = max(dot(R, U.uSunDir), 0.0);
     col.addAssign(U.uSunColor.mul(U.uSunVis).mul(sunShadow).mul(pow(sd, 900.0).mul(7.0).add(pow(sd, 90.0).mul(0.35))));
@@ -137,7 +150,7 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     }
     col.assign(mix(col, vec3(0.85, 0.85, 0.82).mul(U.uSunVis.mul(0.6).add(0.4)).add(U.uSunColor.mul(0.12)), foam.mul(0.55)));
     const alpha = mix(0.35, 0.96, sstep(0.0, 1.1, depth)).toVar();
-    alpha.assign(max(alpha, fres));
+    alpha.assign(max(alpha, touches ? fres.add(abs(tk)) : fres));
     alpha.mulAssign(sstep(0.0, 0.06, bed)); // shoreline fade; over rocks a thin film stays
     if (clearing) alpha.mulAssign(float(1.0).sub(clearing(vW.xz).mul(0.75))); // koi just under the surface
     alpha.assign(max(alpha, foam.mul(0.6).mul(sstep(0.0, 0.03, depth))));

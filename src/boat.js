@@ -4,7 +4,8 @@
 // on the bank; another is pulled up on the west bank above the bridge, downstream of the mill, bow first up the bank
 // onto the grass, heeled a little, its stern at the water's edge. Each boat is one Object3D (its full model near, the
 // far one beyond FAR metres); the moored one's rocking is a few sines of the time on the CPU, and the rope's end
-// follows its bow in the vertex stage. Lit as the lamps (materials.js lampMaterial).
+// follows its bow in the vertex stage. Lit as the lamps (materials.js lampMaterial). The moored hull leaves a wake
+// in the current from its bow and its stern, and sends out faint rings round itself as it rocks (touches.js).
 import * as THREE from 'three/webgpu';
 import { attribute, positionLocal, uniform } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -19,6 +20,7 @@ const STAKE_TAIL = new THREE.Vector3(0.18, ROPE_Z - 0.01, 0); // where the line 
 const HALF = { len: 2.3, beam: 0.56 }; // the hull's half length and half beam
 const FAR = 45; // the full model to here (m)
 const ROPE_C = [0.26, 0.21, 0.13];
+const STEM = 1.95, TRANSOM = 2.2; // the bow's and the stern's ends at the waterline, from the middle (boat's frame)
 
 // where the boats lie. moored: its middle's z on the west bank (side -1), clear of the boulders there, and how far its
 // side keeps off the reeds; beached: the stretch of the west bank searched for a place, the angle its bow makes with
@@ -220,8 +222,14 @@ export async function makeBoats(url, world, { rocks = [], lamps = [], rafts = nu
 
   const tmp = new THREE.Vector3();
   const swing = { ...rest };
+  // the moored hull in the current: a V from its bow, broken water off its square stern; rings round it at the
+  // bottom of each heave and the ends of each roll (touches.js)
+  const wakes = [{ x: 0, z: 0, r: 0.05, len: 4.6, amp: 1, lambda: 0.12 }, { x: 0, z: 0, r: 0.42, len: 2.2, amp: 0.7, lambda: 0.1 }];
+  const splashes = [];
+  const along = new THREE.Vector3(), mid = new THREE.Vector3();
+  let heave = 0, roll = 0;
   return {
-    group,
+    group, wakes, splashes,
     // once a frame: the moored boat rocks (heave of a couple of cm, ~1 degree of roll, less of pitch, a slow swing
     // on its rope); each boat its full or far model by the camera's distance
     update(t, cam) { // (cam: the camera's position)
@@ -229,7 +237,17 @@ export async function makeBoats(url, world, { rocks = [], lamps = [], rafts = nu
       swing.roll = 0.016 * Math.sin(t * 0.77 + 0.4) + 0.006 * Math.sin(t * 1.9);
       swing.pitch = 0.006 * Math.sin(t * 0.61 + 2.0) + 0.003 * Math.sin(t * 1.37);
       swing.yaw = rest.yaw + 0.01 * Math.sin(t * 0.13);
+      const dh = Math.cos(t * 0.9) + 0.8 * Math.cos(t * 1.73 + 1.1), dr = Math.cos(t * 0.77 + 0.4); // (the heave's rate, the slow roll's)
       pose(floating.o, swing);
+      mid.set(0, 0, 0).applyMatrix4(floating.o.matrix);
+      along.set(1, 0, 0).transformDirection(floating.o.matrix);
+      for (const [w, u] of [[wakes[0], STEM], [wakes[1], -TRANSOM]]) { w.x = mid.x + along.x * u; w.z = mid.z + along.z * u; }
+      // (the heave's lowest point: its rate turning from falling to rising; the slow roll's ends: its rate changing
+      // sign; a ring every 2-7 s)
+      const ring = (amp) => splashes.push({ x: mid.x, z: mid.z, amp, r: HALF.beam - 0.06, hx: along.x * (HALF.len - HALF.beam - 0.3), hz: along.z * (HALF.len - HALF.beam - 0.3) });
+      if (heave < 0 && dh >= 0) ring(0.8);
+      if (Math.sign(roll) !== Math.sign(dr) && roll !== 0) ring(0.4);
+      heave = dh; roll = dr;
       uBow.value.copy(tmp.copy(BOW_PEG).applyMatrix4(floating.o.matrix)).sub(bow);
       for (const b of boats) {
         const far = cam.distanceTo(b.centre) > FAR;

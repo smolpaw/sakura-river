@@ -3,7 +3,8 @@
 // and the other fish, drawn a little towards its group; it speeds up now and then and glides. The vertex stage bends
 // the body into its turns and runs the swimming wave down it to the tail; the fins flutter. The water clears a little
 // above each fish (see water.js), as it does over koi near the surface — through the full river depth they would not
-// show.
+// show. Every 10-30 s one rises until its back breaks the surface, making a ring, and a smaller one with its tail as
+// it turns down again (touches.js `splashes`).
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec2, vec3, vec4, mix, sin, cos, abs, fract, length, attribute, positionGeometry, normalGeometry, transformNormalToView, uniformArray } from 'three/tsl';
 import { U, vnoise, sstep, LitMaterial } from './tsl.js';
@@ -12,6 +13,8 @@ import { heronClearings } from './heron.js';
 
 export const KOI_MAX = 12;
 const SIZE = 1.5; // body 0.93 m nose to tail at scale 1: large koi, readable from the banks
+const RISE = [10, 30], RISE_T = 1.8; // s between rises, how long one takes
+const RISE_Y = -0.035; // the fish's middle at the top of a rise: its back just out of the water
 
 // Body along +z (nose at +0.32, tail peduncle at -0.3, tail tip -0.5): broadest just behind the head, blunt nosed,
 // deeper than wide, the belly flatter than the back. Fins (aFin = 1, drawn from both sides): a forked tail, a long
@@ -180,13 +183,20 @@ export function makeKoi(world, count, center, rocks = []) {
   mesh.layers.set(1); // not in the reflection or the shadow map
 
   const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const smooth = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+  const splashes = [];
+  let riseIn = 6 + rng() * 10, riser = -1, riseT = 0;
   return {
-    mesh, state: uniformArray(state, 'vec4'), count: n,
-    info: () => fish.map((f) => [f.x, f.y, f.z, f.h].map((v) => +v.toFixed(2))),
+    mesh, state: uniformArray(state, 'vec4'), count: n, splashes,
+    info: () => fish.map((f) => [f.x, f.drawnY ?? f.y, f.z, f.h].map((v) => +v.toFixed(2))),
     update(dt, t) {
       dt = Math.min(dt, 0.1);
       const cx = [0, 0], cz = [0, 0], cn = [0, 0];
       for (const f of fish) { cx[f.g] += f.x; cz[f.g] += f.z; cn[f.g]++; }
+      // a rise: which fish, how far through it
+      const rt = riseT;
+      if (riser < 0 && (riseIn -= dt) <= 0) { riser = Math.floor(rng() * n); riseT = 0; }
+      if (riser >= 0 && (riseT += dt) >= RISE_T) { riser = -1; riseIn = RISE[0] + rng() * (RISE[1] - RISE[0]); }
       for (let i = 0; i < n; i++) {
         const f = fish[i];
         const hx = Math.sin(f.h), hz = Math.cos(f.h);
@@ -220,7 +230,14 @@ export function makeKoi(world, count, center, rocks = []) {
         const beat = Math.min(1, Math.max(0, (want - f.sp * 0.6) * 4));
         f.tail += dt * (3 + beat * 7 + Math.abs(f.turn) * 3);
         f.dive += dt * 0.15;
-        const y = f.y + Math.sin(f.dive) * 0.05;
+        let y = f.y + Math.sin(f.dive) * 0.05;
+        if (i === riser) {
+          const k = riseT / RISE_T, len = SIZE * f.scale;
+          y += (RISE_Y - y) * smooth(k / 0.35) * smooth((1 - k) / 0.4);
+          if (rt < 0.4 * RISE_T && riseT >= 0.4 * RISE_T) splashes.push({ x: f.x + hx * 0.12 * len, z: f.z + hz * 0.12 * len, amp: 1, r: 0.06 });
+          if (rt < 0.62 * RISE_T && riseT >= 0.62 * RISE_T) splashes.push({ x: f.x - hx * 0.3 * len, z: f.z - hz * 0.3 * len, amp: 0.55, r: 0.03 });
+        }
+        f.drawnY = y;
         aPose.array.set([f.x, y, f.z, f.h], i * 4);
         aLook.array[i * 4] = f.tail; aLook.array[i * 4 + 3] = beat;
         aMove.array[i * 2] = Math.max(-0.5, Math.min(0.5, f.turn * 0.5));
