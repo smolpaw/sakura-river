@@ -38,6 +38,7 @@ import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
 import { makeKoi, koiClearing } from './koi.js';
 import { makeBirds } from './birds.js';
+import { makeButterflies } from './butterflies.js';
 import { makeDeer } from './deer.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
@@ -515,6 +516,8 @@ export async function create(canvas, opts = {}) {
   scene.add(fireflies.mesh);
   const birds = makeBirds(world, { x: TX, z: TZ });
   scene.add(birds.group);
+  const butterflies = makeButterflies(world, { tree: [TX, TZ], flowers: G.flowers, posts: G.lanterns.lists[0], small: Lay.small, tier: tierName });
+  scene.add(butterflies.mesh);
   const deer = await makeDeer(world, Lay.graze);
   scene.add(deer.group);
   const rain = makeRain(Q.rain);
@@ -917,6 +920,7 @@ export async function create(canvas, opts = {}) {
     const cook = Math.exp(-(((clockH - 6.8) / 1.3) ** 2)) + Math.exp(-(((clockH - 17.8) / 1.4) ** 2));
     smoke.uAmount.value = (0.3 + 0.7 * Math.min(1, cook)) * (1 - 0.6 * S.rain);
     birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
+    butterflies.update({ hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, warming });
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
 
     // camera
