@@ -294,40 +294,63 @@ export function rocksData(world, tier, treePos, pebble) {
   }));
   // the farmhouses' pads (world.js BUILDINGS): dry-stone walls (ishigaki) on the banks where a pad is built up or cut
   // into the slope by more than 40 cm: courses of rounded stones from the bank's foot to its top (the pebbles' stone,
-  // ~2,900 of them, merged in groups by place: lods.js makeMerged)
+  // ~4,000 of them, merged in groups by place: lods.js makeMerged)
   const r2 = mulberry32(4321), groups = new Map();
+  // the pebble's underside (its vertices facing down or sideways: what it rests on) and how far its top stands above its
+  // origin, for setting the foot course into the ground (below)
+  const pv = pebble.position, pn = pebble.normal, under = [];
+  let py1 = -Infinity;
+  for (let i = 1; i < pv.length; i += 3) py1 = Math.max(py1, pv[i]);
+  for (let i = 0; i < pv.length; i += 3) if (pn[i + 1] < 0.4) under.push(pv[i], pv[i + 1], pv[i + 2]);
+  const uv = new V();
   world.BUILDINGS.forEach((b) => {
     // a group per 50 m square of the village (lods.js makeMerged draws each merged, near or far by its middle)
     const key = `${Math.floor(b.x / 50)},${Math.floor(b.z / 50)}`;
     if (!groups.has(key)) groups.set(key, { m: [], c: [], k: [] });
     const wall = groups.get(key);
     const z0 = -b.hd, z1 = b.hd + b.yard;
-    // walk the pad's edge, then out across its bank (world.js padAt: 0.15 .. 2.2 m out)
+    // columns of stones along the pad's edge, set in from its corners by a stone's half-width (or they hang over the
+    // next side's bank), and one on each corner's diagonal; each goes out across the bank (world.js padAt: 0.15 ..
+    // 2.2 m out)
     const edge = [[-b.hw, z0, b.hw, z0, 0, -1], [b.hw, z0, b.hw, z1, 1, 0], [b.hw, z1, -b.hw, z1, 0, 1], [-b.hw, z1, -b.hw, z0, -1, 0]];
-    for (const [ax, az, bx, bz, ox, oz] of edge) {
-      const len = Math.hypot(bx - ax, bz - az), n = Math.round(len / 0.85);
-      for (let i = 0; i <= n; i++) {
-        const lx = lerp(ax, bx, i / n), lz = lerp(az, bz, i / n);
-        const at = (o) => [b.x + (lx + ox * o) * b.c + (lz + oz * o) * b.s, b.z - (lx + ox * o) * b.s + (lz + oz * o) * b.c];
-        const [fx, fz] = at(2.4);
-        const foot = world.height(fx, fz), step = Math.abs(foot - b.y);
-        if (step < 0.4) continue;
-        const rows = Math.max(1, Math.round(step / 0.55));
-        for (let r = 0; r < rows; r++) {
-          // up the bank: the height of this course, and how far out the bank stands at that height
-          const t = (r + 0.5) / rows, yy = lerp(Math.min(foot, b.y), Math.max(foot, b.y), t);
-          let o = 0.15, best = Infinity;
-          for (let k = 0; k <= 12; k++) { const oo = 0.15 + k * 0.17, [qx, qz] = at(oo), dy = Math.abs(world.height(qx, qz) - yy); if (dy < best) { best = dy; o = oo; } }
-          const [x, z] = at(o + (r2() - 0.5) * 0.12 + (i % 2) * 0.0);
-          const sc = 0.44 + r2() * 0.2;
-          p.set(x, yy - sc * 0.3, z);
-          q.setFromEuler(new THREE.Euler((r2() - 0.5) * 0.5, r2() * 6.28, (r2() - 0.5) * 0.5));
-          s.set(sc * (1 + r2() * 0.3), sc * (0.7 + r2() * 0.25), sc * (1 + r2() * 0.3));
-          const t2 = 0.5 + r2() * 0.28;
-          wall.m.push(...m.compose(p, q, s).elements);
-          wall.c.push(t2, t2 * 0.98, t2 * 0.93);
-          wall.k.push(rows > 1 ? r / (rows - 1) : 1);
+    const IN = 0.55, columns = [];
+    edge.forEach(([ax, az, bx, bz, ox, oz], k) => {
+      const dx = Math.sign(bx - ax), dz = Math.sign(bz - az), len = Math.hypot(bx - ax, bz - az) - 2 * IN, n = Math.max(1, Math.round(len / 0.85));
+      for (let i = 0; i <= n; i++) columns.push([lerp(ax + dx * IN, bx - dx * IN, i / n), lerp(az + dz * IN, bz - dz * IN, i / n), ox, oz]);
+      const [, , , , nx, nz] = edge[(k + 1) % 4];
+      columns.push([bx, bz, (ox + nx) * Math.SQRT1_2, (oz + nz) * Math.SQRT1_2]);
+    });
+    for (const [lx, lz, ox, oz] of columns) {
+      const at = (o) => [b.x + (lx + ox * o) * b.c + (lz + oz * o) * b.s, b.z - (lx + ox * o) * b.s + (lz + oz * o) * b.c];
+      const [fx, fz] = at(2.4);
+      const foot = world.height(fx, fz), step = Math.abs(foot - b.y);
+      if (step < 0.4) continue;
+      // Courses 0.45 m apart of stones about 0.6 m tall, their centres on the bank's surface: each course's outer
+      // underside rests on the top of the course below, which stands that much further out, however steep the bank
+      // (near a half-stone out per course on a gentle bank, nearly above one another on a steep one).
+      const rows = Math.max(1, Math.round(step / 0.45));
+      for (let r = 0; r < rows; r++) {
+        // up the bank: the height of this course, and how far out the bank stands at that height
+        const t = (r + 0.5) / rows, yy = lerp(Math.min(foot, b.y), Math.max(foot, b.y), t);
+        let o = 0.15, best = Infinity;
+        for (let k = 0; k <= 24; k++) { const oo = 0.15 + k * 0.085, [qx, qz] = at(oo), dy = Math.abs(world.height(qx, qz) - yy); if (dy < best) { best = dy; o = oo; } }
+        const [x, z] = at(o + (r2() - 0.5) * 0.12);
+        const sc = 0.44 + r2() * 0.2;
+        p.set(x, yy - sc * 0.3, z);
+        q.setFromEuler(new THREE.Euler((r2() - 0.5) * 0.3, r2() * 6.28, (r2() - 0.5) * 0.3));
+        s.set(sc * (1 + r2() * 0.3), sc * (0.85 + r2() * 0.3), sc * (1 + r2() * 0.3));
+        const t2 = 0.5 + r2() * 0.28;
+        m.compose(p, q, s);
+        if (r === 0 && step > 1.0) {
+          // the foot course stands on the turf, and on a steep bank its outer underside hangs out over it: it is
+          // sunk by that much and stretched up (by up to 1.7×: a footing stone) so its top stays under the course above
+          let over = -Infinity;
+          for (let k = 0; k < under.length; k += 3) { uv.set(under[k], under[k + 1], under[k + 2]).applyMatrix4(m); over = Math.max(over, uv.y - world.height(uv.x, uv.z)); }
+          if (over > -0.03) { const d = over + 0.06; p.y -= d; s.y *= Math.min(1.7, 1 + d / (s.y * py1)); m.compose(p, q, s); }
         }
+        wall.m.push(...m.elements);
+        wall.c.push(t2, t2 * 0.98, t2 * 0.93);
+        wall.k.push(rows > 1 ? r / (rows - 1) : 1);
       }
     }
   });
