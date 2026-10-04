@@ -11,7 +11,7 @@ import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
 import { lightMap, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
-import { makeLods, makeMerged, makeView, loadModel, ultraUrl } from './lods.js';
+import { makeLods, makeMerged, makeView, loadModel, ultraUrl, shareInstancedPipelines, modelVertices } from './lods.js';
 import { makeGrass } from './grass.js';
 import { bakeImpostors, makeImpostors } from './impostors.js';
 import { nearBlossoms } from './blossoms.js';
@@ -110,6 +110,7 @@ export async function create(canvas, opts = {}) {
   if (fallback) renderer._getFallback = (e) => { params.context = glContext(); return fallback(e); };
   await renderer.init();
   const backendName = renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
+  shareInstancedPipelines(renderer); // one pipeline per material for the instanced models (lods.js)
   // on the WebGL2 fallback the bench probe runs its own timer queries (three's cannot time nested passes)
   if (backendName === 'webgl' && opts.bench) renderer.backend.trackTimestamp = false;
   const tierName = opts.quality || detectTier(renderer);
@@ -170,7 +171,7 @@ export async function create(canvas, opts = {}) {
     fuji: { name: 'fuji' },
     props: { name: 'props', args: { triMul } },
     lanterns: { name: 'lanterns', args: { tier: tierName } },
-    rocks: { name: 'rocks', args: { tier: tierName } },
+    rocks: { name: 'rocks', args: modelVertices(rocksUrl, 'pebble').then((pebble) => ({ tier: tierName, pebble })) }, // (the walls' joints)
     grassMask: { name: 'grassMask', args: { tier: tierName } },
     turf: { name: 'turf', args: { count: Q.turf * (ST ? ST.grass : 1) } },
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
@@ -935,7 +936,7 @@ export async function create(canvas, opts = {}) {
     boats.update(U.uTime.value, camera.position);
     rafts.geometry.instanceCount = Math.round(G.rafts.n * Math.min(1, S.petals / 0.6)); // fewer when fewer petals fall
     deer.update(dt);
-    herons.update(dt, clockH, camera);
+    herons.update(dt, clockH, camera, warming);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = sparks.visible = warming || U.uLights.value > 0.001;

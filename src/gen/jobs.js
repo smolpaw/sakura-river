@@ -41,7 +41,7 @@ export const JOBS = {
     t.y = world().temple.y;
     return { bridge: b, temple: t };
   },
-  rocks: ({ tier }) => rocksData(world(), tier, xz(L().tree)),
+  rocks: ({ tier, pebble }) => rocksData(world(), tier, xz(L().tree), pebble),
   fields: ({ zones }) => world().buildFields(0.5, zones),
   village: () => ({ ...villageData(world()), wayside: waysideData(world()), waysideRoofs: waysideRoofs(world()) }),
   // no grass in the boulders, round the cherries' trunks or under the wayside's stones

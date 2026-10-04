@@ -98,12 +98,23 @@ export function createWorld(seed = 7) {
     lane([[5, -117], [16, -114], [28, -112], [37, -112.5], [44, -118], [45, -126], [44.5, -131]]),
     lane([[-33, -60], [-42, -64], [-55, -73], [-70, -84], [-84, -96], [-89, -115], [-91, -140], [-93, -165], [-95, -190], [-93, -215], [-90, -240]]),
   ];
-  // distance to the nearest lane: looked up in a 1 m grid made on first use (out to 8 m; beyond, Infinity)
+  // distance to the nearest lane: looked up in a 1 m grid made on first use (out to 8 m; beyond, Infinity). Each
+  // segment of each lane fills only the cells within 8 m of its bounds, keeping the nearest (every cell as the exact
+  // distance to all the segments, clamped to 8, would cost ~50 ms in every worker that asks for a height)
   const LD = { x0: -104, z0: -250, s: 1, nx: 165, nz: 253, d: null };
   function laneDist(x, z) {
     if (!LD.d) {
-      LD.d = new Float32Array(LD.nx * LD.nz);
-      for (let j = 0; j < LD.nz; j++) for (let i = 0; i < LD.nx; i++) LD.d[j * LD.nx + i] = Math.min(8, laneDistExact(LD.x0 + i * LD.s, LD.z0 + j * LD.s));
+      const d = LD.d = new Float32Array(LD.nx * LD.nz).fill(8), cell = (v, o) => (v - o) / LD.s;
+      for (const L of LANES) for (let k = 1; k < L.length; k++) {
+        const [ax, az] = L[k - 1], [bx, bz] = L[k], vx = bx - ax, vz = bz - az, vv = vx * vx + vz * vz;
+        const i0 = Math.max(0, Math.floor(cell(Math.min(ax, bx) - 8, LD.x0))), i1 = Math.min(LD.nx - 1, Math.ceil(cell(Math.max(ax, bx) + 8, LD.x0)));
+        const j0 = Math.max(0, Math.floor(cell(Math.min(az, bz) - 8, LD.z0))), j1 = Math.min(LD.nz - 1, Math.ceil(cell(Math.max(az, bz) + 8, LD.z0)));
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const x = LD.x0 + i * LD.s, z = LD.z0 + j * LD.s, t = clamp(((x - ax) * vx + (z - az) * vz) / vv, 0, 1);
+          const r = hyp(x - ax - vx * t, z - az - vz * t);
+          if (r < d[j * LD.nx + i]) d[j * LD.nx + i] = r;
+        }
+      }
     }
     const fx = (x - LD.x0) / LD.s, fz = (z - LD.z0) / LD.s;
     const i = Math.floor(fx), j = Math.floor(fz);
@@ -111,15 +122,6 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = LD.d, k = j * LD.nx + i;
     const r = (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + LD.nx] * (1 - u) + d[k + LD.nx + 1] * u) * v;
     return r >= 8 ? Infinity : r;
-  }
-  function laneDistExact(x, z) {
-    let best = Infinity;
-    for (const L of LANES) for (let i = 1; i < L.length; i++) {
-      const [ax, az] = L[i - 1], [bx, bz] = L[i];
-      const vx = bx - ax, vz = bz - az, t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz), 0, 1);
-      best = Math.min(best, hyp(x - ax - vx * t, z - az - vz * t));
-    }
-    return best;
   }
   // The village's buildings (village.js draws them): their kind, where, which way their front faces (+z turned by
   // yaw), and the levelled pad each stands on (half-sizes hw, hd round it; its yard reaching `yard` metres out in

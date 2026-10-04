@@ -8,7 +8,8 @@ function spawn() {
   try { return new GenWorker(); } catch (e) { return null; }
 }
 
-// jobs: { key: { name, args } } -> Promise<{ results: { key: data }, stats }>
+// jobs: { key: { name, args } } -> Promise<{ results: { key: data }, stats }>; args may be a promise (a job waits for
+// its args when its turn comes: the rocks' job for the pebble model, loaded on the main thread meanwhile)
 export async function runJobs(jobs, { workers = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)), mainThread = false } = {}) {
   const t0 = performance.now();
   const queue = Object.entries(jobs).sort((a, b) => (COST[b[1].name] || 1) - (COST[a[1].name] || 1));
@@ -18,7 +19,7 @@ export async function runJobs(jobs, { workers = Math.max(1, Math.min(4, (navigat
     for (const [key, j] of queue) {
       await new Promise((r) => setTimeout(r, 0)); // yield between jobs
       const s = performance.now();
-      results[key] = unpackDeep(packDeep(JOBS[j.name](j.args), new Set()));
+      results[key] = unpackDeep(packDeep(JOBS[j.name](await j.args), new Set()));
       timing[key] = performance.now() - s;
     }
     return { results, stats: { workers: 0, ms: performance.now() - t0, timing } };
@@ -31,7 +32,7 @@ export async function runJobs(jobs, { workers = Math.max(1, Math.min(4, (navigat
       const [key, j] = queue[next++];
       const my = id++;
       pending.set(my, key);
-      w.postMessage({ id: my, name: j.name, args: j.args });
+      Promise.resolve(j.args).then((args) => w.postMessage({ id: my, name: j.name, args }), reject);
     };
     w.onmessage = (e) => {
       const key = pending.get(e.data.id);

@@ -190,15 +190,17 @@ export async function makeHerons(world) {
   return {
     group,
     info: () => birds.map((b) => ({ kind: b.kind, x: +b.root.position.x.toFixed(2), y: +b.root.position.y.toFixed(3), z: +b.root.position.z.toFixed(2), yaw: +b.root.rotation.y.toFixed(2), act: b.act, visible: b.root.visible })),
-    update(dt, hour, camera) {
+    // warming: the warm-up shows every bird and both its models, so their pipelines are built behind the loading veil,
+    // not when one first comes into view
+    update(dt, hour, camera, warming = false) {
       dt = Math.min(dt, 0.1);
       const away = hour < ROOST[0] || hour > ROOST[1];
       for (const b of birds) {
-        b.root.visible = b.kind === 'heron' || !away;
+        b.root.visible = warming || b.kind === 'heron' || !away;
         if (!b.root.visible) continue;
         const d = camera ? camera.position.distanceTo(b.root.position) : 0;
         const nearOn = d < FAR[b.kind];
-        b.near.visible = nearOn; b.far.visible = !nearOn;
+        b.near.visible = warming || nearOn; b.far.visible = warming || !nearOn;
         if (!b.act) {
           // turning slowly to a new heading every minute or few, eased
           if ((b.turn -= dt) <= 0) { b.yawTo = b.pick(); b.turn = 60 + rng() * 120; }
