@@ -471,7 +471,8 @@ export function villageMaterial() {
 }
 
 // the riverside's lamps (lanterns.js, Blender models): vertex colours with how much each part glows after dusk in
-// their alpha (the bonbori's paper, the fire baskets' coals), glowing in their own colour; lit by the lamps near them
+// their alpha (the bonbori's paper, the fire baskets' coals), glowing in their own colour; lit by the lamps near them.
+// The river boats (boat.js) too, with nothing glowing
 export function lampMaterial() {
   const col = attribute('color', 'vec4');
   return new LitMaterial({ roughness: 0.8, metalness: 0, colorNode: col.rgb }, (out) => Fn(() => {

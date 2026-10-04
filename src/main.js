@@ -23,6 +23,8 @@ import cherryUrl from './models/cherry.glb?url&inline';
 import villageUrl from './models/village.glb?url&inline';
 import shrubsUrl from './models/shrubs.glb?url&inline';
 import lampsUrl from './models/lamps.glb?url&inline';
+import boatUrl from './models/boat.glb?url&inline';
+import { makeBoats } from './boat.js';
 import { LAMP_KINDS } from './lanterns.js';
 import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState, uStarPx } from './sky.js';
@@ -360,6 +362,9 @@ export async function create(canvas, opts = {}) {
   lamps.name = 'lamps';
   lamps.traverse((o) => { o.castShadow = o.isMesh; });
   scene.add(lamps);
+  // the river boats (boat.js): one moored below the cherry tree, rocking at its rope, one pulled up above the bridge
+  const boats = await makeBoats(boatUrl, world, { rocks: G.rocks.blockers, lamps: G.lanterns.bonbori, rafts: G.rafts });
+  scene.add(boats.group);
   const fires = makeFires(G.lanterns.fires);
   fires.name = 'fires';
   scene.add(fires);
@@ -910,6 +915,7 @@ export async function create(canvas, opts = {}) {
     if (petals.isPetalSystem) petals.update(dt, U.uTime.value, S.wind, S.river);
     else petals.update(renderer, warming ? 1 / 60 : dt, U.uTime.value, S.wind, S.river);
     koi.update(dt, U.uTime.value);
+    boats.update(U.uTime.value, camera.position);
     rafts.geometry.instanceCount = Math.round(G.rafts.n * Math.min(1, S.petals / 0.6)); // fewer when fewer petals fall
     deer.update(dt);
     // the lanterns come on at dusk

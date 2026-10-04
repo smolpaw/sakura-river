@@ -1,6 +1,6 @@
 // Builds models with Blender and compresses them like the deer: each tools/<name>.py into src/models/<name>.glb (the
 // woods' trees, the gorge's rock walls, the bamboo, the river's boulders, the cherries' trunks, the village's
-// buildings, the shrubs, the riverside's lamps), inlined in the page, or (PUBLIC: the traveller) into
+// buildings, the shrubs, the riverside's lamps, the river boats), inlined in the page, or (PUBLIC: the traveller) into
 // public/models/<name>.glb, fetched by the page when it needs it. A model built from the scene's own data gets it from tools/<name>.mjs, as a JSON file after the output.
 // The Ultra tier's near models (meshes named `<kind>_near`) go to public/models/<name>-ultra.glb instead: fetched on
 // demand (lods.js ultraUrl), not inlined in the page.
@@ -14,7 +14,7 @@ import { prune, dedup, meshopt } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const MODELS = ['forest', 'cliffs', 'bamboo', 'rocks', 'cherry', 'village', 'shrubs', 'lamps', 'human'];
+const MODELS = ['forest', 'cliffs', 'bamboo', 'rocks', 'cherry', 'village', 'shrubs', 'lamps', 'boat', 'human'];
 const PUBLIC = ['human'];
 // where a model's meshes go: [file, which meshes (by node name)]; a file no mesh goes to is not written
 const targets = (name) => [
