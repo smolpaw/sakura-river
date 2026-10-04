@@ -1,12 +1,14 @@
 // Koi: a dozen carp of the classic varieties cruising just under the river surface near the tree, in two loose
-// groups. Each steers on the CPU: a slow wander, kept off the banks, the rocks, the ends of its reach and the other
-// fish, drawn a little towards its group; it speeds up now and then and glides. The vertex stage bends the body into
-// its turns and runs the swimming wave down it to the tail; the fins flutter. The water clears a little above each
-// fish (see water.js), as it does over koi near the surface — through the full river depth they would not show.
+// groups. Each steers on the CPU: a slow wander, kept off the banks, the rocks, the heron's legs, the ends of its reach
+// and the other fish, drawn a little towards its group; it speeds up now and then and glides. The vertex stage bends
+// the body into its turns and runs the swimming wave down it to the tail; the fins flutter. The water clears a little
+// above each fish (see water.js), as it does over koi near the surface — through the full river depth they would not
+// show.
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec2, vec3, vec4, mix, sin, cos, abs, fract, length, attribute, positionGeometry, normalGeometry, transformNormalToView, uniformArray } from 'three/tsl';
 import { U, vnoise, sstep, LitMaterial } from './tsl.js';
 import { mulberry32 } from './noise.js';
+import { heronClearings } from './heron.js';
 
 export const KOI_MAX = 12;
 const SIZE = 1.5; // body 0.93 m nose to tail at scale 1: large koi, readable from the banks
@@ -93,6 +95,7 @@ const VARIETIES = [
 const SCHOOL = [0, 1, 2, 0, 3, 4, 1, 6, 5, 2, 7, 0];
 
 export function makeKoi(world, count, center, rocks = []) {
+  rocks = [...rocks, ...heronClearings(world)]; // the rocks and the heron's stretch of shallows
   const n = Math.min(count, KOI_MAX);
   const rng = mulberry32(77);
   const zLo = center.z - 30, zHi = center.z + 28;

@@ -42,6 +42,7 @@ import { makeKoi, koiClearing } from './koi.js';
 import { makeBirds } from './birds.js';
 import { makeButterflies } from './butterflies.js';
 import { makeDeer } from './deer.js';
+import { makeHerons } from './heron.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
 import { QualityController } from './quality.js';
@@ -539,6 +540,8 @@ export async function create(canvas, opts = {}) {
   scene.add(butterflies.mesh);
   const deer = await makeDeer(world, Lay.graze);
   scene.add(deer.group);
+  const herons = await makeHerons(world);
+  scene.add(herons.group);
   const rain = makeRain(Q.rain);
   rain.name = 'rain';
   rain.visible = false;
@@ -932,6 +935,7 @@ export async function create(canvas, opts = {}) {
     boats.update(U.uTime.value, camera.position);
     rafts.geometry.instanceCount = Math.round(G.rafts.n * Math.min(1, S.petals / 0.6)); // fewer when fewer petals fall
     deer.update(dt);
+    herons.update(dt, clockH, camera);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = sparks.visible = warming || U.uLights.value > 0.001;
@@ -1203,6 +1207,7 @@ export async function create(canvas, opts = {}) {
     backend: backendName,
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
+    heronInfo() { return herons.info(); }, // the heron and the egrets: where each stands, its heading, its clip
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
     // cull: the view culling (lods.js makeView): on, re-sorts so far and their mean main-thread ms, and per group the
     // instances (impostor cards, the walls' merged groups) the camera draws, of those it would unculled, and triangles
