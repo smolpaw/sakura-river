@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, min, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
-  transformNormalToView, faceDirection, exp, sign,
+  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step,
 } from 'three/tsl';
 import { U, vnoise, hash12, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
@@ -347,11 +347,159 @@ export function flowerMaterial() {
   return new LitMaterial({ roughness: 0.7, side: THREE.DoubleSide, positionNode: windPosition(attribute('aFlex', 'float')), receivedShadowPositionNode: windShadowPosition() });
 }
 
-export function rockMaterial() {
+// ---------- stone close up ----------
+// Within STONE_NEAR m of the camera the boulders, the stones at the water's edge, the gorge's walls and the village's
+// dry-stone walls gain what their vertices are too far apart to carry: the granite's grain (pale feldspar, grey
+// quartz, dark mica flecks) over a broader mottling, with relief from the same noise that breaks up the light; lichen
+// rosettes, grey-green and ochre, on what faces up and sideways above the splash; moss in the hollows (the models'
+// ambient occlusion, dark in their vertex colours), more on the north faces and near the water; a dark film under the
+// waterline and a pale tide mark over the wet band. Each layer fades as a pixel grows to its size, and all of it by
+// STONE_NEAR, beyond which the stone is drawn exactly as without it. The noise is 3D, as the stones face every way.
+const STONE_NEAR = 40;
+const PIXEL = 0.0012; // the angle one pixel spans (radians, about 1080p at the scene's field of view)
+// four hashes at once (0..1), one per lane of the points (X, Y, Z): the 3D form of hash12, on vec4s
+const hash4 = (X, Y, Z) => {
+  const x = fract(X.mul(0.1031)), y = fract(Y.mul(0.1031)), z = fract(Z.mul(0.1031));
+  const d = x.mul(z.add(31.32)).add(y.mul(y.add(31.32))).add(z.mul(x.add(31.32)));
+  return fract(x.add(y).add(d.mul(2.0)).mul(z.add(d)));
+};
+// the lattice points round `x` (lanes: x, x+1 across the four; y, y+1 in pairs), as exact floor() results (as vnoise's)
+const corners = (x) => [floor(vec4(x.x).add(vec4(0, 1, 0, 1))), floor(vec4(x.y).add(vec4(0, 0, 1, 1))), floor(x.z), floor(x.z.add(1.0))];
+// value noise in 3D (0..1); `vnoise3g`: x its value, yzw its gradient
+const vnoise3 = Fn(([x]) => {
+  const [X, Y, z0, z1] = corners(x);
+  const w = fract(x), u = w.mul(w).mul(w.mul(-2.0).add(3.0)).toVar();
+  const h = mix(hash4(X, Y, vec4(z0)), hash4(X, Y, vec4(z1)), u.z);
+  const e = mix(h.xz, h.yw, u.x);
+  return mix(e.x, e.y, u.y);
+}).setLayout({ name: 'vnoise3', type: 'float', inputs: [{ name: 'x', type: 'vec3' }] });
+const vnoise3g = Fn(([x]) => {
+  const [X, Y, z0, z1] = corners(x);
+  const w = fract(x).toVar(), u = w.mul(w).mul(w.mul(-2.0).add(3.0)).toVar(), du = w.mul(w.oneMinus()).mul(6.0);
+  const h0 = hash4(X, Y, vec4(z0)).toVar(), h1 = hash4(X, Y, vec4(z1)).toVar();
+  // (the corners a..h as h0 = (a, b, c, d), h1 = (e, f, g, h): x across, y in pairs, z between them)
+  const a = h0.x, k1 = h0.y.sub(a).toVar(), k2 = h0.z.sub(a).toVar(), k3 = h1.x.sub(a).toVar();
+  const k4 = a.sub(h0.y).sub(h0.z).add(h0.w).toVar(), k5 = a.sub(h0.z).sub(h1.x).add(h1.z).toVar(), k6 = a.sub(h0.y).sub(h1.x).add(h1.y).toVar();
+  const k7 = h0.y.add(h0.z).add(h1.x).add(h1.w).sub(a).sub(h0.w).sub(h1.y).sub(h1.z).toVar();
+  const v = a.add(k1.mul(u.x)).add(k2.mul(u.y)).add(k3.mul(u.z)).add(k4.mul(u.x).mul(u.y)).add(k5.mul(u.y).mul(u.z)).add(k6.mul(u.z).mul(u.x)).add(k7.mul(u.x).mul(u.y).mul(u.z));
+  return vec4(v, du.mul(vec3(
+    k1.add(k4.mul(u.y)).add(k6.mul(u.z)).add(k7.mul(u.y).mul(u.z)),
+    k2.add(k5.mul(u.z)).add(k4.mul(u.x)).add(k7.mul(u.z).mul(u.x)),
+    k3.add(k6.mul(u.x)).add(k5.mul(u.y)).add(k7.mul(u.x).mul(u.y)))));
+}).setLayout({ name: 'vnoise3g', type: 'vec4', inputs: [{ name: 'x', type: 'vec3' }] });
+// lichen crusts: in a grid of cells (`p` in cells), the share `share` of them holding one, a disc round a point
+// jittered within its cell, 0.25 to 1.4 cells across (most of them small), its edge lobed (so the eight cells round
+// `p` hold every disc that reaches it; four at a time, in the lanes). x: inside the nearest (its edge soft), y: towards
+// its edge (0 its middle, 1 its edge), z: its hash
+const lichen = Fn(([p, share]) => {
+  const [X, Y, z0, z1] = corners(p.sub(0.5));
+  const best = vec2(9.0, 0.0).toVar(); // (distance in radii, hash)
+  for (const z of [z0, z1]) {
+    const Z = vec4(z), h = hash4(X, Y, Z).toVar();
+    const vx = vec4(p.x).sub(X.add(h.mul(0.5)).add(0.25)), vy = vec4(p.y).sub(Y.add(fract(h.mul(37.17)).mul(0.5)).add(0.25));
+    const vz = vec4(p.z).sub(Z.add(fract(h.mul(71.31)).mul(0.5)).add(0.25));
+    const r = fract(h.mul(13.7)), lobes = sin(vx.mul(9.1).add(vy.mul(7.3)).add(vz.mul(8.7)).add(h.mul(40.0))).mul(0.12).add(1.0);
+    const d = vx.mul(vx).add(vy.mul(vy)).add(vz.mul(vz)).sqrt().mul(lobes).div(r.mul(r).mul(r).mul(0.5).add(0.12));
+    const D = mix(vec4(9.0), d, step(fract(h.mul(5.31)), vec4(share))).toVar(), K = fract(h.mul(91.7)).toVar();
+    const m1 = select(D.x.lessThan(D.y), vec2(D.x, K.x), vec2(D.y, K.y)), m2 = select(D.z.lessThan(D.w), vec2(D.z, K.z), vec2(D.w, K.w));
+    const m = select(m1.x.lessThan(m2.x), m1, m2);
+    best.assign(select(m.x.lessThan(best.x), m, best));
+  }
+  return vec3(sstep(1.0, 0.85, best.x), sstep(0.4, 0.95, best.x), best.y);
+}).setLayout({ name: 'lichen', type: 'vec3', inputs: [{ name: 'p', type: 'vec3' }, { name: 'share', type: 'float' }] });
+// the size of a pixel on the stone (m), and how much of the close-up detail applies (fading out towards STONE_NEAR)
+const stoneFoot = (dist) => dist.mul(PIXEL).div(max(dot(normalWorldGeometry, viewDir()).abs(), 0.2));
+const stoneFade = (dist) => sstep(STONE_NEAR, STONE_NEAR * 0.7, dist);
+// the crystals' share of the detail: gone before they would shimmer (about a centimetre across)
+const crystalFade = (fp) => sstep(0.006, 0.003, fp);
+
+// the near stone's colour over `c` (the far stone's: vertex colour times its tone). `bedded`: the gorge's layered rock,
+// finer-grained and without mica; `walls`: the village's dry-stone walls (their per-stone attribute: makeMerged)
+const stoneColor = (c, vcol, dist, { walls, bedded }) => Fn(() => {
+  const o = c.toVar();
+  const n = normalWorldGeometry, up = n.y, fp = stoneFoot(dist);
+  // mottling, a hand across, over broader patches
+  const mot = vnoise3(wp.mul(9.0)).toVar();
+  const f = vec3(mot.sub(0.5).mul(bedded ? 0.16 : 0.24).add(1.0).mul(vnoise3(wp.mul(2.5).add(31.0)).sub(0.5).mul(0.22).add(1.0))).toVar();
+  // the crystals: pale warm feldspar, grey quartz, the fine grain in between with the dark flecks of mica
+  const fc = crystalFade(fp);
+  If(fc.greaterThan(0.0), () => {
+    const g = vnoise3(wp.mul(80.0));
+    const feld = sstep(0.5, 0.66, g), qtz = sstep(0.42, 0.3, g);
+    const x = vec3(1.0).add(vec3(0.13, 0.11, 0.07).mul(feld).sub(vec3(0.08, 0.07, 0.05).mul(qtz)).mul(bedded ? 0.4 : 1.0)).toVar();
+    If(fp.lessThan(0.003), () => {
+      const g2 = vnoise3(wp.mul(190.0).add(17.0));
+      const fine = g2.sub(0.5).mul(0.14).add(1.0).mul(bedded ? 1.0 : mix(1.0, 0.45, sstep(0.72, 0.77, g2)).add(0.04));
+      x.mulAssign(mix(1.0, fine, sstep(0.003, 0.0015, fp)));
+    });
+    f.mulAssign(mix(vec3(1.0), x.mul(bedded ? 1.0 : 0.98), fc));
+  });
+  o.mulAssign(f);
+  // lichen: crusts a centimetre or three across, clustered in patches, on faces turned up and sideways above the
+  // splash; further off, where they would shimmer, the patch's average
+  const patch = sstep(0.55, 0.8, vnoise3(wp.mul(1.6))).mul(sstep(-0.4, 0.15, up)).mul(sstep(0.45, 0.9, wp.y));
+  If(patch.greaterThan(0.0), () => {
+    const L = lichen(wp.mul(18.0), patch.mul(0.55));
+    const spot = mix(L.x, patch.mul(0.18), sstep(0.008, 0.02, fp));
+    // grey-green crusts, some yellow-green, the odd ochre one; paler at their growing edge, the old middle darker
+    const col = mix(mix(vec3(0.5, 0.54, 0.45), vec3(0.5, 0.52, 0.3), sstep(0.5, 0.8, L.z)), vec3(0.55, 0.42, 0.22), sstep(0.9, 0.93, L.z));
+    o.assign(mix(o, mix(col, o.mul(1.4), 0.3).mul(L.y.mul(0.25).add(0.85)), spot.mul(0.5)));
+  });
+  // moss: in the hollows (for the walls, the joints), more on the north faces (the sun stands to the south, -z), on the
+  // north side of the stones near the water, in tufts, not on the undersides
+  const north = sstep(-0.3, 0.9, n.z);
+  const hollow = walls ? sstep(0.35, 0.85, attribute('aStone', 'vec4').x).mul(0.8) : sstep(0.13, 0.07, dot(vcol, vec3(0.3, 0.6, 0.1)));
+  const damp = sstep(1.4, 0.6, wp.y).mul(sstep(0.3, 0.45, wp.y)).mul(north).mul(0.4);
+  const want = hollow.mul(north.mul(0.5).add(0.5)).add(damp).mul(sstep(-0.6, -0.1, up));
+  const tuft = vnoise3(wp.mul(4.0).add(11.0)).mul(0.7).add(mot.mul(0.3));
+  const moss = sstep(float(1.05).sub(want), float(1.2).sub(want), tuft);
+  o.assign(mix(o, vec3(0.085, 0.13, 0.04).mul(mot.mul(0.5).add(0.75)), moss.mul(0.8)));
+  // under the waterline a dark film, greener; the tide mark where the water stood higher, over the wet band
+  o.mulAssign(mix(vec3(1.0), vec3(0.78, 0.88, 0.6), sstep(0.06, -0.12, wp.y)));
+  const tide = wp.y.add(sin(wp.x.mul(4.1).add(wp.z.mul(1.3))).mul(sin(wp.z.mul(3.7).sub(wp.x.mul(0.9)))).mul(0.025));
+  o.mulAssign(mix(vec3(1.0), vec3(1.16, 1.13, 1.06), sstep(0.27, 0.3, tide).mul(sstep(0.37, 0.32, tide)).mul(0.8)));
+  if (walls) {
+    const S = attribute('aStone', 'vec4'), h = S.y;
+    // each stone its own: browner or greyer, lighter or darker; the top course lighter, the lowest damp (the whole a
+    // shade brighter, so the joints' shadow leaves the wall's average near the far look's)
+    o.mulAssign(mix(vec3(1.1, 1.0, 0.84), vec3(0.92, 0.97, 1.04), h).mul(mix(0.85, 1.2, fract(h.mul(7.31)))));
+    o.mulAssign(mix(0.82, 1.08, sstep(0.0, 0.6, S.z)).mul(mix(1.0, 1.1, sstep(0.75, 1.0, S.z))));
+    // the joints: in shadow, earth and moss in their depths
+    const fill = mix(vec3(0.07, 0.055, 0.04), vec3(0.06, 0.085, 0.03), sstep(0.45, 0.6, tuft));
+    o.assign(mix(o.mul(mix(1.0, 0.45, S.x)), fill, sstep(0.55, 0.95, S.x).mul(0.85)));
+  }
+  return mix(c, o, stoneFade(dist));
+})();
+
+// the stone's normal in view space, close by tilted by the mottling's and the crystals' relief
+const stoneNormal = (dist, bedded) => Fn(() => {
+  const n = normalView.toVar();
+  If(dist.lessThan(STONE_NEAR), () => {
+    const fp = stoneFoot(dist), fc = crystalFade(fp);
+    // (a height of 25 mm in the lumps a third of a metre across, 12 mm in the mottling, 1.5 mm in the crystals: the
+    // gradient times the noise's frequency)
+    const g = vnoise3g(wp.mul(9.0)).yzw.mul(0.012 * 9.0).add(vnoise3g(wp.mul(3.0).add(31.0)).yzw.mul(0.025 * 3.0)).toVar();
+    If(fc.greaterThan(0.0), () => { g.addAssign(vnoise3g(wp.mul(80.0)).yzw.mul((bedded ? 0.0006 : 0.0015) * 80.0).mul(fc)); });
+    const gv = cameraViewMatrix.mul(vec4(g, 0.0)).xyz;
+    n.assign(normalize(n.sub(gv.sub(n.mul(dot(n, gv))).mul(stoneFade(dist)))));
+  });
+  return n;
+})();
+
+// The boulders, the stones at the water's edge and, with `bedded`, the gorge's walls; with `walls`, the village's
+// dry-stone walls (merged with their per-stone attribute aStone: lods.js makeMerged).
+export function rockMaterial({ walls = false, bedded = false } = {}) {
   const wet = sstep(0.28, -0.05, wp.y);
+  const dist = wp.sub(cameraPosition).length();
+  const vcol = attribute('color', 'vec3');
+  const colorNode = Fn(() => {
+    // (the vertex colour multiplied here, not by vertexColors, so the near detail can mix towards its own colours)
+    const c = vcol.mul(mix(1.0, 0.5, wet).mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(2.0))).mul(0.3).add(0.85))).toVar();
+    If(dist.lessThan(STONE_NEAR), () => { c.assign(stoneColor(c, vcol, dist, { walls, bedded })); });
+    return c;
+  })();
   return new LitMaterial({
-    vertexColors: true, roughness: 0.88, metalness: 0,
-    colorNode: vec3(mix(1.0, 0.5, wet).mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(2.0))).mul(0.3).add(0.85))),
+    roughness: 0.88, metalness: 0, colorNode, normalNode: stoneNormal(dist, bedded),
   }, (out) => Fn(() => {
     // (as in the original: view-space normal against world-space vectors)
     const vv = viewDir();

@@ -399,7 +399,7 @@ export async function create(canvas, opts = {}) {
   const rocks = await makeLods(rocksUrl, ROCK_KINDS, G.rocks.boulders, rockMat, [45], { lodScale, ...nearOf('rocks') });
   const pebbles = await makeLods(rocksUrl, ['pebble'], [G.rocks.pebbles], rockMat, [], { lodScale, ...nearOf('rocks', 8) });
   // the village's stone walls: merged, a group per few farmhouses (layer 1: far from the river, never in its reflection)
-  const walls = await makeMerged(rocksUrl, 'pebble', G.rocks.walls, rockMat, 70, lodScale);
+  const walls = await makeMerged(rocksUrl, 'pebble', G.rocks.walls, M.rockMaterial({ walls: true }), 70, lodScale, { stones: true });
   walls.traverse((o) => { if (o.isMesh) o.layers.set(1); });
   walls.name = 'stoneWalls';
   scene.add(walls);
@@ -434,7 +434,7 @@ export async function create(canvas, opts = {}) {
   forest.name = 'forest';
   if (opts.debug) window.__sakuraDebug = { ...window.__sakuraDebug, renderer, impostors: forest.userData.impostors };
   scene.add(forest);
-  const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial(), [70], { lodScale, ...nearOf('cliffs') });
+  const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial({ bedded: true }), [70], { lodScale, ...nearOf('cliffs') });
   cliffs.name = 'cliffs';
   scene.add(cliffs);
   const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial(), [60, 160], { lodScale, ...nearOf('bamboo', 15) });

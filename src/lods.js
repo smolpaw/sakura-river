@@ -261,13 +261,83 @@ function put(L, i, j, color) {
   col[j * 3] = color[i * 3]; col[j * 3 + 1] = color[i * 3 + 1]; col[j * 3 + 2] = color[i * 3 + 2];
 }
 
+// How deep each vertex of each copy of `base` (list l: { matrix, n }) lies in the joints between the copies, as
+// ambient occlusion from its neighbours: each copy taken as a rounded box (the model's bounds, a superellipsoid of power
+// 4), the vertex is in the joint as far as the points a little way out along its normal (PROBE, metres) lie inside
+// another copy (1: against or under another, 0: open). Per copy, then vertex.
+const PROBE = [[0, 1], [0.07, 1], [0.2, 0.6]];
+function stoneJoints(l, base) {
+  base.computeBoundingBox();
+  const bb = base.boundingBox, c = bb.getCenter(new THREE.Vector3()), hs = bb.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+  const pos = base.attributes.position, nrm = base.attributes.normal, nv = pos.count, n = l.n;
+  const M = new THREE.Matrix4(), I = new THREE.Matrix4(), N = new THREE.Matrix3(), inv = new Float32Array(n * 16), at = new Float32Array(n * 4);
+  const cell = new Map(), C = 2, key = (x, z) => `${Math.floor(x / C)},${Math.floor(z / C)}`;
+  for (let i = 0; i < n; i++) {
+    M.fromArray(l.matrix, i * 16);
+    I.copy(M).invert().toArray(inv, i * 16);
+    const e = M.elements, s = Math.max(Math.hypot(e[0], e[1], e[2]), Math.hypot(e[4], e[5], e[6]), Math.hypot(e[8], e[9], e[10]));
+    const w = new THREE.Vector3().copy(c).applyMatrix4(M);
+    at[i * 4] = w.x; at[i * 4 + 1] = w.y; at[i * 4 + 2] = w.z; at[i * 4 + 3] = hs.length() * s;
+    const k = key(w.x, w.z);
+    if (!cell.has(k)) cell.set(k, []);
+    cell.get(k).push(i);
+  }
+  const out = new Float32Array(n * nv), p = new THREE.Vector3(), d = new THREE.Vector3(), near = [], reach = PROBE[PROBE.length - 1][0];
+  const ix = 1 / hs.x, iy = 1 / hs.y, iz = 1 / hs.z;
+  for (let i = 0; i < n; i++) {
+    M.fromArray(l.matrix, i * 16);
+    N.getNormalMatrix(M);
+    const x0 = at[i * 4], y0 = at[i * 4 + 1], z0 = at[i * 4 + 2], r0 = at[i * 4 + 3] + reach;
+    near.length = 0;
+    const cx = Math.floor(x0 / C), cz = Math.floor(z0 / C);
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) for (const j of cell.get(`${cx + dx},${cz + dz}`) || []) {
+      if (j !== i && Math.hypot(at[j * 4] - x0, at[j * 4 + 1] - y0, at[j * 4 + 2] - z0) < r0 + at[j * 4 + 3]) near.push(j);
+    }
+    for (let v = 0; v < nv; v++) {
+      p.fromBufferAttribute(pos, v).applyMatrix4(M);
+      d.fromBufferAttribute(nrm, v).applyMatrix3(N).normalize();
+      let occ = 0;
+      for (let k = 0; k < near.length && occ < 1; k++) {
+        const j = near[k], o = j * 16, e = inv, rj = at[j * 4 + 3] + reach;
+        // (only the copies whose bounding sphere the probes can reach)
+        if ((at[j * 4] - p.x) ** 2 + (at[j * 4 + 1] - p.y) ** 2 + (at[j * 4 + 2] - p.z) ** 2 > rj * rj) continue;
+        // the vertex and its normal in copy j's frame, in units of its half-size: then how far inside it each probe is
+        // (1 well inside, 0 outside, soft across its surface)
+        const px = (e[o] * p.x + e[o + 4] * p.y + e[o + 8] * p.z + e[o + 12] - c.x) * ix;
+        const py = (e[o + 1] * p.x + e[o + 5] * p.y + e[o + 9] * p.z + e[o + 13] - c.y) * iy;
+        const pz = (e[o + 2] * p.x + e[o + 6] * p.y + e[o + 10] * p.z + e[o + 14] - c.z) * iz;
+        const dx = (e[o] * d.x + e[o + 4] * d.y + e[o + 8] * d.z) * ix;
+        const dy = (e[o + 1] * d.x + e[o + 5] * d.y + e[o + 9] * d.z) * iy;
+        const dz = (e[o + 2] * d.x + e[o + 6] * d.y + e[o + 10] * d.z) * iz;
+        for (let q = 0; q < PROBE.length; q++) {
+          const s = PROBE[q][0], w = PROBE[q][1];
+          if (w <= occ) continue;
+          const lx = px + dx * s, ly = py + dy * s, lz = pz + dz * s;
+          const t = Math.min(1, Math.max(0, (1.06 - Math.sqrt(Math.sqrt(lx * lx * lx * lx + ly * ly * ly * ly + lz * lz * lz * lz))) / 0.12));
+          occ = Math.max(occ, w * t * t * (3 - 2 * t));
+        }
+      }
+      out[i * nv + v] = occ;
+    }
+  }
+  return out;
+}
+// a copy's hash (0..1) from its position
+const hashCopy = (matrix, i) => {
+  const x = Math.sin(matrix[i * 16 + 12] * 12.9898 + matrix[i * 16 + 14] * 78.233 + matrix[i * 16 + 13] * 37.719) * 43758.5453;
+  return x - Math.floor(x);
+};
+
 // Many copies of one small model as merged meshes, a full one and a far one per group (lists[i]: { matrix, color, n }),
 // switched by the camera's distance to the group's middle at `range` times lodScale (with HYST metres of hysteresis).
 // For a model of a few dozen triangles in thousands of copies: instanced past 1,024 copies three moves the matrices
 // from a uniform buffer to per-instance attributes, which cost ~1.4 ms a frame here for 2,100 stones of 24 triangles
 // (WebGL, RTX 2060); merged they cost nothing measurable. Each group's mesh is culled whole against each pass's camera
 // by three (frustumCulled), so it keeps its shadow out of view.
-export async function makeMerged(url, kind, lists, mat, range, lodScale = 1) {
+// With `stones` (the village's dry-stone walls) every vertex also carries aStone (bytes): x how deep it lies in the
+// joints with the copies round it (stoneJoints), y a hash of its copy (0..1), z its copy's course up the wall
+// (lists[i].course: 0 the foot, 1 the top).
+export async function makeMerged(url, kind, lists, mat, range, lodScale = 1, { stones = false } = {}) {
   const gltf = await loadModel(url);
   range *= lodScale;
   const plain = (name) => {
@@ -284,12 +354,18 @@ export async function makeMerged(url, kind, lists, mat, range, lodScale = 1) {
   const group = new THREE.Group(), m = new THREE.Matrix4();
   const sets = lists.filter((l) => l.n > 0).map((l) => {
     const centre = new THREE.Vector3();
-    const levels = models.map((base) => {
-      const parts = [];
+    const levels = models.map((base, far) => {
+      // (the far level, drawn beyond the stone detail's reach, carries aStone without the joints)
+      const parts = [], joint = stones && (far ? new Float32Array(l.n * base.attributes.position.count) : stoneJoints(l, base));
       for (let i = 0; i < l.n; i++) {
         const g = base.clone().applyMatrix4(m.fromArray(l.matrix, i * 16)), c = g.attributes.color;
         const tint = l.color.subarray(i * 3, i * 3 + 3);
         for (let v = 0; v < c.count; v++) c.setXYZ(v, c.getX(v) * tint[0], c.getY(v) * tint[1], c.getZ(v) * tint[2]);
+        if (joint) {
+          const a = new Uint8Array(c.count * 4), h = Math.round(hashCopy(l.matrix, i) * 255), course = Math.round((l.course ? l.course[i] : 1) * 255);
+          for (let v = 0; v < c.count; v++) { a[v * 4] = Math.round(joint[i * c.count + v] * 255); a[v * 4 + 1] = h; a[v * 4 + 2] = course; }
+          g.setAttribute('aStone', new THREE.BufferAttribute(a, 4, true));
+        }
         parts.push(g);
       }
       const mesh = new THREE.Mesh(mergeGeometries(parts), mat);

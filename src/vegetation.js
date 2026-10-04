@@ -234,7 +234,7 @@ export function rocksData(world, tier, treePos) {
   world.BUILDINGS.forEach((b) => {
     // a group per 50 m square of the village (lods.js makeMerged draws each merged, near or far by its middle)
     const key = `${Math.floor(b.x / 50)},${Math.floor(b.z / 50)}`;
-    if (!groups.has(key)) groups.set(key, { m: [], c: [] });
+    if (!groups.has(key)) groups.set(key, { m: [], c: [], k: [] });
     const wall = groups.get(key);
     const z0 = -b.hd, z1 = b.hd + b.yard;
     // walk the pad's edge, then out across its bank (world.js padAt: 0.15 .. 2.2 m out)
@@ -261,11 +261,13 @@ export function rocksData(world, tier, treePos) {
           const t2 = 0.5 + r2() * 0.28;
           wall.m.push(...m.compose(p, q, s).elements);
           wall.c.push(t2, t2 * 0.98, t2 * 0.93);
+          wall.k.push(rows > 1 ? r / (rows - 1) : 1);
         }
       }
     }
   });
-  const data = (l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 });
+  // (walls: each stone's course up the wall, 0 the foot, 1 the top)
+  const data = (l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3, ...(l.k && { course: new Float32Array(l.k) }) });
   return { boulders: lists.map(data), pebbles: data(stones), walls: [...groups.values()].filter((g) => g.c.length).map(data), rocksInWater, blockers: placements };
 }
 
