@@ -37,7 +37,9 @@ const starField = Fn(([s]) => {
   const px = length(fwidth(s)).div(m).mul(STAR_N * 0.6).mul(uStarPx);
   const r = length(fract(q).sub(o)).div(px);
   const k = hash12(c.add(5.1)).toVar();
-  const b = pow(hash12(c.add(9.7)), 14.0).mul(3.2).add(0.004); // many faint stars, a few bright ones
+  // many faint stars, a few bright ones, all below the bloom's threshold (2.2, post.js) at their twinkle's peak: one
+  // over it blooms into a square (its first blur is nearly flat), on ultra's denser pixels most often
+  const b = pow(hash12(c.add(9.7)), 14.0).mul(3.2).min(2.0).add(0.004);
   const twinkle = sin(U.uTime.mul(k.mul(5.0).add(2.0)).add(k.mul(60.0))).mul(0.22).add(0.85);
   const tint = mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.68), hash12(c.add(3.3)));
   return tint.mul(b.mul(twinkle).mul(exp(r.mul(r).mul(-1.0))).mul(step(k, STAR_P)));
@@ -118,7 +120,8 @@ export function makeSky() {
       const r = length(vec2(off, max(x.negate(), 0.0))).div(px);
       const along = clamp(x.div(uMeteorLen), 0.0, 1.0);
       const trail = float(1.0).sub(along).mul(float(1.0).sub(along)).mul(step(0.0, dot(d, uMeteorHead)));
-      col.addAssign(vec3(0.85, 0.9, 1.0).mul(exp(r.mul(r).mul(-0.8)).mul(trail).mul(uMeteor).mul(sstep(0.0, 0.08, h))));
+      // (held below the bloom's threshold, like the stars)
+      col.addAssign(vec3(0.85, 0.9, 1.0).mul(exp(r.mul(r).mul(-0.8)).mul(trail).mul(uMeteor).min(2.0).mul(sstep(0.0, 0.08, h))));
     });
     // moon: a crescent cut from the disc by a larger circle (a gentle inner arc), shaded as a sphere with seas and
     // craters and a slightly ragged inner edge; the dark part is left to the sky; a glow off the lit limb
