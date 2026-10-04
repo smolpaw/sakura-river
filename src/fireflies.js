@@ -127,8 +127,9 @@ export function makeFireflies(d, uFocal) {
   mesh.frustumCulled = false;
   mesh.renderOrder = 3; // over the water (2)
   mesh.visible = false;
-  // per frame: how many are out (0..1). They come out as the lamps come on, brightest once the sky is dark; none in
-  // rain over a drizzle or a wind over a breeze. `warming`: the warm-up builds the pipeline.
+  // per frame: how many are out (0..1; `wind` on the 0..1 scale of the weather presets). They come out as the lamps
+  // come on, brightest once the sky is dark; none from a drizzle up, fewer in a wind past a breeze and none in a gale.
+  // `warming`: the warm-up builds the pipeline.
   function update({ lights, elev, rain, wind, warming = false }) {
     uAmount.value = lights * (0.25 + 0.75 * smoothstep(-1, -12, elev)) * smoothstep(0.3, 0.08, rain) * smoothstep(0.85, 0.55, wind);
     mesh.visible = warming || uAmount.value > 0.002;

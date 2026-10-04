@@ -187,7 +187,8 @@ function butterflyMaterial(uAmount) {
   const fly = clamp(C.w.add(sin(tau.mul(w.mul(1.3)).add(ph(10))).mul(0.3)).add(sin(tau.mul(w.mul(3.4)).add(ph(11))).mul(0.1)), 0.3, 1.5)
     .add(sin(phase.mul(TAU)).mul(0.02).mul(float(1).sub(glide)));
   const pos = vec3(A.x.add(px), yg.add(mix(fly, C.x, sit)), A.z.add(pz));
-  // never smaller than a speck of a few pixels (an angle), up to six times its size; none out (by rank) or beyond 150 m
+  // never smaller than a fleck of ~17 px at 1080p (an angle: 1.2% of the distance), up to six times its size; none out
+  // (by rank) or beyond 150 m
   const dist = length(pos.sub(cameraPosition)), span = K.x;
   const out = sstep(C.y, C.y.add(0.04), uAmount).mul(sstep(150.0, 130.0, dist));
   const size = clamp(dist.mul(0.012), span, span.mul(6.0)).mul(out);

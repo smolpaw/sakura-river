@@ -468,11 +468,12 @@ const stoneColor = (c, vcol, dist, { walls, bedded }) => Fn(() => {
     const fill = mix(vec3(0.07, 0.055, 0.04), vec3(0.06, 0.085, 0.03), sstep(0.45, 0.6, tuft));
     o.assign(mix(o.mul(mix(1.0, 0.45, S.x)), fill, sstep(0.55, 0.95, S.x).mul(0.85)));
   }
-  return mix(c, o, stoneFade(dist));
+  // (the walls' far level, flagged in aStone.w, has no joints: it stays the far stone)
+  return mix(c, o, walls ? stoneFade(dist).mul(float(1.0).sub(attribute('aStone', 'vec4').w)) : stoneFade(dist));
 })();
 
 // the stone's normal in view space, close by tilted by the mottling's and the crystals' relief
-const stoneNormal = (dist, bedded) => Fn(() => {
+const stoneNormal = (dist, { walls, bedded }) => Fn(() => {
   const n = normalView.toVar();
   If(dist.lessThan(STONE_NEAR), () => {
     const fp = stoneFoot(dist), fc = crystalFade(fp);
@@ -481,7 +482,8 @@ const stoneNormal = (dist, bedded) => Fn(() => {
     const g = vnoise3g(wp.mul(9.0)).yzw.mul(0.012 * 9.0).add(vnoise3g(wp.mul(3.0).add(31.0)).yzw.mul(0.025 * 3.0)).toVar();
     If(fc.greaterThan(0.0), () => { g.addAssign(vnoise3g(wp.mul(80.0)).yzw.mul((bedded ? 0.0006 : 0.0015) * 80.0).mul(fc)); });
     const gv = cameraViewMatrix.mul(vec4(g, 0.0)).xyz;
-    n.assign(normalize(n.sub(gv.sub(n.mul(dot(n, gv))).mul(stoneFade(dist)))));
+    const fade = walls ? stoneFade(dist).mul(float(1.0).sub(attribute('aStone', 'vec4').w)) : stoneFade(dist);
+    n.assign(normalize(n.sub(gv.sub(n.mul(dot(n, gv))).mul(fade))));
   });
   return n;
 })();
@@ -499,7 +501,7 @@ export function rockMaterial({ walls = false, bedded = false } = {}) {
     return c;
   })();
   return new LitMaterial({
-    roughness: 0.88, metalness: 0, colorNode, normalNode: stoneNormal(dist, bedded),
+    roughness: 0.88, metalness: 0, colorNode, normalNode: stoneNormal(dist, { walls, bedded }),
   }, (out) => Fn(() => {
     // (as in the original: view-space normal against world-space vectors)
     const vv = viewDir();

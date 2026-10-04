@@ -950,7 +950,7 @@ export async function create(canvas, opts = {}) {
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = sparks.visible = warming || U.uLights.value > 0.001;
-    fireflies.update({ lights: U.uLights.value, elev: skyNow.elev, rain: S.rain, wind: S.wind, warming });
+    fireflies.update({ lights: U.uLights.value, elev: skyNow.elev, rain: S.rain, wind: S.wind / 1.6, warming });
     figures.update(dt, { hour: clockH, rain: S.rain, lights: U.uLights.value, camera, warming });
     // the hearths' smoke: thickest when the rice is on, morning and evening; thinned by rain
     const cook = Math.exp(-(((clockH - 6.8) / 1.3) ** 2)) + Math.exp(-(((clockH - 17.8) / 1.4) ** 2));

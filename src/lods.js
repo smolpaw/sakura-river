@@ -317,7 +317,7 @@ const hashCopy = (matrix, i) => {
 // With `stones` (the village's dry-stone walls) every vertex also carries aStone (bytes): x how deep it lies in the
 // joints with the copies round it (lists[i].joint: per copy, then vertex of the full model; vegetation.js stoneJoints,
 // worked out in the rocks' generation job), y a hash of its copy (0..1), z its copy's course up the wall
-// (lists[i].course: 0 the foot, 1 the top).
+// (lists[i].course: 0 the foot, 1 the top), w 1 on the far level (no joints: drawn as the far stone).
 export async function makeMerged(url, kind, lists, mat, range, lodScale = 1, { stones = false } = {}) {
   const gltf = await loadModel(url);
   range *= lodScale;
@@ -326,7 +326,8 @@ export async function makeMerged(url, kind, lists, mat, range, lodScale = 1, { s
   const sets = lists.filter((l) => l.n > 0).map((l) => {
     const centre = new THREE.Vector3();
     const levels = models.map((base, far) => {
-      // (the far level, drawn beyond the stone detail's reach, carries aStone without the joints)
+      // (the far level has no joints: its aStone.w flags it, and the material leaves it as the far stone, since a group
+      // switches levels by its middle and a far level can be drawn well within the stone detail's reach)
       const parts = [], joint = stones && (far ? new Float32Array(l.n * base.attributes.position.count) : l.joint);
       for (let i = 0; i < l.n; i++) {
         const g = base.clone().applyMatrix4(m.fromArray(l.matrix, i * 16)), c = g.attributes.color;
@@ -334,7 +335,7 @@ export async function makeMerged(url, kind, lists, mat, range, lodScale = 1, { s
         for (let v = 0; v < c.count; v++) c.setXYZ(v, c.getX(v) * tint[0], c.getY(v) * tint[1], c.getZ(v) * tint[2]);
         if (joint) {
           const a = new Uint8Array(c.count * 4), h = Math.round(hashCopy(l.matrix, i) * 255), course = Math.round((l.course ? l.course[i] : 1) * 255);
-          for (let v = 0; v < c.count; v++) { a[v * 4] = Math.round(joint[i * c.count + v] * 255); a[v * 4 + 1] = h; a[v * 4 + 2] = course; }
+          for (let v = 0; v < c.count; v++) { a[v * 4] = Math.round(joint[i * c.count + v] * 255); a[v * 4 + 1] = h; a[v * 4 + 2] = course; a[v * 4 + 3] = far ? 255 : 0; }
           g.setAttribute('aStone', new THREE.BufferAttribute(a, 4, true));
         }
         parts.push(g);
