@@ -12,7 +12,8 @@
 // across the paddy from its north end, turning at its end to the next strip, the seedlings she has planted standing in rows in front of
 // her (one instanced draw, as many as she has planted: how far she has got follows the clock, from none at 08:00 to
 // the whole paddy by 17:30, and the time she has been watched); every few rows, and at each strip's end, she
-// straightens up (`stretch`). She is there from 08:00 to 17:30 only, and not in rain over 0.5.
+// straightens up (`stretch`). She is there from 08:00 to 17:30 only, and not in rain over 0.5; he sits out drizzle
+// under his sedge hat and goes home in rain over 0.5 (his lantern's light leaves the light map: onLamp, main.js).
 import * as THREE from 'three/webgpu';
 import { Fn, float, max, pow, dot, normalize, uniform, attribute, positionWorld, normalWorld, cameraPosition, diffuseColor, vec3 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -140,8 +141,9 @@ function figureMaterial(at) {
   })());
 }
 
-// uFocal: the lanterns' (fx.js makeGlows). Returns { group, update, info }; the model arrives a moment after.
-export function makeFigures(world, { uFocal } = {}) {
+// uFocal: the lanterns' (fx.js makeGlows); onLamp(on): the fisherman's lantern lit or put out (he has gone home).
+// Returns { group, update, info }; the model arrives a moment after.
+export function makeFigures(world, { uFocal, onLamp } = {}) {
   const rng = mulberry32(71);
   const group = new THREE.Group();
   group.name = 'figures';
@@ -157,6 +159,7 @@ export function makeFigures(world, { uFocal } = {}) {
   // the float on the water: its wake and its rings (touches.js)
   const wakes = [{ x: 0, z: 0, r: 0.012, len: 0.5, amp: 0, lambda: 0.045 }], splashes = [];
   const fpos = new THREE.Vector3();
+  let fisherOut = true; // (his lantern starts in the light map: main.js)
 
   loadModel(new URL('models/figures.glb', document.baseURI).href).then((gltf) => {
     const src = gltf.scene;
@@ -223,9 +226,14 @@ export function makeFigures(world, { uFocal } = {}) {
     act(name) { const f = figs[name]; if (f) f.next = 0; },
     update(dt, { hour = 12, rain = 0, lights = 0, camera = null, warming = false } = {}) {
       dt = Math.min(dt, 0.1);
-      glows.visible = warming || lights > 0.001;
+      // the fisherman: out in all but heavy rain; his clips wait while he is home
+      const fout = rain <= 0.5;
+      if (fout !== fisherOut) { fisherOut = fout; if (onLamp) onLamp(fout); }
+      glows.visible = fout && (warming || lights > 0.001);
       const fi = figs.fisherman;
-      if (fi) {
+      if (fi) fi.root.visible = fout;
+      if (fi && !fout) wakes[0].amp = 0;
+      if (fi && fout) {
         level(fi, camera);
         const [sit, lift] = fi.A;
         const t0 = fi.t[0], t1 = fi.t[1], act = fi.act;

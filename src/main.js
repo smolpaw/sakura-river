@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter, setLightMap } from './tsl.js';
 import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
-import { lightMap, lamp } from './lights.js';
+import { lightMap, lightMapAdd, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods, makeMerged, makeView, loadModel, ultraUrl, shareInstancedPipelines, modelVertices } from './lods.js';
@@ -394,16 +394,17 @@ export async function create(canvas, opts = {}) {
   // middle 0.36 below), the stone lanterns' and the temple's fireboxes, the bonbori, the shoji's light on the yards
   const pts = (a, f) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(f(a[i], a[i + 1], a[i + 2])); return out; };
   // people at work (figures.js): an old man fishing from the west bank, a woman planting rice by the valley lane; the
-  // model is fetched after start-up, his lantern's light is in the map below
-  const figures = makeFigures(world, { uFocal: lanterns.uFocal });
+  // model is fetched after start-up, his lantern's light is in the map below while he is out
+  const figures = makeFigures(world, { uFocal: lanterns.uFocal, onLamp: (on) => { lightMapAdd(lightData, figures.lamps, on ? 1 : -1); setLightMap(lightData); } });
   scene.add(figures.group);
-  setLightMap(lightMap([
+  const lightData = lightMap([
     ...figures.lamps,
     ...pts(cat('hang'), (x, y, z) => lamp(x, y - 0.36, z, 0.2, 3)),
     ...pts(fixed, (x, y, z) => lamp(x, y, z, 0.3, 2.4)),
     ...pts(G.lanterns.bonbori, (x, y, z) => lamp(x, y, z, 0.32, 3.2)),
     ...pts(G.village.spill, (x, y, z) => lamp(x, y, z, 0.12, 3.5)),
-  ]));
+  ]);
+  setLightMap(lightData);
 
   await yieldTask();
   // ---------- ground cover ----------
