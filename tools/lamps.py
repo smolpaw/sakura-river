@@ -19,7 +19,8 @@ from forest import lerp, link, tris, vertex_ao, smoothstep
 from village import Kit, srgb, shared_ao
 
 V = Vector
-CEDAR = srgb('#5c4636')      # weathered post
+CEDAR = srgb('#8a7a68')      # weathered post: sun-greyed cedar, grey-brown
+CEDAR_S = srgb('#665646')    # the post's darker grain streaks
 CEDAR_D = srgb('#2e231b')
 ROPE = srgb('#a08a5e')       # straw rope
 STONE = srgb('#7d776c')
@@ -32,8 +33,8 @@ COAL = srgb('#ff6a1c')
 LICHEN = srgb('#a5a68a')
 
 
-def finish(k, name, ao_reach=0.5):
-    """AO into the colours of what does not glow; one mesh named `name`"""
+def finish(k, name, ao_reach=0.5, ao_floor=0.45):
+    """AO into the colours of what does not glow (the most occluded at ao_floor); one mesh named `name`"""
     bm = k.bm
     bmesh.ops.triangulate(bm, faces=bm.faces)
     bm.normal_update()
@@ -41,7 +42,7 @@ def finish(k, name, ao_reach=0.5):
     ao = shared_ao(name, bm, vertex_ao(bm, ao_reach))
     for v in bm.verts:
         c = v[k.col]
-        a = 1.0 if c[3] > 0 else lerp(0.45, 1.0, ao[v.index])
+        a = 1.0 if c[3] > 0 else lerp(ao_floor, 1.0, ao[v.index])
         v[k.col] = (c[0] * a, c[1] * a, c[2] * a, c[3])
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
@@ -188,7 +189,7 @@ def post(level):
         # weathering: darker grain streaks down two faces, a split near the top
         for i in range(5):
             x = rng.uniform(-0.045, 0.045)
-            k.box(CEDAR_D, (0.012, 0.125, rng.uniform(0.6, 1.6)), V((x, 0, rng.uniform(0.6, 2.0))))
+            k.box(CEDAR_S, (0.012, 0.125, rng.uniform(0.6, 1.6)), V((x, 0, rng.uniform(0.6, 2.0))))
         if near:
             # the rope's turns round the post, and its knot: two loops and the frayed end the line leaves by
             rope_coil(k, 2.515, 2.585, 3, 0.06, 0.017, 4)
@@ -211,7 +212,8 @@ def post(level):
         for x, y in ((0.06, 0), (-0.06, 0), (0, 0.06), (0, -0.06)):
             z = 2.8 + 0.1 * (1 - max(abs(x), abs(y)) / 0.1) + 0.002
             k.cyl(IRON, V((x, y, z - 0.003)), V((x, y, z + 0.003)), 0.006, seg=5, smooth=False)
-    return finish(k, 'post' + level)
+    # (a lone post in the open: little occludes it but its own cap and rope)
+    return finish(k, 'post' + level, ao_floor=0.7)
 
 
 def washi(seed):

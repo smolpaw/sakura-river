@@ -4,8 +4,8 @@
 # y up, so the front faces +z in the page), its footing sunk 0.3 m so it sits on sloping ground, with a lighter
 # `<kind>_far` model:
 # - jizo: a roku-jizō, six small stone Jizō (~0.7 m: a monk's round shaven head, a robe to the feet, hands together,
-#   or a staff and a jewel) on lotus pedestals in a row on a stone plinth, under a little gabled shelter of weathered
-#   cedar boards on four posts; each wears a red cloth bib (yodarekake) hanging in folds and a red knitted cap; cups
+#   or a staff and a jewel) on lotus pedestals in a row on a stone plinth, under a little gabled shelter on four cedar
+#   posts, roofed with cedar shingles (kokera) in overlapping courses (shingle_roof); each wears a red cloth bib (yodarekake) hanging in folds and a red knitted cap; cups
 #   of tea and small stones left in front of them;
 # - jizo1: one Jizō (~0.8 m) with bib and cap on a plinth, a stone vase of fresh flowers and a cup in front;
 # - dohyo: a stone signpost (michishirube) ~1.2 m, a square pillar under a worn pyramid top, the way carved into two
@@ -436,6 +436,75 @@ def boards(seed, nb, base, moss_at=None):
     return col
 
 
+SHINGLE = srgb('#9a8a74')    # sun-greyed cedar shingles
+SILVER = srgb('#a29e95')     # ... silvered where the weather has bleached them
+POST = srgb('#7f6e5b')       # the shelter's weathered posts
+
+
+def shingle_roof(k, RZ, EZ, EY, L, rng, courses=8):
+    """a gabled roof of kokera: thin cedar shingles of differing widths in overlapping courses up each slope (ridge RZ
+    up, eaves EZ up and EY out front and back, L either side), each course's butt standing proud of the one below it
+    and the joints staggered; the eaves' edge thicker, the boards' ends layered in it; a board under them all (seen
+    from below and at the gables), a cap and a beam along the ridge, barge boards up the gables. Each shingle its own
+    shade, bleached in places, moss on the lower courses and along the butts where the rain lingers."""
+    off = V((rng.uniform(0, 50), rng.uniform(0, 50), 0))
+    H = RZ - EZ
+    slope = math.hypot(EY, H)
+    T, T0, UNDER = 0.022, 0.05, 0.025  # a course's butt, the eaves' edge (proud of the board under them), that board
+    for side in (-1, 1):
+        n = V((0, -side * H, EY)) / slope  # out of the slope
+
+        def at(x, s, lift):
+            return V((x, -side * EY * (1 - s), EZ + H * s)) + n * lift
+        # the board under the shingles: its top on the slope's plane
+        board(k, at(-L * side, 0, 0), V((2 * L * side, 0, 0)), at(0, 1, 0) - at(0, 0, 0), 4, 1, lambda p, u, v: CEDAR_D * 1.3, UNDER)
+        for c in range(courses):
+            s0, s1 = c / courses, (c + 1) / courses
+            t = T0 if c == 0 else T
+            x = -L - rng.uniform(0.0, 0.12)
+            while x < L:
+                w = rng.uniform(0.1, 0.19)
+                xa, xb = max(x, -L) + 0.003, min(x + w, L) - 0.003
+                x += w
+                if xb - xa < 0.02:
+                    continue
+                mid = V(((xa + xb) / 2, s0, 0))
+                shade = rng.uniform(0.78, 1.18)
+                bleach = smoothstep(-0.2, 0.5, noise.noise(V((mid.x * 0.9, s0 * 1.6, 1.0)) + off) + rng.uniform(-0.25, 0.25))
+                moss = smoothstep(0.0, 0.45, noise.noise(V((mid.x * 1.4, s0 * 2.8, 2.0)) + off) + 0.45 * (1 - s0) - 0.1) * (0.4 + 0.6 * (1 - s0))
+                base = (SHINGLE * shade).lerp(SILVER, 0.45 * bleach)
+
+                def col(m, dark=1.0):
+                    return (base * dark).lerp(MOSS * rng.uniform(0.75, 1.1), min(0.8, m))
+                # its face, from the butt up to where the next course covers it; the butt's end below
+                pts = [at(xa, s0, t), at(xb, s0, t), at(xb, s1, 0.0), at(xa, s1, 0.0)]
+                cols = [col(0.7 * moss + 0.15), col(0.7 * moss + 0.15), col(0.4 * moss, 0.85), col(0.4 * moss, 0.85)]
+                faces = [(0, 1, 2, 3)]
+                if c == 0:
+                    # the eaves' edge: the butts of the courses laid double there, and the board under them
+                    for l0, l1, d in ((t, t * 0.5, 0.62), (t * 0.5, 0.0, 0.48)):
+                        b = len(pts)
+                        pts += [at(xa, s0, l0), at(xb, s0, l0), at(xb, s0, l1), at(xa, s0, l1)]
+                        cols += [col(0.5 * moss, d)] * 4
+                        faces.append((b + 3, b + 2, b + 1, b))
+                else:
+                    pts += [at(xa, s0, 0.0), at(xb, s0, 0.0)]
+                    cols += [col(0.8 * moss + 0.1, 0.6)] * 2
+                    faces.append((4, 5, 1, 0))
+                if side < 0:
+                    faces = [tuple(reversed(f)) for f in faces]
+                emit(k, Matrix(), pts, faces, cols, smooth=False)
+        # the ridge cap: a board down each side from the ridge over the top course
+        o = at(-L * side - 0.03 * side, 0.84, 0.035)
+        board(k, o, V((2 * (L + 0.03) * side, 0, 0)), at(0, 1.0, 0.035) - at(0, 0.84, 0.035) + V((0, 0, 0.012)), 6, 1,
+              boards(47 + side, 6, SHINGLE * 0.82), 0.025)
+        # barge boards up the gables
+        for sx in (-1, 1):
+            k.beam(CEDAR_D * 1.4, at(sx * (L + 0.018), -0.02, 0.01), at(sx * (L + 0.018), 1.0, 0.01) + V((0, 0, 0.03)),
+                   0.03, 0.1, up=n)
+    k.box(CEDAR_D * 1.2, (2 * L + 0.1, 0.07, 0.06), V((0, 0, RZ + 0.07)))  # the beam along the ridge
+
+
 def roku_jizo(level):
     far = level == '_far'
     k = Kit()
@@ -461,22 +530,24 @@ def roku_jizo(level):
     X, Y, EH = 1.62, 0.4, 1.48
     for sx in (-1, 1):
         for sy in (-1, 1):
-            k.box(CEDAR, (0.075, 0.075, EH + 0.3), V((sx * X, sy * Y, (EH - 0.3) / 2)), rz=0.0)
+            k.box(POST, (0.075, 0.075, EH + 0.3), V((sx * X, sy * Y, (EH - 0.3) / 2)), rz=0.0)
             if not far:
                 k.box(GRANITE * 0.9, (0.17, 0.17, 0.12), V((sx * X, sy * Y, 0.0)))
     for sy in (-1, 1):
-        k.box(CEDAR_D, (2 * X + 0.25, 0.07, 0.08), V((0, sy * Y, EH)))
+        k.box(POST * 0.7, (2 * X + 0.25, 0.07, 0.08), V((0, sy * Y, EH)))
     for sx in (-1, 1):
-        k.box(CEDAR_D, (0.07, 2 * Y + 0.1, 0.08), V((sx * X, 0, EH)))
-        k.box(CEDAR_D, (0.06, 0.06, 0.36), V((sx * X, 0, EH + 0.2)))
+        k.box(POST * 0.7, (0.07, 2 * Y + 0.1, 0.08), V((sx * X, 0, EH)))
+        k.box(POST * 0.7, (0.06, 0.06, 0.36), V((sx * X, 0, EH + 0.2)))
     RZ, EZ, EY, L = 1.9, 1.44, 0.8, 1.9  # (src/wayside.js waysideRoofs casts this roof into the valley's shadow map)
     k.box(CEDAR_D, (2 * L, 0.08, 0.08), V((0, 0, RZ - 0.06)))
-    nb = 3 if far else 14
-    for side in (-1, 1):
-        o = V((-L * side, side * -EY, EZ))
-        eu, ev = V((2 * L * side, 0, 0)), V((0, side * EY, RZ - EZ))
-        board(k, o, eu, ev, nb if far else nb * 2, 1 if far else 4, boards(43 + side, nb, srgb('#75644f')), 0.035)
-    k.box(CEDAR_D * 0.8, (2 * L + 0.04, 0.14, 0.05), V((0, 0, RZ + 0.01)))  # the ridge board
+    if far:
+        for side in (-1, 1):
+            o = V((-L * side, side * -EY, EZ))
+            eu, ev = V((2 * L * side, 0, 0)), V((0, side * EY, RZ - EZ))
+            board(k, o, eu, ev, 3, 1, boards(43 + side, 3, SHINGLE * 0.9), 0.06)
+        k.box(CEDAR_D * 0.8, (2 * L + 0.04, 0.14, 0.05), V((0, 0, RZ + 0.01)))  # the ridge
+    else:
+        shingle_roof(k, RZ, EZ, EY, L, rng)
     return finish(k, 'jizo' + level, 0.6)
 
 

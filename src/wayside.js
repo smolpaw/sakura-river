@@ -137,7 +137,7 @@ export function waysideClearings(world, pad = 0.3) {
 
 // the roku-jizō's roof as triangles in the world (positions, tools/wayside.py roku_jizo: the ridge 1.9 m up, the eaves
 // 1.44 m up and 0.8 m out front and back, 1.9 m either side), closed into a solid under its slopes: the shadow it casts
-// into the valley's map (its own boards, seen edge-on from a low sun, rasterize there into stripes of shadow, and its
+// into the valley's map (its own shingles, seen edge-on from a low sun, rasterize there into stripes of shadow, and its
 // statues and plinth are too small to cast cleanly)
 export function waysideRoofs(world) {
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);

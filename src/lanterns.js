@@ -127,17 +127,22 @@ export function lanternData(world, blockers, anchors, tree) {
 // with the system's Japanese fonts, Mincho first; with none, every lantern carries the crest.
 export const LANTERN_TEXTS = [null, ['奉納', '御神燈'], ['献燈', '桜井酒造'], ['', '夜桜'], ['奉納', '山本商店'], ['', 'さくら祭'], ['奉納', '千本桜'], ['町内会', '祭']];
 export const INK = { cols: 4, rows: 2, w: 128, h: 256, span: 0.26, v0: 0.1, v1: 0.9 }; // a cell: `span` m across, paper v0..v1
-const FONT = '"Yu Mincho", YuMincho, "Hiragino Mincho ProN", "Noto Serif CJK JP", "Noto Serif JP", "MS Mincho", "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif';
+export const FONT = '"Yu Mincho", YuMincho, "Hiragino Mincho ProN", "Noto Serif CJK JP", "Noto Serif JP", "MS Mincho", "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif';
+
+// whether the system has a font with the kanji: two different ones drawn the same means none has them (missing-glyph
+// boxes)
+export function hasJapaneseFont() {
+  const probe = new OffscreenCanvas(40, 40).getContext('2d', { willReadFrequently: true });
+  const px = (ch) => { probe.clearRect(0, 0, 40, 40); probe.font = `32px ${FONT}`; probe.fillText(ch, 2, 34); return probe.getImageData(0, 0, 40, 40).data.join(); };
+  return px('桜') !== px('祭');
+}
 
 // the ink atlas: black ink in R, red in G, one cell per LANTERN_TEXTS entry (rows top-down, as the shader reads them)
 export function paintLanternInk() {
   const W = INK.cols * INK.w, H = INK.rows * INK.h;
   const ctx = (c) => c.getContext('2d', { willReadFrequently: true });
   const black = ctx(new OffscreenCanvas(W, H)), red = ctx(new OffscreenCanvas(W, H));
-  // two different kanji drawn the same means no font has them (missing-glyph boxes)
-  const probe = ctx(new OffscreenCanvas(40, 40));
-  const px = (ch) => { probe.clearRect(0, 0, 40, 40); probe.font = `32px ${FONT}`; probe.fillText(ch, 2, 34); return probe.getImageData(0, 0, 40, 40).data.join(); };
-  const jp = px('桜') !== px('祭');
+  const jp = hasJapaneseFont();
   for (const c of [black, red]) { c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; }
   LANTERN_TEXTS.forEach((t, i) => {
     const x = (i % INK.cols + 0.5) * INK.w, y0 = Math.floor(i / INK.cols) * INK.h;

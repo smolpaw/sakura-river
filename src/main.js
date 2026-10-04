@@ -25,6 +25,7 @@ import shrubsUrl from './models/shrubs.glb?url&inline';
 import lampsUrl from './models/lamps.glb?url&inline';
 import boatUrl from './models/boat.glb?url&inline';
 import { makeBoats } from './boat.js';
+import { makeBanners } from './banners.js';
 import { LAMP_KINDS } from './lanterns.js';
 import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState, uStarPx } from './sky.js';
@@ -369,6 +370,9 @@ export async function create(canvas, opts = {}) {
   // the river boats (boat.js): one moored below the cherry tree, rocking at its rope, one pulled up above the bridge
   const boats = await makeBoats(boatUrl, world, { rocks: G.rocks.blockers, lamps: G.lanterns.bonbori, rafts: G.rafts });
   scene.add(boats.group);
+  // the nobori by the torii, up the approach and at the bridge's landings (banners.js)
+  const banners = makeBanners(G.lanterns.banners);
+  scene.add(banners.group);
   const fires = makeFires(G.lanterns.fires);
   fires.name = 'fires';
   scene.add(fires);

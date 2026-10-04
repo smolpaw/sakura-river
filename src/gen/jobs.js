@@ -7,6 +7,7 @@ import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.
 import { templeData } from '../temple.js';
 import { fallenData, raftData } from '../petals.js';
 import { lanternData, lanternGeometry, paintLanternInk } from '../lanterns.js';
+import { bannerData, paintBannerInk } from './banners.js';
 import { tessellate } from '../stress.js';
 import { villageData } from '../village.js';
 import { waysideData, waysideRoofs, waysideClearings } from '../wayside.js';
@@ -66,11 +67,13 @@ export const JOBS = {
     const l = L();
     const trees = [l.tree, ...l.small.map((sp) => [sp.x, 0, sp.z])].map(([x, , z]) => ({ x, z, r: 1 }));
     const rocks = rockPlan(world(), tier, xz(l.tree)).placements.map((r) => ({ x: r.x, z: r.z, r: r.sc }));
-    return { ...lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world()), xz(l.tree)), lantern: lanternGeometry(), ink: paintLanternInk() };
+    const d = lanternData(world(), rocks.concat(trees), bridgeRopeAnchors(world()), xz(l.tree));
+    // and the nobori by the torii, up the approach and at the bridge's landings (clear of the lamps)
+    return { ...d, lantern: lanternGeometry(), ink: paintLanternInk(), banners: { ...bannerData(world(), d), ink: paintBannerInk() } };
   },
   fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L()), underTree(L())),
   rafts: ({ count, tier }) => raftData(world(), count, rockPlan(world(), tier, xz(L().tree)).rocksInWater),
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 90, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 7, rafts: 8, river: 3 };
