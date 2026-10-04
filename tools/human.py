@@ -471,9 +471,10 @@ FINGERS = [
 THUMB = [((0.016, 0.02, 0.006), 0.0125), ((0.05, 0.043, 0.02), 0.0108), ((0.074, 0.053, 0.03), 0.0095), ((0.093, 0.056, 0.036), 0.0078)]
 
 
-def finger_joints():
+def finger_joints(fingers=None):
+    """each finger's joints in the hand's frame (FINGERS by default; another figure's grip: its own list)"""
     out = []
-    for a0, b0, spread, lens, r0, r1, curl in FINGERS:
+    for a0, b0, spread, lens, r0, r1, curl in fingers or FINGERS:
         pts = [np.array((a0, b0, 0.0))]
         ang = 0.0
         for L, c in zip(lens, curl):
@@ -493,8 +494,9 @@ def hand_local(p):
     return (x * u.x + y * u.y + z * u.z, x * v.x + y * v.y + z * v.z, x * w.x + y * w.y + z * w.z)
 
 
-def hand_fields(p):
-    """left hand; p in world (x >= 0 side)"""
+def hand_fields(p, joints=None, arm=0.25):
+    """left hand; p in world (x >= 0 side). joints: finger_joints() of another grip; arm: how far the forearm
+    reaches up from the wrist (m)"""
     q = hand_local(p)
     a, b, c = q
     f = {}
@@ -502,7 +504,7 @@ def hand_fields(p):
     palm = smin(palm, ellipsoid(q, (0.036, 0.022, 0.009), (0.03, 0.016, 0.012)), 0.01)      # the thumb's mound
     palm = smin(palm, ellipsoid(q, (0.047, -0.025, 0.006), (0.035, 0.012, 0.01)), 0.01)
     fingers = None
-    for pts, r0, r1 in FINGER_JOINTS:
+    for pts, r0, r1 in joints or FINGER_JOINTS:
         n = len(pts) - 1
         for i in range(n):
             ra, rb = r0 + (r1 - r0) * i / n, r0 + (r1 - r0) * (i + 1) / n
@@ -514,7 +516,7 @@ def hand_fields(p):
         thumb = e if thumb is None else np.minimum(thumb, e)
     d = smin(palm, fingers, 0.007)
     d = smin(d, thumb, 0.01)
-    arm = capsule((a, b, c * 1.25), (-0.25, 0, 0), (0.004, 0, 0), 0.033, 0.0245)
+    arm = capsule((a, b, c * 1.25), (-arm, 0, 0), (0.004, 0, 0), 0.033 + 0.03 * max(0.0, arm - 0.25), 0.0245)
     d = smin(d, arm, 0.016)
     f['d'] = d
     f['q'] = q
@@ -525,15 +527,15 @@ def hand_sdf(p):
     return hand_fields(p)['d']
 
 
-def hand_colour(P):
-    f = hand_fields((P[:, 0], P[:, 1], P[:, 2]))
+def hand_colour(P, joints=None, arm=0.25):
+    f = hand_fields((P[:, 0], P[:, 1], P[:, 2]), joints, arm)
     a, b, c = f['q']
     col = np.tile(SKIN_HAND, (len(P), 1))
     col = mix(col, SKIN_HAND * np.array([1.08, 1.0, 0.95]), 0.6 * sstep(0.0, 0.012, c))          # paler palms
     col = mix(col, srgb('#b97a62'), 0.35 * sstep(0.008, 0.0, np.abs(a - 0.098)) * sstep(0.0, -0.008, c))   # knuckles
     # nails: the backs of the finger tips
     nail = np.zeros(len(P))
-    for pts, r0, r1 in FINGER_JOINTS:
+    for pts, r0, r1 in joints or FINGER_JOINTS:
         tip, d = pts[-1], pts[-1] - pts[-2]
         d = d / np.linalg.norm(d)
         rel = np.stack([a - tip[0], b - tip[1], c - tip[2]], 1)
@@ -556,7 +558,8 @@ def foot_local(p):
     return (x * c + y * s, x * s - y * c, z)
 
 
-def leg_fields(p):
+def leg_fields(p, use_gaiter=True):
+    """the left leg; use_gaiter: the kyahan wrapped round the shin (else the bare shin)"""
     x, y, z = p
     K, A = J['shin_L'][0], J['shin_L'][1]
     f = {}
@@ -582,7 +585,10 @@ def leg_fields(p):
     gaiter = smax(leg - 0.006 + band, np.maximum(0.15 - z, z - 0.47), 0.004)
     tie = smax(leg - 0.0085, np.abs(z - 0.452) - 0.0045, 0.002)
     gaiter = np.minimum(gaiter, tie)
-    f['gaiter'], f['tie'] = gaiter, tie
+    f['gaiter'], f['tie'], f['bare'] = gaiter, tie, d
+    if not use_gaiter:
+        gaiter = tie = np.full_like(d, 1.0)
+        f['gaiter'], f['tie'] = gaiter, tie
     d = np.minimum(d, gaiter)
     d = smax(d, z - 0.64, 0.01)     # the thigh, up into the kimono
     f['d'] = d
@@ -1083,7 +1089,9 @@ class Part:
     """one piece of the figure as arrays: vertices, triangles, smooth flags, colour, pattern (alpha), weights, the
     reach of its ambient occlusion"""
 
-    def __init__(self, me, colour, weights, reach, smooth=True):
+    def __init__(self, me, colour, weights, reach, smooth=True, bones=None):
+        bones = bones or BONES
+        self.bones = bones
         me.calc_loop_triangles()
         P = positions(me)
         T = np.empty(len(me.loop_triangles) * 3, np.int64)
@@ -1108,9 +1116,9 @@ class Part:
         W = weights(P)
         bpy.data.meshes.remove(me)
         self.P, self.T, self.S, self.col, self.alpha = P, T, S, col, alpha
-        self.W = np.zeros((len(P), len(BONES)))
+        self.W = np.zeros((len(P), len(bones)))
         for k, v in W.items():
-            self.W[:, BONES.index(k)] += v
+            self.W[:, bones.index(k)] += v
         self.reach = np.full(len(P), reach)
 
     def mirrored(self):
@@ -1118,10 +1126,10 @@ class Part:
         o = Part.__new__(Part)
         o.P = self.P * np.array([-1.0, 1.0, 1.0])
         o.T = self.T[:, ::-1].copy()
-        o.S, o.col, o.alpha, o.reach = self.S, self.col, self.alpha, self.reach
+        o.S, o.col, o.alpha, o.reach, o.bones = self.S, self.col, self.alpha, self.reach, self.bones
         o.W = np.zeros_like(self.W)
-        for j, b in enumerate(BONES):
-            o.W[:, BONES.index(b[:-2] + {'_L': '_R', '_R': '_L'}[b[-2:]] if b[-2:] in ('_L', '_R') else b)] = self.W[:, j]
+        for j, b in enumerate(self.bones):
+            o.W[:, self.bones.index(b[:-2] + {'_L': '_R', '_R': '_L'}[b[-2:]] if b[-2:] in ('_L', '_R') else b)] = self.W[:, j]
         return o
 
 
@@ -1277,10 +1285,10 @@ def make_mesh(name, m):
     return me
 
 
-def far_model(m, target):
+def far_model(m, target, name='human_far'):
     """the whole figure decimated; weights and colours from the nearest vertex of the full model"""
     from mathutils.kdtree import KDTree
-    me = decimate(make_mesh('human_far', m), target)
+    me = decimate(make_mesh(name, m), target)
     P = positions(me)
     kd = KDTree(len(m['P']))
     for i, p in enumerate(m['P']):
@@ -1297,29 +1305,31 @@ def far_model(m, target):
 
 
 # ---------- armature ----------
-def make_rig():
-    arm = bpy.data.armatures.new('human_rig')
-    rig = bpy.data.objects.new('human_rig', arm)
+def make_rig(name='human_rig', bones=None, joints=None, parent=None):
+    """the armature: bones (BONES) at joints (J: name -> (head, tail)), each under parent(name) (parent_of)"""
+    bones, joints, parent = bones or BONES, joints or J, parent or parent_of
+    arm = bpy.data.armatures.new(name)
+    rig = bpy.data.objects.new(name, arm)
     bpy.context.collection.objects.link(rig)
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.mode_set(mode='EDIT')
-    for name in BONES:
+    for name in bones:
         eb = arm.edit_bones.new(name)
-        eb.head, eb.tail = J[name]
+        eb.head, eb.tail = joints[name]
         eb.roll = 0.0
-        p = parent_of(name)
+        p = parent(name)
         if p:
             eb.parent = arm.edit_bones[p]
     bpy.ops.object.mode_set(mode='OBJECT')
     return rig
 
 
-def bind(rig, name, m):
+def bind(rig, name, m, bones=None):
     me = make_mesh(name, m)
     ob = bpy.data.objects.new(name, me)
     bpy.context.collection.objects.link(ob)
     W = top4(m['W'])
-    for j, b in enumerate(BONES):
+    for j, b in enumerate(bones or BONES):
         vg = ob.vertex_groups.new(name=b)
         for i in np.nonzero(W[:, j] > 1e-4)[0]:
             vg.add([int(i)], float(W[i, j]), 'REPLACE')
@@ -1524,19 +1534,25 @@ def clip_frames(rest, name):
     return out
 
 
-def key_clips(rig):
+def key_clips(rig, clips=None, bones=None):
+    """key each clip as an action on the rig: clips [(name, frames(rest))], frames a list of (Q, T) per frame, Q the
+    bones' rotations (armature axes, about each bone's head, after its parent's), T the hips' move or {bone: move}
+    (the traveller's idle, walk and hurry by default)"""
     rest = Rest(rig)
+    bones = bones or BONES
+    if clips is None:
+        clips = [(n, lambda r, n=n: clip_frames(r, n)) for n in ('idle', 'walk', 'hurry')]
     rig.animation_data_create()
     for b in rig.pose.bones:
         b.rotation_mode = 'QUATERNION'
     actions = []
-    for name in ('idle', 'walk', 'hurry'):
+    for name, frames in clips:
         act = bpy.data.actions.new(name)
         act.use_fake_user = True
         rig.animation_data.action = act
         prev = {}
-        for f, (Q, Tr) in enumerate(clip_frames(rest, name)):
-            for b in BONES:
+        for f, (Q, Tr) in enumerate(frames(rest)):
+            for b in bones:
                 r = rest.r[b]
                 q = r.inverted() @ Q[b] @ r
                 if b in prev and prev[b].dot(q) < 0:
@@ -1545,9 +1561,10 @@ def key_clips(rig):
                 pb = rig.pose.bones[b]
                 pb.rotation_quaternion = q
                 pb.keyframe_insert('rotation_quaternion', frame=f, group=b)
-            pb = rig.pose.bones['hips']
-            pb.location = rest.r['hips'].inverted() @ Tr
-            pb.keyframe_insert('location', frame=f, group='hips')
+            for b, t in (Tr.items() if isinstance(Tr, dict) else (('hips', Tr),)):
+                pb = rig.pose.bones[b]
+                pb.location = rest.r[b].inverted() @ t
+                pb.keyframe_insert('location', frame=f, group=b)
         actions.append(act)
         track = rig.animation_data.nla_tracks.new()
         track.name = name
@@ -1572,6 +1589,10 @@ def main(out):
     for name, m in (('human', body), ('human_head', head), ('human_far', far)):
         bind(rig, name, m)
     key_clips(rig)
+    export(out)
+
+
+def export(out):
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=False, export_normals=True, export_yup=True, export_skins=True,
                               export_animations=True, export_animation_mode='ACTIONS', export_force_sampling=True,

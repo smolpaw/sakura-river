@@ -29,7 +29,7 @@ const WALK = 1.4, HURRY = 2.6; // the clips' speeds (m/s)
 
 // the cloth's patterns over the vertex colours, from the bind pose in metres (`at`: the mesh's quantized positions
 // back to metres, set per mesh in loadWalker)
-function clothColor(at) {
+export function clothColor(at) {
   return Fn(() => {
     const c4 = attribute('color', 'vec4');
     const c = c4.rgb.toVar();

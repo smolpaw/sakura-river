@@ -44,6 +44,7 @@ import { makeBirds } from './birds.js';
 import { makeButterflies } from './butterflies.js';
 import { makeDeer } from './deer.js';
 import { makeHerons } from './heron.js';
+import { makeFigures } from './figures.js';
 import * as M from './materials.js';
 import { createGPUProbe } from './bench-probe-gpu.js';
 import { QualityController } from './quality.js';
@@ -390,7 +391,12 @@ export async function create(canvas, opts = {}) {
   // all the lamps' light on what is near them (tsl.js lanternLight): paper lanterns (the hang point; the paper's
   // middle 0.36 below), the stone lanterns' and the temple's fireboxes, the bonbori, the shoji's light on the yards
   const pts = (a, f) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(f(a[i], a[i + 1], a[i + 2])); return out; };
+  // people at work (figures.js): an old man fishing from the west bank, a woman planting rice by the valley lane; the
+  // model is fetched after start-up, his lantern's light is in the map below
+  const figures = makeFigures(world, { uFocal: lanterns.uFocal });
+  scene.add(figures.group);
   setLightMap(lightMap([
+    ...figures.lamps,
     ...pts(cat('hang'), (x, y, z) => lamp(x, y - 0.36, z, 0.2, 3)),
     ...pts(fixed, (x, y, z) => lamp(x, y, z, 0.3, 2.4)),
     ...pts(G.lanterns.bonbori, (x, y, z) => lamp(x, y, z, 0.32, 3.2)),
@@ -945,6 +951,7 @@ export async function create(canvas, opts = {}) {
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = sparks.visible = warming || U.uLights.value > 0.001;
     fireflies.update({ lights: U.uLights.value, elev: skyNow.elev, rain: S.rain, wind: S.wind, warming });
+    figures.update(dt, { hour: clockH, rain: S.rain, lights: U.uLights.value, camera, warming });
     // the hearths' smoke: thickest when the rice is on, morning and evening; thinned by rain
     const cook = Math.exp(-(((clockH - 6.8) / 1.3) ** 2)) + Math.exp(-(((clockH - 17.8) / 1.4) ** 2));
     smoke.uAmount.value = (0.3 + 0.7 * Math.min(1, cook)) * (1 - 0.6 * S.rain);
@@ -1213,6 +1220,7 @@ export async function create(canvas, opts = {}) {
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     heronInfo() { return herons.info(); }, // the heron and the egrets: where each stands, its heading, its clip
+    figureInfo() { return figures.info(); }, figureAct(name) { figures.act(name); }, // the fisherman and the planter; start one's second clip (lift, stretch)
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
     // cull: the view culling (lods.js makeView): on, re-sorts so far and their mean main-thread ms, and per group the
     // instances (impostor cards, the walls' merged groups) the camera draws, of those it would unculled, and triangles
