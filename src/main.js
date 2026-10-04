@@ -51,6 +51,8 @@ import { runJobs } from './gen/pool.js';
 import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 import { makeWalk, WALK } from './walk.js';
+import waysideUrl from './models/wayside.glb?url&inline';
+import { WAYSIDE_KINDS } from './wayside.js';
 
 // pr: cap on the device pixel ratio; ss: the scene's render scale over the drawing buffer (supersampling, resolved by
 // the post chain's downsample, post.js); lodScale: the model LODs' and the impostors' switch distances multiplied
@@ -493,6 +495,18 @@ export async function create(canvas, opts = {}) {
   const view = makeView(camera, reflector ? reflector.target : null);
   if (reflector) view.cameras.add(reflector.getVirtualCamera(camera));
   const lodGroups = [forest, cliffs, rocks, pebbles, bamboo, village, lamps, shrubs];
+  // the wayside's stones by the lanes (wayside.js): Jizō, signposts, roadside shrines; casting shadows as the lamps do,
+  // and the roku-jizō's roof into the valley's map too (layer 3 only), so it shades its statues where the sharp map
+  // does not reach
+  const wayside = await makeLods(waysideUrl, WAYSIDE_KINDS, G.village.wayside, M.waysideMaterial(), [40], { lodScale });
+  wayside.name = 'wayside';
+  wayside.traverse((o) => { o.castShadow = o.isMesh; });
+  scene.add(wayside);
+  lodGroups.push(wayside);
+  const shelterRoofs = new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(G.village.waysideRoofs, 3)), new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide }));
+  shelterRoofs.name = 'waysideRoofs';
+  shelterRoofs.layers.set(FAR_LAYER);
+  scene.add(shelterRoofs);
 
   // ---------- petals ----------
   const sp3 = main.data.spawn, spawnPts = [];

@@ -13,7 +13,7 @@ import { kit, toro } from './temple.js';
 export const VILLAGE_KINDS = ['minka0', 'minka1', 'kura', 'koya', 'torii', 'suisha'];
 
 // the torii where the approach leaves the bridge, facing back along it
-const TORII = [{ x: -9.6, z: -69.5, yaw: -0.37 }];
+export const TORII = [{ x: -9.6, z: -69.5, yaw: -0.37 }];
 
 export function villageData(world) {
   const rng = mulberry32(606);

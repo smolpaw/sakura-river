@@ -9,6 +9,7 @@ import { fallenData, raftData } from '../petals.js';
 import { lanternData, lanternGeometry, paintLanternInk } from '../lanterns.js';
 import { tessellate } from '../stress.js';
 import { villageData } from '../village.js';
+import { waysideData, waysideRoofs, waysideClearings } from '../wayside.js';
 import { lerp } from '../noise.js';
 import { layout, rockAvoid, trunkAvoid, underTree, lawn, turf } from './layout.js';
 
@@ -42,13 +43,13 @@ export const JOBS = {
   },
   rocks: ({ tier }) => rocksData(world(), tier, xz(L().tree)),
   fields: ({ zones }) => world().buildFields(0.5, zones),
-  village: () => villageData(world()),
-  // no grass in the boulders or round the cherries' trunks
+  village: () => ({ ...villageData(world()), wayside: waysideData(world()), waysideRoofs: waysideRoofs(world()) }),
+  // no grass in the boulders, round the cherries' trunks or under the wayside's stones
   grassMask: ({ tier }) => {
     const l = L();
     const rocks = rockPlan(world(), tier, xz(l.tree)).placements.filter((r) => r.sc > 0.3).map((r) => ({ x: r.x, z: r.z, r: r.sc * 0.95 }));
     const trunks = [{ x: l.TX, z: l.TZ, r: 0.95 }, ...l.small.map((sp) => ({ x: sp.x, z: sp.z, r: 0.45 * sp.s }))];
-    return grassMask(rocks, trunks);
+    return grassMask(rocks.concat(waysideClearings(world())), trunks);
   },
   turf: ({ count }) => turfData(world(), turf(L(), count)),
   flowers: ({ count, tier }) => {
@@ -59,8 +60,8 @@ export const JOBS = {
   forest: ({ count }) => forestData(world(), count),
   cliffs: () => cliffData(world()),
   bamboo: () => bambooData(world()),
-  // clear of the cherries: the main tree's lawn and crown, the small trees' clearings
-  shrubs: () => { const l = L(); return shrubData(world(), [{ x: l.TX, z: l.TZ, r: 22 }, ...l.small.map((sp) => ({ x: sp.x, z: sp.z, r: 8 }))]); },
+  // clear of the cherries (the main tree's lawn and crown, the small trees' clearings) and the wayside's stones
+  shrubs: () => { const l = L(); return shrubData(world(), [{ x: l.TX, z: l.TZ, r: 22 }, ...l.small.map((sp) => ({ x: sp.x, z: sp.z, r: 8 }))], waysideClearings(world())); },
   lanterns: ({ tier }) => {
     const l = L();
     const trees = [l.tree, ...l.small.map((sp) => [sp.x, 0, sp.z])].map(([x, , z]) => ({ x, z, r: 1 }));
@@ -72,4 +73,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 5, fields: 400, village: 2, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 60, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 20, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 7, rafts: 8, river: 3 };

@@ -2,7 +2,7 @@
 // onBeforeCompile patch it replaces (see git history of src/shaders.js).
 import * as THREE from 'three/webgpu';
 import {
-  Fn, If, float, vec2, vec3, vec4, mix, max, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
+  Fn, If, float, vec2, vec3, vec4, mix, max, min, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection, exp, sign,
 } from 'three/tsl';
@@ -481,6 +481,23 @@ export function lampMaterial() {
       const flicker = sin(U.uTime.mul(8.0).add(wp.x.mul(2.3))).mul(0.06).add(0.94);
       o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
       o.addAssign(col.rgb.mul(vec3(1.0, 0.78, 0.5)).mul(col.a).mul(U.uLights).mul(flicker).mul(1.6));
+    });
+    return o;
+  })());
+}
+
+// the wayside's stones (wayside.js, Blender models): vertex colours; their grey stone and wood in shade grey rather
+// than the sky's navy (as the temple's stone), not the red cloth, the copper or the vermilion; lit by the lamps near
+// them after dusk
+export function waysideMaterial() {
+  const col = attribute('color', 'vec3');
+  const hi = max(max(col.r, col.g), col.b), lo = min(min(col.r, col.g), col.b);
+  const neutral = sstep(0.45, 0.3, hi.sub(lo).div(max(hi, 1e-3)));
+  return new LitMaterial({ roughness: 0.85, metalness: 0, colorNode: col }, (out) => Fn(() => {
+    const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
+    o.addAssign(diffuseColor.rgb.mul(skyToGrey()).mul(neutral));
+    If(U.uLights.greaterThan(0.0), () => {
+      o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
     });
     return o;
   })());

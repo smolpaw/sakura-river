@@ -360,11 +360,11 @@ export function bambooData(world) {
 // Blender models (lods.js, tools/shrubs.py), one unit tall: azaleas in bloom (magenta, white) clipped into rounded
 // mounds along the temple's approach and round the farmhouses, kerria and dwarf bamboo (sasa) along the woods'
 // edges and the lanes, a thicket now and then out in the meadow; none in the water, on the farmland, lanes, pads or temple, on
-// rock, or near the cherry trees.
+// rock, or near the cherry trees (`trees`) or in the `clear` circles ({ x, z, r }: the wayside's stones).
 export const SHRUB_KINDS = ['azalea', 'azalea_w', 'kerria', 'sasa'];
 const AZ = 0, AZW = 1, KER = 2, SASA = 3;
 
-export function shrubData(world, trees) {
+export function shrubData(world, trees, clear = []) {
   const rng = mulberry32(737), nz = makeNoise(53);
   const lists = SHRUB_KINDS.map(() => []), placed = [];
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), up = new V(0, 1, 0);
@@ -383,8 +383,10 @@ export function shrubData(world, trees) {
     p.set(x, world.height(x, z) - sink * h, z);
     q.setFromAxisAngle(up, rng() * Math.PI * 2);
     s.set(h * (0.9 + rng() * 0.25), h, h * (0.9 + rng() * 0.25));
-    const g = 0.85 + rng() * 0.3;
-    lists[k].push({ m: m.compose(p, q, s).toArray(), c: [g, g * (0.97 + rng() * 0.06), g * (0.94 + rng() * 0.08)] });
+    const g = 0.85 + rng() * 0.3, c = [g, g * (0.97 + rng() * 0.06), g * (0.94 + rng() * 0.08)];
+    // (one in a `clear` circle is left out after its draws, so the rest stand as they would without it)
+    if (clear.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + r * 0.85)) return;
+    lists[k].push({ m: m.compose(p, q, s).toArray(), c });
   };
   // the temple's approach: clipped azaleas both sides, every few metres, magenta and white by turns in runs, clear
   // of its stone lanterns
