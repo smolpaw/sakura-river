@@ -126,6 +126,8 @@ export function bridgeData(world, zc) {
   }
   for (let l = 0.45; l < L; l += 0.95) {
     const u = uAt(l);
+    // (none where the girders run into the bank at a landing: its caps would poke out of the earth)
+    if ([-1, 1].some((sd) => { const c = pt(u, sd * 1.575, -0.46); return c.y < world.height(c.x, c.z) + 0.05; })) continue;
     block(u, 0, -0.33, 0.15, 0.18, 2 * 1.56, VERM_D);
     for (const sd of [-1, 1]) block(u, sd * 1.575, -0.33, 0.17, 0.2, 0.03, BRONZE);
   }
