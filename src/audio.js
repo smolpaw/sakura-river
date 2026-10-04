@@ -2,9 +2,9 @@
 // Loops (river, wind, rain, birds by day, water lapping under the bridge; close by: the waterwheel, frogs in the
 // paddies at night, wind in the bamboo groves) play from decoded buffers, loaded when first heard and dropped after a
 // minute unheard; thunder follows each lightning strike after the sound's travel time; bush warblers sing in short
-// bouts by day; the temple's bell tolls as the lanterns come on at dusk; the walker's geta sound on the ground under
-// them. Music streams through a media element. Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or
-// created until sound is turned on.
+// bouts by day; the temple's bell tolls as the lanterns come on at dusk; the fisherman hums or whistles his tune to
+// himself, heard only close to him; the walker's geta sound on the ground under them. Music streams through a media
+// element. Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or created until sound is turned on.
 import { clamp, lerp, smoothstep } from './noise.js';
 
 // loudness of each track (tools/audio.mjs prints it); music plays at MUSIC_LUFS at full volume, the loops are
@@ -17,6 +17,12 @@ const THUNDER_NEAR = 4, THUNDER_FAR = 3, SONGS = 4;
 // under a loop close by
 const STEPS = { stone: 8, wood: 8, earth: 8, grass: 8 };
 const STEP_GAIN = { stone: 0.9, wood: 0.95, earth: 0.65, grass: 0.45 };
+// the fisherman's tune (tools/audio.mjs: Auld Lang Syne, 蛍の光), hummed or whistled: each phrase's start and end
+// (s) in its file
+const TUNE = {
+  hum: [[0.23, 5.68], [6.76, 11.0], [13.05, 18.4], [19.66, 24.35], [25.8, 31.37], [32.14, 36.73], [39.65, 46.98]],
+  whistle: [[0.08, 9.52], [10.46, 20.43], [20.83, 29.42], [29.75, 39.75]],
+};
 const SPEED_OF_SOUND = 343;
 const TICK = 0.1; // mix update interval, s
 
@@ -26,14 +32,17 @@ export function createSound(world, bridge) {
   const url = (name) => new URL(name + '.mp3', base).href;
   let ctx = null, on = false;
   let master, natureBus, musicBus, trackGain, el, riverLP, riverPan, lapLP, lapPan, wheelLP, wheelPan, frogPan, bambooPan;
+  let voiceGain, voiceLP, voicePan;
   const vol = { music: 0.75, nature: 0.4 };
   let order = [], ti = 0, nextTimer = 0;
   const beds = {};
-  const shots = { thunder: null, songs: null, bell: null, steps: null };
+  const shots = { thunder: null, songs: null, bell: null, steps: null, tune: null };
   let walked = -Infinity; // when the walk last stepped or moved (performance.now() ms): keeps the footsteps loaded
   let lights = -1, toll = 0; // the lanterns' level at the last mix; a bell toll waiting for its file (s left)
   let since = TICK, bout = null, songWait = 4;
   const lv = { birds: 0, lightning: 0 };
+  // the fisherman's voice: the phrases playing (source, envelope, kind, when they end), the wait before the next bout
+  const voice = { src: null, env: null, kind: null, until: 0, wait: 4 + Math.random() * 8 };
 
   // ---------- loading: compressed bytes stay cached, decoded buffers come and go ----------
   const bytes = new Map();
@@ -138,10 +147,15 @@ export function createSound(world, bridge) {
     bed('frogs', [frogPan]);
     bambooPan = new StereoPannerNode(ctx);
     bed('bamboo', [bambooPan]);
+    voiceLP = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 16000, Q: 0.5 });
+    voicePan = new StereoPannerNode(ctx);
+    voiceGain = new GainNode(ctx, { gain: 0 });
+    voiceLP.connect(voicePan).connect(voiceGain).connect(natureBus);
     shots.steps = Object.fromEntries(Object.entries(STEPS).map(([s, n]) => [s, shotSet([...Array(n)].map((_, i) => `step-${s}-${i + 1}`))]));
     shots.thunder = shotSet([...Array(THUNDER_NEAR)].map((_, i) => `thunder-near-${i + 1}`).concat([...Array(THUNDER_FAR)].map((_, i) => `thunder-far-${i + 1}`)));
     shots.songs = shotSet([...Array(SONGS)].map((_, i) => `uguisu-${i + 1}`));
     shots.bell = shotSet(['bell']);
+    shots.tune = shotSet(['fisher-hum', 'fisher-whistle']);
 
     el = new Audio();
     el.preload = 'auto';
@@ -289,8 +303,40 @@ export function createSound(world, bridge) {
       play(shots.bell.bufs[0], { gain: 0.9, pan: panTo(st.camera, world.temple.x, world.temple.z) * 0.6, lowpass: lerp(4000, 2200, clamp(pd / 400, 0, 1)) });
     } else toll = Math.max(0, toll - TICK);
     keepShots(shots.songs, lv.birds > 0.2);
+    hum(st);
     lv.lightning = st.lightning;
     keepShots(shots.thunder, st.lightning > 0.02);
+  }
+
+  // the fisherman (st.fisher: { pos, busy } while he sits by the river, else null): bouts of 2-4 phrases of his tune,
+  // hummed or whistled (never whistled after dark, as in Japan), from the start of a verse or in the middle of it, then
+  // a pause of 15-50 s; heard within about 15 m, quiet while he lifts his line and when he goes home
+  function hum(st) {
+    const f = st.fisher, t = ctx.currentTime;
+    const d = f ? st.camera.position.distanceTo(f.pos) : Infinity;
+    keepShots(shots.tune, d < 60);
+    const n = Math.max(0, 1 / (1 + (d / 4) ** 2) - 0.02) / 0.98;
+    voiceGain.gain.setTargetAtTime(1.3 * n, t, 0.3);
+    if (f) {
+      voiceLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, n * 1.6)), t, 0.3);
+      voicePan.pan.setTargetAtTime(clamp(panTo(st.camera, f.pos.x, f.pos.z) * 0.8 * (1 - n * 0.4), -0.8, 0.8), t, 0.3);
+    }
+    if (voice.src && t >= voice.until) voice.src = null;
+    if (voice.src && (!f || f.busy)) {
+      voice.env.gain.setTargetAtTime(0, t, 0.15);
+      voice.src.stop(t + 0.8);
+      voice.src = null;
+    }
+    if (voice.src || !f || f.busy || d > 30 || shots.tune.state !== 'ready' || (voice.wait -= TICK) > 0) return;
+    const kind = dayOf(st.hour) > 0.5 && Math.random() < 0.4 ? 'whistle' : 'hum';
+    const P = TUNE[kind], k = Math.random() < 0.4 ? 0 : Math.floor(Math.random() * (P.length - 1));
+    const m = Math.min(P.length - k, 2 + Math.floor(Math.random() * 3));
+    const at = P[k][0] - 0.05, dur = P[k + m - 1][1] + 0.15 - at, rate = 0.97 + Math.random() * 0.05;
+    const s = new AudioBufferSourceNode(ctx, { buffer: shots.tune.bufs[kind === 'hum' ? 0 : 1], playbackRate: rate });
+    const env = new GainNode(ctx, { gain: 0.8 + Math.random() * 0.3 });
+    s.connect(env).connect(voiceLP);
+    s.start(t, at, dur);
+    Object.assign(voice, { src: s, env, kind, until: t + dur / rate, wait: 15 + Math.random() * 35 });
   }
 
   // bush warblers: bouts of 2-4 songs from one spot, then a pause
@@ -321,7 +367,8 @@ export function createSound(world, bridge) {
       (which === 'music' ? musicBus : natureBus).gain.setTargetAtTime(vol[which] ** 2, ctx.currentTime, 0.1);
       if (which === 'music') apply();
     },
-    // per frame: st = { wind, river, rain, lightning (0..1 settings), hour, lights (the lanterns, 0..1), camera }
+    // per frame: st = { wind, river, rain, lightning (0..1 settings), hour, lights (the lanterns, 0..1), camera,
+    // fisher ({ pos, busy } or null: figures.js voice) }
     update(dt, st) {
       if (!this.active) return;
       sing(dt);
@@ -368,7 +415,7 @@ export function createSound(world, bridge) {
     // debug: the context's state and each loop's load state and level
     // sound is on but the browser holds it back until the page gets a click or key press
     get waiting() { return on && !document.hidden && (!ctx || ctx.state !== 'running' || (vol.music > 0 && el.paused && !nextTimer)); },
-    info() { return { state: ctx ? ctx.state : 'none', on, waiting: this.waiting, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state, bell: shots.bell && shots.bell.state, steps: shots.steps && Object.fromEntries(Object.entries(shots.steps).map(([k, v]) => [k, v.state])), lights }; },
+    info() { return { state: ctx ? ctx.state : 'none', on, waiting: this.waiting, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state, bell: shots.bell && shots.bell.state, tune: shots.tune && shots.tune.state, voice: voice.src ? voice.kind : null, steps: shots.steps && Object.fromEntries(Object.entries(shots.steps).map(([k, v]) => [k, v.state])), lights }; },
     dispose() { on = false; removeUnlock(); clearTimeout(nextTimer); document.removeEventListener('visibilitychange', apply); if (el) el.pause(); if (ctx) ctx.close(); ctx = null; },
   };
 }

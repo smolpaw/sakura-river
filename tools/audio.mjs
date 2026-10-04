@@ -7,8 +7,8 @@
 //   it, so the page can loop [PAD, PAD + length] and stay seamless whatever the MP3 decoder does with encoder delay and
 //   padding.
 //   They are levelled to BED_LUFS, with the peak held under -1 dBFS.
-// - One-shots (thunder, bush-warbler songs, the temple bell) are trimmed, faded and peak-normalised (the bell
-//   levelled); mono, panned by the page.
+// - One-shots (thunder, bush-warbler songs, the temple bell, the fisherman's tune) are trimmed, faded and
+//   peak-normalised (the bell and the tune levelled); mono, panned by the page.
 // - Footsteps (geta on four surfaces) are cut at each step's onset, layered with a geta's wooden knock where the
 //   recording is not of geta, and levelled to one loudness; mono.
 // - Music tracks are copied without their tags; their loudness is printed for the gains in src/audio.js.
@@ -36,6 +36,8 @@ const SRC = {
   frogs: 'https://archive.org/download/aporee_65287_75404/frogs20240918082339.flac',
   bamboo: 'https://archive.org/download/aporee_43162_49194/WindinBamboo24bit.flac',
   geta: 'https://archive.org/download/aporee_25634_29691/20141031cokli1146.mp3',
+  // Freesound's HQ preview (the original needs a login)
+  tune: 'https://cdn.freesound.org/previews/413/413563_6460821-hq.mp3',
   pontoon: BSB('1845'),
   path: BSB('3216'),
   grass: BSB('0854'),
@@ -69,6 +71,11 @@ const SHOTS = [
   ...[[3.6, 3.6], [11.4, 3.6], [55.0, 3.8], [18.2, 8.8]].map(([at, len], i) => ({ out: `uguisu-${i + 1}`, src: 'uguisu', at, len, af: 'highpass=f=700', peak: -6 })),
   // the evening bell's last three strikes, about 21 s apart, the last one decaying fully; a faint 5 kHz insect line
   { out: 'bell', src: 'bell', at: 100.0, len: 65, af: 'highpass=f=40,lowpass=f=4000', lufs: -20 },
+  // the fisherman's tune (Auld Lang Syne, sung in Japan as 蛍の光): the recording's whistled verse, the low band's
+  // breath noise cut; its hummed verse (up to the "Happy New Year" at the end), three semitones lower for an older
+  // voice, formants and tempo kept; the phrases' times in src/audio.js (TUNE)
+  { out: 'fisher-whistle', src: 'tune', at: 0, len: 40.2, af: 'highpass=f=600,highpass=f=600,lowpass=f=6000', lufs: -20, fade: 0.4 },
+  { out: 'fisher-hum', src: 'tune', at: 40.3, len: 47.4, af: 'highpass=f=80,rubberband=pitch=0.8409:formant=preserved:pitchq=quality', lufs: -20, fade: 0.4 },
 ];
 
 // Footsteps: geta (wooden clogs) recorded on a street in Kyoto give the stone set as they are, and their wooden knock,
@@ -165,7 +172,7 @@ for (const b of BEDS.filter((b) => wanted(b.out))) {
 
 for (const s of SHOTS.filter((s) => wanted(s.out))) {
   const [ch] = decode(fetchSource(s.url || SRC[s.src]), s.at, s.len, s.af, 1);
-  const fi = Math.round((s.src === 'uguisu' ? 0.25 : 0.02) * RATE), fo = Math.round(Math.min(2.5, s.len * 0.25) * RATE), n = ch.length;
+  const fi = Math.round((s.src === 'uguisu' ? 0.25 : 0.02) * RATE), fo = Math.round((s.fade ?? Math.min(2.5, s.len * 0.25)) * RATE), n = ch.length;
   for (let i = 0; i < fi; i++) ch[i] *= i / fi;
   for (let i = 0; i < fo; i++) ch[n - 1 - i] *= (i / fo) ** 2;
   const pk = 10 ** ((s.peak ?? -1) / 20) / peakOf([ch]);

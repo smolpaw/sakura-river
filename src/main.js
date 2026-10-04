@@ -966,7 +966,7 @@ export async function create(canvas, opts = {}) {
     birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     butterflies.update({ hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, warming });
     perched.update({ hour: clockH, rain: S.rain, wind: S.wind / 1.6, camera, walker: walker && walk.state, warming });
-    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera });
+    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera, fisher: figures.voice() });
 
     // camera
     walk.update(dt, walking && !tween); // (the body waits for the flight into its eye)

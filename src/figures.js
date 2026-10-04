@@ -8,6 +8,7 @@
 // float is moved to the river's surface); he plays `sit` and every 30-90 s `lift`. His paper lantern lights after
 // dusk: its light is in the light map (figureLamps, before the map is built) and a glow sprite marks it. His float
 // leaves a little wake in the current and sends out rings when it dips, is lifted out and lands again (touches.js).
+// He hums or whistles to himself (audio.js, from voice()), and falls quiet while he lifts his line.
 // The planter plants three seedlings across her row and steps back a row each 12 s loop (`plant`): she works strips
 // across the paddy from its north end, turning at its end to the next strip, the seedlings she has planted standing in rows in front of
 // her (one instanced draw, as many as she has planted: how far she has got follows the clock, from none at 08:00 to
@@ -27,6 +28,7 @@ import { lamp } from './lights.js';
 import { mulberry32 } from './noise.js';
 
 const FAR = 40; // m: the lighter models beyond
+const HEAD = new THREE.Vector3(0, 1.0, 0.2); // the fisherman's mouth, sitting, in his frame (about)
 // tools/figures.py: the fisherman's lantern's middle and his float's water (Blender's axes there: x, y, z -> x, z, -y
 // here), the planter's feet under the water, her row spacing, the seedlings' spots across the row (x, forward) and
 // when each goes in
@@ -160,6 +162,7 @@ export function makeFigures(world, { uFocal, onLamp } = {}) {
   const wakes = [{ x: 0, z: 0, r: 0.012, len: 0.5, amp: 0, lambda: 0.045 }], splashes = [];
   const fpos = new THREE.Vector3();
   let fisherOut = true; // (his lantern starts in the light map: main.js)
+  const said = { pos: new THREE.Vector3(), busy: false }; // voice()'s answer, reused
 
   loadModel(new URL('models/figures.glb', document.baseURI).href).then((gltf) => {
     const src = gltf.scene;
@@ -222,6 +225,13 @@ export function makeFigures(world, { uFocal, onLamp } = {}) {
     group, wakes, splashes,
     lamps: figureLamps(world),
     info: () => Object.fromEntries(Object.entries(figs).map(([k, f]) => [k, { pos: f.root.position.toArray().map((v) => +v.toFixed(2)), yaw: +f.root.rotation.y.toFixed(2), visible: f.root.visible, clip: f.A[f.act].getClip().name, t: +f.t[f.act].toFixed(2), row: f.row, planted: seedlings ? seedlings.count : 0 }])),
+    // where the fisherman's voice comes from and whether he is busy with his line; null while he is home or not loaded
+    voice() {
+      const f = figs.fisherman;
+      if (!f || !f.root.visible) return null;
+      said.pos.copy(HEAD).applyMatrix4(f.root.matrixWorld); said.busy = f.act === 1;
+      return said;
+    },
     // debug: start the second clip now
     act(name) { const f = figs[name]; if (f) f.next = 0; },
     update(dt, { hour = 12, rain = 0, lights = 0, camera = null, warming = false } = {}) {
