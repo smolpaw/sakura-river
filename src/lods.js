@@ -14,15 +14,23 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const HYST = 5, STEP = 4, SUFFIX = ['', '_far', '_dist'];
 
-// One render pipeline per material for all its instanced draws (WebGPU). three keeps an InstancedMesh's matrices in a
-// uniform array sized to its count and named after its node's id, so every level of every kind gets its own vertex
-// shader and pipeline, each compiling the material's fragment shader again (the boulders' stone shader 11 times). With
-// the matrices in a storage buffer (a runtime-sized array) under one name, a material's instanced draws share one
-// vertex shader and one pipeline: half the pipelines, the largest part of start-up (docs/performance.md, Start-up).
-// Patches a three internal (WGSLNodeBuilder.getUniformFromNode); should an upgrade change it, each draw keeps its own
-// pipeline again (slower start-up, the same image). Not on WebGL (no storage buffers) or where vertex shaders cannot
-// read storage buffers (WebGPU's compatibility mode).
+// One shader build and one render pipeline per material for all its instanced draws (WebGPU). three keeps an
+// InstancedMesh's matrices in a uniform array sized to its count and named after its node's id, so every level of
+// every kind gets its own vertex shader and pipeline, each compiling the material's fragment shader again (the
+// boulders' stone shader 11 times). With the matrices and colours in storage buffers (runtime-sized arrays) under one
+// name, a material's instanced draws share one vertex shader and one pipeline: half the pipelines, the largest part of
+// start-up (docs/performance.md, Start-up). three still builds the shader's node graph once per InstancedMesh and pass
+// (its render-object cache key holds the mesh's uuid, since the build's bindings hold that mesh's buffers: three PR
+// 29066), the longest main-thread task of start-up; with every such mesh's buffers in storage the build is the same
+// for all of them, so the key leaves the uuid out and each render object's bindings are pointed at its own mesh's
+// buffers instead (three recreates a bind group whose attribute changed: Bindings._update).
+// Patches three internals (WGSLNodeBuilder.getUniformFromNode, RenderObject.getCacheKey and getBindings, reached
+// through the renderer's RenderObjects); should an upgrade change them, each draw keeps its own build and pipeline
+// again (slower start-up, the same image). Not on WebGL (no storage buffers) or where vertex shaders cannot read
+// storage buffers (WebGPU's compatibility mode).
 let storageMatrices = false;
+const sharable = (o) => o && o.isInstancedMesh && o.instanceMatrix.isStorageInstancedBufferAttribute === true
+  && (!o.instanceColor || o.instanceColor.isStorageInstancedBufferAttribute === true);
 export function shareInstancedPipelines(renderer) {
   const B = renderer.backend, L = B.isWebGPUBackend && B.device.limits;
   if (!L || B.compatibilityMode || !((L.maxStorageBuffersInVertexStage ?? L.maxStorageBuffersPerShaderStage) >= 1) || storageMatrices) return;
@@ -31,8 +39,42 @@ export function shareInstancedPipelines(renderer) {
   P.getUniformFromNode = function (node, type, stage, name) {
     const u = get.call(this, node, type, stage, name);
     const o = this.object;
-    if (type === 'storageBuffer' && o && o.isInstancedMesh && node.value === o.instanceMatrix) u.name = 'instanceMatrices';
+    if (type === 'storageBuffer' && o && o.isInstancedMesh) {
+      // (the binding wraps the storage node, so the node carries which of the mesh's buffers it reads)
+      if (node.value === o.instanceMatrix) { u.name = 'instanceMatrices'; node.instanceBuffer = 'instanceMatrix'; }
+      else if (node.value === o.instanceColor) { u.name = 'instanceColors'; node.instanceBuffer = 'instanceColor'; }
+    }
     return u;
+  };
+  // RenderObject is not exported: its prototype is patched when the renderer makes its first one
+  const objects = renderer._objects, create = objects.createRenderObject;
+  let patched = false;
+  objects.createRenderObject = function (...args) {
+    const ro = create.apply(this, args);
+    if (!patched) {
+      patched = true;
+      const R = Object.getPrototypeOf(ro), getCacheKey = R.getCacheKey, getBindings = R.getBindings;
+      R.getCacheKey = function () {
+        const o = this.object;
+        if (!sharable(o)) return getCacheKey.call(this);
+        this.object = Object.create(o, { uuid: { value: 'instanced' } }); // the mesh, its uuid shared
+        try { return getCacheKey.call(this); } finally { this.object = o; }
+      };
+      R.getBindings = function () {
+        const fresh = this._bindings === null, bindings = getBindings.call(this), o = this.object;
+        if (!fresh || !sharable(o)) return bindings;
+        for (const group of bindings) {
+          for (const b of group.bindings) {
+            const node = b.isStorageBuffer && !(b.groupNode && b.groupNode.shared) && b.nodeUniform; // the storage node
+            const attr = node && node.instanceBuffer && o[node.instanceBuffer];
+            if (attr && node.value !== attr) b.nodeUniform = Object.create(node, { value: { value: attr } });
+          }
+        }
+        return bindings;
+      };
+      if (sharable(ro.object)) ro.initialCacheKey = ro.getCacheKey(); // made before the patch
+    }
+    return ro;
   };
 }
 
@@ -141,7 +183,9 @@ export async function makeLods(url, kinds, lists, mat, ranges, { leavesMat = nul
     const n = Math.max(1, l.n);
     const mesh = new THREE.InstancedMesh(src.geometry, material, n);
     if (storageMatrices) mesh.instanceMatrix = new THREE.StorageInstancedBufferAttribute(mesh.instanceMatrix.array, 16);
-    mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+    // (in storage, four floats a colour: three would pad a vec3 array to that itself on upload and swap in its own array)
+    const cs = storageMatrices ? 4 : 3;
+    mesh.instanceColor = new (storageMatrices ? THREE.StorageInstancedBufferAttribute : THREE.InstancedBufferAttribute)(new Float32Array(n * cs), cs);
     mesh.frustumCulled = false; // culled per instance (lod)
     group.add(mesh);
     // every instance's matrix with the node folded in (it holds the quantized positions' scale and offset), so a
@@ -150,7 +194,7 @@ export async function makeLods(url, kinds, lists, mat, ranges, { leavesMat = nul
     for (let i = 0; i < l.n; i++) m.fromArray(l.matrix, i * 16).multiply(src.matrixWorld).toArray(M, i * 16);
     const g = src.geometry;
     const L = {
-      mesh, src, M, mat: mesh.instanceMatrix.array, col: mesh.instanceColor.array,
+      mesh, src, M, mat: mesh.instanceMatrix.array, col: mesh.instanceColor.array, cs,
       ids: new Int32Array(n).fill(-1), dirty: false, // which instance each slot holds; a slot written since the upload
       vis: mesh.count, all: mesh.count, f: 0, b: 0, cull: false, tris: (g.index ? g.index.count : g.attributes.position.count) / 3,
     };
@@ -279,9 +323,9 @@ export async function makeLods(url, kinds, lists, mat, ranges, { leavesMat = nul
 function put(L, i, j, color) {
   if (L.ids[j] === i) return;
   L.ids[j] = i; L.dirty = true;
-  const M = L.M, mat = L.mat, col = L.col, a = i * 16, b = j * 16;
+  const M = L.M, mat = L.mat, col = L.col, a = i * 16, b = j * 16, c = j * L.cs;
   for (let k = 0; k < 16; k++) mat[b + k] = M[a + k];
-  col[j * 3] = color[i * 3]; col[j * 3 + 1] = color[i * 3 + 1]; col[j * 3 + 2] = color[i * 3 + 2];
+  col[c] = color[i * 3]; col[c + 1] = color[i * 3 + 1]; col[c + 2] = color[i * 3 + 2];
 }
 
 // a model of a glTF as a plain geometry in metres: its quantized attributes decoded to floats, its node's transform
