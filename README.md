@@ -91,10 +91,13 @@ The quality menu's Auto picks a tier for the device and lowers the resolution wh
     scene.setSound(true | false);         // starts with the page's first click or key press if it has had none
     scene.setVolume('music' | 'nature', value0to1);
     scene.soundWaiting();                 // true while the browser holds sound back until a click or key press
+    scene.setRenderScale(s);              // the adaptive render scale now, 0.6..1 (the controller moves it again unless the quality is fixed)
     scene.resetCamera();
     scene.dispose();
 
 In walk mode the engine reads the keys, the mouse (pointer lock) and touches on the canvas itself; `onWalkChange(on)` reports it starting and ending (the Walk button, Reset view, a second Esc, or Cinematic or Orbit taking over). Headless checks drive it with `walkInfo(detail)` (where the walker stands, the ground, eye, pace and surface; with `detail`, the network), `walkTo(x, z, yaw)` and `walkInput({ forward, strafe, hurry, yaw, pitch })`; `bench/walk-look.mjs` walks every leg with them and captures the views.
+
+Under load the adaptive quality controller lowers the render scale: the scene is drawn at that scale and upscaled to the canvas by FSR 1 (docs/performance.md, Adaptive quality); `create(canvas, { upscale: false })` scales the canvas itself instead, stretched by the browser, for comparisons.
 
 The Blender models and the woods' impostors are culled per instance to the view (docs/performance.md, Frustum culling). `setCulling(false)` turns that off, for comparisons and timing runs; `info().cull` reports it: `{ on, sorts, sortMs, groups }`, the re-sorts so far and their mean main-thread time, and per group (`forest`, `cliffs`, `rocks`, `pebbles`, `bamboo`, `village`, `lamps`, `shrubs`, `wayside`, `stoneWalls`) the instances the camera draws (`drawn`; the woods' impostor cards included, the walls in merged groups), how many it would unculled (`of`) and their triangles (`tris`).
 

@@ -27,6 +27,7 @@ function label(scene, camera) {
   if (n.startsWith('Shadow Map')) return 'shadow';
   if (n.endsWith('[ Reflector ]')) return 'reflection';
   if (n.startsWith('Bloom')) return 'bloom';
+  if (n.startsWith('FSR1')) return 'upscale';
   const rtt = n.match(/^(\w+) \[ RTT \]$/); // named post passes
   if (rtt) return rtt[1].toLowerCase();
   if (n === 'Render Pipeline') return 'grade';

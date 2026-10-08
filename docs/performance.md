@@ -60,7 +60,7 @@ Each item passed the visual gate or is pixel-identical to what it replaced.
 
 ## Tried and rejected
 
-- **Temporal AA (`traa`, `taau`):** `traa` blurs swaying foliage and loses alpha-to-coverage; `taau` blurs even at scale 1. At full resolution it costs more than the MSAA it replaces, so it only pays below scale 1, which fails the gate.
+- **Temporal AA (`traa`, `taau`):** `traa` blurs swaying foliage and loses alpha-to-coverage; `taau` blurs even at scale 1. At full resolution it costs more than the MSAA it replaces, so it only pays below scale 1, which fails the gate. (Below scale 1 the adaptive quality now upscales with FSR 1, which is spatial: Adaptive quality.)
 - **Cached static shadow map:** pixel-identical but a net loss, because restoring the depth copy costs more than drawing the static casters.
 - **A running clock** (a minute per second; removed 2026-10-02, owner): the sun moved every frame, so each redraw of the sun's shadow map (every other frame, for the wind) rasterized the casters on a slightly turned texel grid and small ones (flowers, leaves) blinked in and out of shadow; the valley's map and the sky were redone continually too. The time of day is now fixed between time-lapses (CLAUDE.md).
 - **Cheaper shadow filter:** 1 tap vs 9 saves only 0.1 ms.

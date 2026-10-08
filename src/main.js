@@ -35,7 +35,7 @@ import { makeGpuPetals } from './petalsgpu.js';
 import { petalMaterial, makeMotes, makeLanterns, makeGlows, makeFires, makeSmoke, makeSparks } from './fx.js';
 import { fireflyData, makeFireflies } from './fireflies.js';
 import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
-import { buildPipeline } from './post.js';
+import { buildPipeline, discardMultisampleStores } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
@@ -130,7 +130,8 @@ export async function create(canvas, opts = {}) {
     opts.onLost && opts.onLost(lost);
   };
   const backendName = backendNow = renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
-  shareInstancedPipelines(renderer); // one pipeline per material for the instanced models (lods.js)
+  shareInstancedPipelines(renderer); // one shader build and pipeline per material for the instanced models (lods.js)
+  discardMultisampleStores(renderer); // the scene pass's multisampled colour not written out after its resolve (post.js)
   // on the WebGL2 fallback the bench probe runs its own timer queries (three's cannot time nested passes)
   if (backendName === 'webgl' && opts.bench) renderer.backend.trackTimestamp = false;
   const tierName = tierNow = opts.quality || detectTier(renderer);
@@ -607,7 +608,11 @@ export async function create(canvas, opts = {}) {
   await yieldTask();
   // ---------- post ----------
   // light shafts per CSS pixel: 0.25 of the drawing buffer at DPR 2 is ~7x below sub-pixel A/A noise (dpr_parity)
-  const post = buildPipeline(renderer, scene, camera, { raySamples: Q.rays, msaa, shaftScale: opts.shaftScale ?? 0.5 / dpr, ss: Q.ss });
+  // The adaptive render scale (quality.js): the scene pass at that scale and FSR 1 upscaling it to the drawing buffer
+  // (post.js). On tiers that supersample (ultra) and with `upscale: false` the canvas itself scales instead and the
+  // browser stretches it (bilinear).
+  const upscaling = (opts.upscale ?? true) && Q.ss === 1;
+  const post = buildPipeline(renderer, scene, camera, { raySamples: Q.rays, msaa, shaftScale: opts.shaftScale ?? 0.5 / dpr, ss: Q.ss, upscale: upscaling, upscaleSharpness: opts.upscaleSharpness });
   const rays = post.shafts.uniforms;
 
   // ---------- camera / controls ----------
@@ -813,21 +818,25 @@ export async function create(canvas, opts = {}) {
 
   // ---------- sizing / adaptive quality ----------
   let W = 1, H = 1;
-  let pixelScale = 1; // adaptive render scale: the canvas resolution itself
+  let pixelScale = 1; // adaptive render scale: the scene pass's resolution (upscaling), else the canvas's
+  const reflBase = reflector ? reflector.resolutionScale : 0; // the reflection's buffer over the drawing buffer
+  let reflLevel = 1; // the controller's step on it
   function resize() {
     const w = Math.max(1, canvas.clientWidth | 0), h = Math.max(1, canvas.clientHeight | 0);
     W = w; H = h;
-    const pr = Math.min(dpr * pixelScale, maxTex / Math.max(w, h));
+    const pr = Math.min(dpr * (upscaling ? 1 : pixelScale), maxTex / Math.max(w, h));
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     const g = post.grade.uniforms;
     renderer.getDrawingBufferSize(g.res.value);
-    post.bloom.setSize(g.res.value.x, g.res.value.y);
-    // supersampling (ultra): the scene at ss times the drawing buffer, within the device's texture limit
-    const ss = ssNow = Math.max(1, Math.min(Q.ss, maxTex / Math.max(g.res.value.x, g.res.value.y)));
+    // the scene pass's scale over the drawing buffer: the render scale, upscaled after (post.js), or the supersampling
+    // (ultra: the scene at ss times the drawing buffer, within the device's texture limit)
+    const ss = ssNow = upscaling ? pixelScale : Math.max(1, Math.min(Q.ss, maxTex / Math.max(g.res.value.x, g.res.value.y)));
     post.setScale(ss, g.res.value.x, g.res.value.y);
+    // the reflection's buffer follows the scene pass's resolution down
+    if (reflector) reflector.resolutionScale = reflBase * reflLevel * Math.min(1, ss);
     // sharpening by the scene's pixel density: less where pixels are small (high DPR) or supersampled (the Lanczos
     // downsample sharpens a little itself)
     const spr = pr * ss;
@@ -847,8 +856,6 @@ export async function create(canvas, opts = {}) {
   // wind-animated shadows and the reflection update at 30 Hz (the visual gate's wind and camera sequences pass)
   const shadowEvery0 = opts.shadowEvery ?? 2, reflEvery0 = opts.reflEvery ?? 2;
   let shadowEvery = shadowEvery0, reflEvery = reflEvery0;
-  // the canvas resolution scales (the browser upscales it) and every effect buffer follows the drawing buffer
-  const reflBase = reflector ? reflector.resolutionScale : 0;
   // GPU timer queries where available (three leaves trackTimestamp on for WebGL without the timer extension);
   // otherwise frame time, which vsync caps at the refresh interval: over budget then means clearly slower than a
   // 60 Hz frame (like the old ladder's 21 ms), and it never reads a capped 16.7 ms frame as overload
@@ -857,12 +864,13 @@ export async function create(canvas, opts = {}) {
     targetMs: opts.targetMs ?? (gpuTimed ? 14 : 19), // ~85% of a 60 Hz frame of GPU time
     minScale: opts.minScale ?? 0.6, maxScale: 1,
     levels: [
-      { apply() { if (reflector) reflector.resolutionScale = reflBase * 0.7; }, revert() { if (reflector) reflector.resolutionScale = reflBase; } },
+      { apply() { reflLevel = 0.7; }, revert() { reflLevel = 1; } }, // (resize applies it)
       { apply() { grass.userData.setFraction(0.7); }, revert() { grass.userData.setFraction(1); } },
       { apply() { reflEvery = 1e9; grass.userData.setFraction(0.5); }, revert() { reflEvery = reflEvery0; grass.userData.setFraction(0.7); } },
     ],
     onChange: ({ scale }) => { pixelScale = scale; resize(); },
   });
+  if (opts.renderScale) qc.setScale(+opts.renderScale); // a starting scale (bench: with fixedQuality it stays)
   let resolving = false;
   function feedGpuTime(frameMs) {
     if (probe) {
@@ -1198,7 +1206,10 @@ export async function create(canvas, opts = {}) {
       if (name === 'time') { timeTween = null; clockH = tToHour(clamp(+v, -0.08, 1.08)); } // 04:50 .. 20:10
       else { weatherTween = null; setParam(name, v); }
     },
-    setImmediate(name, v) { this.set(name, v); for (const k in P) S[k] = P[k]; U.uWet.value = S.rain > 0.02 ? Math.min(1, 0.4 + S.rain) : 0; },
+    setImmediate(name, v) {
+      if (name === 'renderScale') return qc.setScale(+v);
+      this.set(name, v); for (const k in P) S[k] = P[k]; U.uWet.value = S.rain > 0.02 ? Math.min(1, 0.4 + S.rain) : 0;
+    },
     // weather preset by id, blended in over `seconds`
     setWeather(id, seconds = 6) {
       const w = WEATHERS.find((x) => x.id === id);
@@ -1286,6 +1297,7 @@ export async function create(canvas, opts = {}) {
       return out.sort((a, b) => b.total - a.total);
     },
     qualityState() { return { tier: tierName, level: qc.level, scale: qc.scale, fps: fpsShown, gpuMs: qc.lastMs }; },
+    setRenderScale(s) { qc.setScale(+s); }, // the adaptive render scale now (0.6-1; the controller moves it again unless the quality is fixed)
     setAdaptive(on) { opts.fixedQuality = !on; },
     step(dt) { step(dt); },
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },

@@ -5,6 +5,7 @@ import {
   Fn, float, vec2, vec3, vec4, uniform, uv, rtt, mix, max, min, dot, sqrt, clamp, length, exp, fract, select, Loop, renderOutput, toneMappingExposure,
   pass, floor, abs, sin,
 } from 'three/tsl';
+import FSR1Node from 'three/addons/tsl/display/FSR1Node.js';
 import { hashSin, sstep } from './tsl.js';
 
 const luma = (c) => dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -74,7 +75,8 @@ export function unrealBloom(input, { threshold = 2.2, radius = 0.55, strength = 
   };
 }
 
-// light shafts: returns { rays: texture node (half res), uniforms }
+// light shafts: returns { rays: texture node (half res), uniforms, setEnabled, setScale (the buffers' scale over the
+// drawing buffer) }
 export function lightShafts(color, samples, scale = 0.5) {
   const u = { sun: uniform(new THREE.Vector2(0.5, 0.5)), aspect: uniform(1), intensity: uniform(1), tint: uniform(new THREE.Color(1, 0.8, 0.6)) };
   const mask = Fn(() => {
@@ -100,7 +102,11 @@ export function lightShafts(color, samples, scale = 0.5) {
   const b2 = rtt(blur(b1, 0.35, 0.99), null, null, opt);
   const passes = [m, b1, b2];
   for (const p of passes) p.name = 'Shafts';
-  return { rays: b2, uniforms: u, setEnabled(on) { for (const p of passes) p.autoUpdate = on; } };
+  return {
+    rays: b2, uniforms: u,
+    setEnabled(on) { for (const p of passes) p.autoUpdate = on; },
+    setScale(sc) { for (const p of passes) p.setResolutionScale(sc); },
+  };
 }
 
 export function grade(input) {
@@ -182,11 +188,42 @@ export function downsample(input, maxRatio) {
   return { node, uniforms: u };
 }
 
-// scene pass -> shafts -> bloom -> tone map / sRGB -> (supersampling: downsample) -> grade
+// The adaptive render scale's resolve: the tone-mapped image, rendered at the scale, upscaled to the drawing buffer by
+// FSR 1 (three's FSR1Node: EASU, an edge-adaptive 12-tap Lanczos, then RCAS sharpening) in place of the browser
+// stretching a smaller canvas bilinearly (docs/performance.md, Adaptive quality). Spatial, so swaying foliage keeps its
+// edges and MSAA stays (temporal upscalers blurred them: Tried and rejected). Off at scale 1: its passes are skipped
+// and its output texture is the tone-mapped image itself, so the grade reads that.
+class Upscaler extends FSR1Node {
+  constructor(input, sharpness) { super(input, sharpness); this.on = true; }
+  setEnabled(on) {
+    this.on = on;
+    this._textureNode.value = on ? this._rcasRT.texture : this.textureNode.value;
+  }
+  updateBefore(frame) { if (this.on) super.updateBefore(frame); }
+}
+
+// The multisampled colour of a pass that resolves is discarded after the resolve instead of stored (WebGPU): nothing
+// reads it after the resolve, and on tile GPUs (Apple, Adreno, Mali) storing it writes four samples a pixel to memory
+// where the resolve alone keeps them on the tile (the desktop GPU here shows no difference; unmeasured on a tiler).
+// The depth is still stored. Patches a three internal (WebGPUBackend._getRenderPassDescriptor); should an upgrade
+// change it, the buffer is stored again. Not for a target that is drawn again with its contents kept (none here).
+export function discardMultisampleStores(renderer) {
+  const B = renderer.backend, get = B._getRenderPassDescriptor;
+  if (!B.isWebGPUBackend || !get) return;
+  B._getRenderPassDescriptor = function (context, config) {
+    const d = get.call(this, context, config);
+    for (const a of d.colorAttachments) if (a.resolveTarget) a.storeOp = 'discard';
+    return d;
+  };
+}
+
+// scene pass -> shafts -> bloom -> tone map / sRGB -> (supersampling: downsample | render scale: upscale) -> grade
 // shaftScale: light-shaft buffer size relative to the drawing buffer; ss: the scene's render scale over the drawing
 // buffer (above 1 it is supersampled: the scene and the tone-mapped image at ss times the drawing buffer each way,
-// filtered down before the grade; setScale lowers it where the device's texture limit requires)
-export function buildPipeline(renderer, scene, camera, { raySamples, bloomStrength = 0.4, msaa = 4, shaftScale = 0.5, ss = 1 }) {
+// filtered down before the grade; setScale lowers it where the device's texture limit requires); upscale: setScale
+// may lower the scene's scale below 1 (the adaptive render scale), the image upscaled by FSR 1 with RCAS sharpening
+// upscaleSharpness (0 the most, 2 none)
+export function buildPipeline(renderer, scene, camera, { raySamples, bloomStrength = 0.4, msaa = 4, shaftScale = 0.5, ss = 1, upscale = false, upscaleSharpness = 0.5 }) {
   const scenePass = pass(scene, camera, { samples: msaa });
   scenePass.setResolutionScale(ss);
   const color = scenePass.getTextureNode('output');
@@ -199,23 +236,31 @@ export function buildPipeline(renderer, scene, camera, { raySamples, bloomStreng
   const bl = unrealBloom(hdr, { strength: bloomStrength, radius: 0.55, threshold: 2.2 });
   const ldr = rtt(renderOutput(vec4(aces170(hdr.rgb.add(bl.node), toneMappingExposure), 1.0), THREE.NoToneMapping, THREE.SRGBColorSpace), null, null, { resolutionScale: ss });
   ldr.name = 'Output';
-  let down = null, resolved = ldr;
+  let down = null, up = null, resolved = ldr;
   if (ss > 1) {
     down = downsample(ldr, ss);
     resolved = rtt(down.node);
     resolved.name = 'Downsample';
+  } else if (upscale) {
+    up = new Upscaler(ldr, upscaleSharpness);
+    resolved = up.getTextureNode();
+    up.setEnabled(false);
   }
   const g = grade(resolved);
   const pipeline = new THREE.RenderPipeline(renderer, g.node);
   pipeline.outputColorTransform = false;
   return {
-    pipeline, scenePass, shafts, bloom: bl, grade: g,
-    // the scene's render scale for a drawing buffer of w x h (no more than the ss it was built with)
+    pipeline, scenePass, shafts, bloom: bl, grade: g, upscaler: up,
+    // the scene pass's scale over the drawing buffer of w x h: above 1 the supersampling (no more than the ss it was
+    // built with), below 1 the adaptive render scale (built with `upscale`); the effect buffers (shafts, bloom) follow
+    // the scene pass down, not up
     setScale(s, w, h) {
-      if (!down) return;
-      scenePass.setResolutionScale(s); ldr.setResolutionScale(s);
-      down.uniforms.inRes.value.set(Math.floor(w * s), Math.floor(h * s));
-      down.uniforms.outRes.value.set(w, h);
+      const d = Math.min(1, s);
+      if (down || up) { scenePass.setResolutionScale(s); ldr.setResolutionScale(s); }
+      shafts.setScale(shaftScale * d);
+      bl.setSize(Math.max(1, Math.floor(w * d)), Math.max(1, Math.floor(h * d)));
+      if (down) { down.uniforms.inRes.value.set(Math.floor(w * s), Math.floor(h * s)); down.uniforms.outRes.value.set(w, h); }
+      if (up) up.setEnabled(s < 0.999);
     },
   };
 }
