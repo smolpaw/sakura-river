@@ -93,9 +93,19 @@
 
 <div class="walk-hint" id="walk-hint">W A S D walk · mouse look · Shift hurry · Esc frees the mouse, Esc again leaves</div>
 
+<div class="notice" id="notice" role="status" hidden>
+  <span id="notice-text"></span>
+  <button type="button" class="btn" id="notice-low" hidden>Switch to Low</button>
+  <button type="button" class="mini" id="notice-close" aria-label="Dismiss">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+  </button>
+</div>
+
 <div class="veil" id="veil" role="status">
   <div class="veil-mark" aria-hidden="true">桜</div>
   <div class="veil-text" id="veil-text">Growing the blossoms…</div>
+  <div class="veil-sub" id="veil-sub"></div>
+  <div class="veil-actions" id="veil-actions"></div>
 </div>
 
 <script type="module" src="/src/ui.js"></script>

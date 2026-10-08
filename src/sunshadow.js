@@ -90,6 +90,13 @@ export function makeFarShadow(renderer, size) {
   const lightBox = new THREE.Box3();
   let wait = 0;
   uOn.value = renderer.shadowMap.enabled ? 1 : 0;
+  // without comparison sampling (Android WebGPU in compatibility mode, main.js turns shadows off there) a depth texture
+  // that keeps its compare function is declared for comparison and sampled without, which compatibility mode rejects:
+  // every lit material's pipeline would fail. The lookup is never taken there (uOn is 0), it only has to compile.
+  if (renderer.backend.compatibilityMode && !renderer.hasCompatibility(THREE.Compatibility.TEXTURE_COMPARE)) {
+    rt.depthTexture.compareFunction = null;
+    rt.depthTexture.minFilter = rt.depthTexture.magFilter = THREE.NearestFilter;
+  }
 
   function render(scene, toSun) {
     // the light's frame looking down the sun's rays, fitted round the valley's box

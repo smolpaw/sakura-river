@@ -119,7 +119,19 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .veil.done { opacity: 0; pointer-events: none; }
 .veil-mark { font-family: 'Shippori Mincho', serif; font-weight: 700; font-size: 56px; color: var(--sakura); animation: breathe 2.4s ease-in-out infinite; }
 .veil-text { font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--washi-dim); text-align: center; padding-inline: 16px; }
+.veil-sub { max-width: 440px; min-height: 1.5em; padding-inline: 20px; font: 400 13px/1.5 var(--sans); color: var(--washi-dim); text-align: center; }
+.veil-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.veil-actions:empty { display: none; }
+.veil.failed .veil-mark { animation: none; opacity: 0.5; }
+.veil.failed .veil-text { color: var(--washi); }
 @keyframes breathe { 50% { opacity: 0.55; transform: scale(0.96); } }
+/* a word about how the scene runs here (too slow even on Low, or Low may help) */
+.notice { position: fixed; top: calc(22px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 4;
+  max-width: calc(100vw - 32px); box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px;
+  background: var(--glass); border: 1px solid var(--glass-edge); -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25);
+  font: 500 13px/1.4 var(--sans); color: var(--washi); }
+.notice[hidden], .notice [hidden] { display: none; }
+.notice .btn { padding: 7px 11px; }
 @media (prefers-reduced-motion: reduce) { .veil-mark, #btn-sound.waiting svg { animation: none; } .side, .veil { transition: none; } }
 
 @media (max-width: 560px) {

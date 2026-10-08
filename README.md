@@ -17,10 +17,12 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 
 Drag to look round the scene, scroll or pinch to zoom, right-drag to pan. The buttons by the quality menu: Cinematic (a slow flight round the valley), Orbit (the view turns slowly round), Walk and Reset view. Walk flies the camera into a walker on the footpath beside the cherry tree: W A S D or the arrow keys walk, the mouse looks round (a click on the scene locks the pointer; Esc releases it), Shift hurries; on a touch screen the left thumb walks and the right one looks. The walker keeps to the lanes, the bridge and the temple's steps and terrace. Walk again, Reset view or a second Esc leaves walk mode: the camera flies back out behind the figure, which stays standing where it was left.
 
+The quality menu's Auto picks a tier for the device and lowers the resolution while frames run long; a tier picked by hand stays as it is however slowly the device draws it (the scene still moves at its right speed down to 8 fps). If Auto stays slow at its lowest settings (or under half the frame rate it wants) the page offers to start it on Low from then on (picking a quality in the menu undoes that), and if Low itself stays under 15 fps (likewise) it says the device is below what the scene needs. While loading, the screen names each stage with its progress; if the scene can't start (no WebGPU or WebGL2, the graphics device lost, its shaders stalled) it says why and offers Low quality, the WebGL renderer (when WebGPU failed) or a reload.
+
 ## Layout
 
 - `index.html`: page markup (title, weather and time panel, camera buttons, quality menu, loading veil).
-- `src/ui.js`: wires the page controls to the engine.
+- `src/ui.js`: wires the page controls to the engine, and shows the loading progress, the failure screen and the notice when the device is too slow.
 - `src/style.css`: page styles.
 - `src/main.js`: engine entry point: renderer, scene assembly, camera and controls (orbit, cinematic, walk mode), post-processing chain, adaptive quality, and the public API.
 - `src/walk.js`: walk mode's paths and movement: the network the walker keeps to (the lanes as corridors, the bridge's deck between its railings, the temple's steps and terrace, landings at the bridge's ends), what stands on it to walk round, the ground and its surface under the feet (the deck's arch, the steps smoothed into a slope), and the keys, mouse look and touch sticks.
@@ -77,7 +79,7 @@ Drag to look round the scene, scroll or pinch to zoom, right-drag to pan. The bu
 ## Engine API
 
     import { create } from './src/main.js';   // also exposed as window.SakuraRiver.create
-    const scene = create(canvas, { quality, fixedQuality, hour, onStats, onCinematicChange, onWalkChange });
+    const scene = create(canvas, { quality, fixedQuality, backend, hour, onProgress, onReady, onStats, onLost, onCinematicChange, onWalkChange });
     scene.setWeather(id, seconds);        // a preset from WEATHERS in src/weather.js, blended in
     scene.setTimeOfDay(hour, animate, forward); // 0..24; an eased time-lapse, forward through midnight or (forward false) straight there
     scene.timeOfDay();                    // current clock hour (fixed between time-lapses: the clock doesn't tick)
@@ -96,7 +98,9 @@ In walk mode the engine reads the keys, the mouse (pointer lock) and touches on 
 
 The Blender models and the woods' impostors are culled per instance to the view (docs/performance.md, Frustum culling). `setCulling(false)` turns that off, for comparisons and timing runs; `info().cull` reports it: `{ on, sorts, sortMs, groups }`, the re-sorts so far and their mean main-thread time, and per group (`forest`, `cliffs`, `rocks`, `pebbles`, `bamboo`, `village`, `lamps`, `shrubs`, `wayside`, `stoneWalls`) the instances the camera draws (`drawn`; the woods' impostor cards included, the walls in merged groups), how many it would unculled (`of`) and their triangles (`tris`).
 
-`quality` is optional ('ultra', 'high', 'medium' or 'low'). When it's left out, the quality level is picked from the device, never ultra: ultra supersamples the scene and raises the detail beyond high with no regard for frame rate, for strong GPUs (docs/performance.md, Ultra). With `fixedQuality` the adaptive resolution controller is off (the page does this when a quality is chosen by hand). `hour` is the starting clock hour. `set('time', t)` takes the old 0..1 scale (05:00..19:00; -0.08..1.08 reaches into the night).
+`quality` is optional ('ultra', 'high', 'medium' or 'low'). When it's left out, the quality level is picked from the device, never ultra: ultra supersamples the scene and raises the detail beyond high with no regard for frame rate, for strong GPUs (docs/performance.md, Ultra). With `fixedQuality` the adaptive resolution controller is off (the page does this when a quality is chosen by hand). `backend: 'webgl'` uses the WebGL2 renderer even where WebGPU is there. `hour` is the starting clock hour. `set('time', t)` takes the old 0..1 scale (05:00..19:00; -0.08..1.08 reaches into the night).
+
+`create` resolves once the scene is built and warmed up. On the way `onProgress({ stage, f, quality, backend })` reports each stage (`generate`, `build`, `shaders`, `warm`; `f` 0..1 where it is counted, else null) with the tier and backend in use, and `onReady({ quality })` the tier. It rejects with `code: 'unsupported'` when neither WebGPU nor WebGL2 starts, `'stalled'` when preparing the shaders makes no progress for a minute, `'lost'` when the device is lost while they are prepared. `onLost({ api, message, reason })` reports a lost device (a driver reset, the GPU out of memory) during start-up or after; the scene stops then. `onStats({ fps, quality, level, scale, floor })` comes about once a second: `floor` is true when nothing is left to lower (a fixed quality, or the adaptive controller at its lowest).
 
 ## Sound
 

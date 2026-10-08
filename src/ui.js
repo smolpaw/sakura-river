@@ -103,8 +103,11 @@ import { WEATHERS, TIMES } from './weather.js';
   // ---------- quality: a fixed tier, or auto (detected tier + adaptive resolution); changing it reloads ----------
   var quality = load('sr.quality');
   if (['ultra', 'high', 'medium', 'low'].indexOf(quality) < 0) quality = 'auto';
+  // Auto's starting tier when the page found the detected one too slow here (the notice's Switch to Low); a choice in
+  // the menu clears it
+  var autoTier = quality === 'auto' && load('sr.autoTier') === 'low' ? 'low' : null;
   $('quality').value = quality;
-  $('quality').addEventListener('change', function () { save('sr.quality', this.value); location.reload(); });
+  $('quality').addEventListener('change', function () { save('sr.quality', this.value); save('sr.autoTier', ''); location.reload(); });
 
   // ---------- camera ----------
   $('btn-cine').addEventListener('click', function () {
@@ -174,22 +177,107 @@ import { WEATHERS, TIMES } from './weather.js';
     window.addEventListener(t, wake, { capture: true, passive: true });
   });
 
+  // ---------- loading, failure and how it runs ----------
+  // the WebGL2 renderer when the page offers it after WebGPU failed here; for this tab's session only
+  var backend = null;
+  try { backend = sessionStorage.getItem('sr.backend'); } catch (e) { /* ignore */ }
+  var tier = quality === 'auto' ? null : quality, using = null; // the tier and the backend in use, once known
+  var failed = false;
+  var STAGES = { generate: 'Shaping the valley', build: 'Growing the blossoms', shaders: 'Preparing the shaders', warm: 'Almost there' };
+  var stage = null, stageAt = 0, stageF = null;
+  function showStage() {
+    if (failed || !stage) return;
+    $('veil-text').textContent = STAGES[stage] + '…' + (stageF !== null ? ' ' + Math.round(stageF * 100) + '%' : '');
+    // a slow device spends long on a stage: say it is still working
+    var s = (performance.now() - stageAt) / 1000;
+    $('veil-sub').textContent = s > 12 ? Math.round(s) + ' s · this takes longer on slower devices' : '';
+  }
+  var stageTimer = setInterval(showStage, 1000);
+  function act(label, fn) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn'; b.textContent = label;
+    b.addEventListener('click', fn);
+    $('veil-actions').appendChild(b);
+  }
+  function reloadWith(q, be) {
+    if (q) save('sr.quality', q);
+    try { if (be) sessionStorage.setItem('sr.backend', be); else sessionStorage.removeItem('sr.backend'); } catch (e) { /* ignore */ }
+    location.reload();
+  }
+  // the scene can't start or has stopped: say why, and what may still work here
+  function fail(title, text, opts) {
+    if (failed) return;
+    failed = true;
+    clearInterval(stageTimer);
+    var veil = $('veil');
+    veil.classList.remove('done'); veil.classList.add('failed');
+    veil.setAttribute('role', 'alert');
+    $('veil-text').textContent = title;
+    $('veil-sub').textContent = text;
+    $('veil-actions').textContent = '';
+    if (opts.low && tier !== 'low') act('Try Low quality', function () { reloadWith('low', backend); });
+    if (opts.webgl && using === 'webgpu') act('Try the WebGL renderer', function () { reloadWith(null, 'webgl'); });
+    act('Reload', function () { location.reload(); });
+  }
+  function lost(info) {
+    var low = tier === 'low';
+    console.error('Sakura River stopped: ' + (info && info.message));
+    fail(engine ? 'The graphics device stopped' : 'The graphics device gave up while preparing the scene',
+      'The browser reset the graphics chip, which usually means it ran out of graphics memory or a frame took too long. ' +
+      (low ? 'Low quality is the lightest the scene gets, so this device may not be able to show it.' : 'Low quality needs much less.'),
+      { low: true, webgl: true });
+  }
+  // after the scene shows: if it stays very slow with nothing left to lower, say so (a hand-picked tier above Low is
+  // the visitor's choice, however slow it runs)
+  var slowSince = 0, noticed = false;
+  function watchSpeed(s) {
+    if (!engine || failed || noticed) return;
+    var lowest = s.quality === 'low';
+    if (!lowest && quality !== 'auto') return;
+    // (under half of it, lowering the resolution can't close the gap: no need to wait for the controller's floor, which
+    // takes minutes at a few frames a second)
+    var limit = lowest ? 15 : 20, slow = s.fps < limit && (s.floor || s.fps < limit / 2);
+    if (!slow) { slowSince = 0; return; }
+    if (!slowSince) { slowSince = performance.now(); return; }
+    if (performance.now() - slowSince < 8000) return;
+    noticed = true;
+    $('notice-text').textContent = lowest
+      ? 'This device is below what the scene needs, even on Low quality (' + s.fps + ' fps). It keeps running, slowly.'
+      : 'Running slowly here (' + s.fps + ' fps). Low quality may run smoother.';
+    $('notice-low').hidden = lowest;
+    $('notice').hidden = false;
+  }
+  // (Auto starting on Low, not Low fixed: Auto at its floor already draws fewer pixels than fixed Low would)
+  $('notice-low').addEventListener('click', function () { save('sr.autoTier', 'low'); location.reload(); });
+  $('notice-close').addEventListener('click', function () { $('notice').hidden = true; });
+
   function start() {
     var fixed = quality !== 'auto';
     create($('scene'), {
-      quality: fixed ? quality : undefined,
+      quality: fixed ? quality : autoTier || undefined,
       fixedQuality: fixed,
+      backend: backend === 'webgl' ? 'webgl' : undefined,
       hour: TIMES.find(function (t) { return t.id === 'night'; }).hour, // open at night
+      onProgress: function (p) {
+        tier = p.quality; using = p.backend;
+        if (p.stage !== stage) { stage = p.stage; stageAt = performance.now(); }
+        stageF = p.f;
+        showStage();
+      },
       onStats: function (s) { // shown only when the capped 60 fps drops (58+ is jitter)
         var el = $('stats');
         el.hidden = s.fps >= 58;
         if (!el.hidden) el.textContent = s.fps + ' fps';
+        watchSpeed(s);
       },
+      onLost: lost,
       onCinematicChange: function (on) { setPressed($('btn-cine'), on); },
       onWalkChange: showWalk,
-      onReady: function (r) { if (!fixed) $('quality').options[0].textContent = 'Auto · ' + r.quality; },
+      onReady: function (r) { tier = r.quality; if (!fixed) $('quality').options[0].textContent = 'Auto · ' + r.quality; },
     }).then(function (e) {
+      if (failed) { try { e.dispose(); } catch (err) { /* the device is gone */ } return; }
       engine = e;
+      clearInterval(stageTimer);
       engine.setWeather(WEATHERS[wi].id, 0);
       day.value = engine.timeOfDay();
       engine.setVolume('music', vols.music);
@@ -199,8 +287,18 @@ import { WEATHERS, TIMES } from './weather.js';
       setInterval(showTime, 250);
       $('veil').classList.add('done');
       wake();
-    }).catch(function () {
-      $('veil-text').textContent = 'This device could not start WebGL. Try a desktop browser with hardware acceleration on.';
+    }).catch(function (err) {
+      console.error(err);
+      if (err && err.code === 'unsupported') {
+        fail('This browser can’t show the scene',
+          'It needs WebGPU or WebGL2 with hardware acceleration. Try a current Chrome, Edge or Safari, with hardware acceleration on in its settings.',
+          {});
+      } else if (err && err.code === 'stalled') {
+        fail('The scene couldn’t start', 'The graphics driver stopped while preparing the scene’s shaders' +
+          (using === 'webgpu' ? '. The WebGL renderer may work on this device.' : '.'), { low: true, webgl: true });
+      } else {
+        fail('The scene couldn’t start', String((err && err.message) || err).slice(0, 200), { low: true, webgl: true });
+      }
     });
   }
   // let the veil paint before the procedural build

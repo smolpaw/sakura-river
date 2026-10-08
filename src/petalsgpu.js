@@ -121,7 +121,7 @@ export function makeGpuPetals(trees, groundAt, count, material) {
     update(renderer, dt, time, windAmt, riverSpeed) {
       if (active < target) active = Math.min(target, active + Math.ceil(count * dt * 0.4));
       else if (active > target) active = target;
-      u.dt.value = Math.min(dt, 0.05); u.time.value = time; u.wind.value = windAmt; u.river.value = riverSpeed;
+      u.dt.value = dt; u.time.value = time; u.wind.value = windAmt; u.river.value = riverSpeed;
       if (dt > 0) renderer.compute(step);
       geo.instanceCount = active;
     },

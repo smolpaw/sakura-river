@@ -9,8 +9,9 @@ function spawn() {
 }
 
 // jobs: { key: { name, args } } -> Promise<{ results: { key: data }, stats }>; args may be a promise (a job waits for
-// its args when its turn comes: the rocks' job for the pebble model, loaded on the main thread meanwhile)
-export async function runJobs(jobs, { workers = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)), mainThread = false } = {}) {
+// its args when its turn comes: the rocks' job for the pebble model, loaded on the main thread meanwhile).
+// onJob(done, total) is called as each job finishes.
+export async function runJobs(jobs, { workers = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)), mainThread = false, onJob = () => {} } = {}) {
   const t0 = performance.now();
   const queue = Object.entries(jobs).sort((a, b) => (COST[b[1].name] || 1) - (COST[a[1].name] || 1));
   const results = {}, timing = {};
@@ -21,6 +22,7 @@ export async function runJobs(jobs, { workers = Math.max(1, Math.min(4, (navigat
       const s = performance.now();
       results[key] = unpackDeep(packDeep(JOBS[j.name](await j.args), new Set()));
       timing[key] = performance.now() - s;
+      onJob(Object.keys(results).length, queue.length);
     }
     return { results, stats: { workers: 0, ms: performance.now() - t0, timing } };
   }
@@ -40,6 +42,7 @@ export async function runJobs(jobs, { workers = Math.max(1, Math.min(4, (navigat
       if (e.data.error) { w.terminate(); reject(new Error(`generation job ${key} failed: ${e.data.error}`)); return; }
       results[key] = unpackDeep(e.data.result);
       timing[key] = e.data.ms;
+      onJob(Object.keys(results).length, queue.length);
       take();
     };
     w.onerror = (e) => { w.terminate(); reject(new Error('generation worker error: ' + (e.message || e))); };

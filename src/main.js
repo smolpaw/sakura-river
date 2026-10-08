@@ -108,16 +108,32 @@ export async function create(canvas, opts = {}) {
     // GPU time drives the quality controller (not needed at a fixed quality outside the bench)
     trackTimestamp: opts.bench ? opts.backend !== 'webgl' : !opts.fixedQuality,
   };
+  // start-up stages for the loading screen: generate (f: the share of generation jobs done), build, shaders, warm (f);
+  // with the tier and the backend in use
+  let tierNow = opts.quality || null, backendNow = null;
+  const progress = (stage, f = null) => opts.onProgress && opts.onProgress({ stage, f, quality: tierNow, backend: backendNow });
   if (params.forceWebGL) params.context = glContext();
   const renderer = new THREE.WebGPURenderer(params);
   const fallback = renderer._getFallback; // private in r186; its WebGLBackend is built from `params`
   if (fallback) renderer._getFallback = (e) => { params.context = glContext(); return fallback(e); };
-  await renderer.init();
-  const backendName = renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
+  try { await renderer.init(); } catch (e) {
+    // neither WebGPU nor WebGL2 (blocked, no hardware acceleration, or a browser without either)
+    throw Object.assign(new Error('no WebGPU or WebGL2: ' + (e && e.message)), { code: 'unsupported' });
+  }
+  // A lost device (a driver reset, the GPU out of memory, the browser's GPU watchdog after a long stall) ends the
+  // scene, during start-up or after: the loop stops and the page is told (onLost), since nothing renders after it.
+  let lost = null;
+  renderer.onDeviceLost = (info) => {
+    if (lost) return;
+    lost = { api: info.api, message: info.message, reason: info.reason };
+    renderer._onDeviceLost(info); // three's own: logs it and stops its compile and render calls on the dead device
+    opts.onLost && opts.onLost(lost);
+  };
+  const backendName = backendNow = renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
   shareInstancedPipelines(renderer); // one pipeline per material for the instanced models (lods.js)
   // on the WebGL2 fallback the bench probe runs its own timer queries (three's cannot time nested passes)
   if (backendName === 'webgl' && opts.bench) renderer.backend.trackTimestamp = false;
-  const tierName = opts.quality || detectTier(renderer);
+  const tierName = tierNow = opts.quality || detectTier(renderer);
   const Q = { ...TIERS[tierName] };
   const ST = opts.stress || null; // bench-only future-content scenario
   const dpr = Math.min(window.devicePixelRatio || 1, Q.pr);
@@ -152,6 +168,7 @@ export async function create(canvas, opts = {}) {
   const focus = new THREE.Vector3(...Lay.focus);
   const triMul = ST ? ST.triMul : 1;
   const trees = treeSpecs(Lay);
+  progress('generate', 0);
   const fieldJobs = [[], [], []], area = [0, 0, 0];
   world.ZONES.map((Z, i) => ({ i, a: (Z.box[2] - Z.box[0]) * (Z.box[3] - Z.box[1]) })).sort((p, q) => q.a - p.a).forEach(({ i, a }) => {
     const k = area.indexOf(Math.min(...area));
@@ -184,9 +201,10 @@ export async function create(canvas, opts = {}) {
     bamboo: { name: 'bamboo' },
     fallen: { name: 'fallen', args: { count: Q.fallen } },
     rafts: { name: 'rafts', args: { count: Math.round(Q.fallen * 1.2), tier: tierName } },
-  }, { mainThread: opts.workers === false });
+  }, { mainThread: opts.workers === false, onJob: (done, total) => progress('generate', done / total) });
   world.setHeightCache(G.heightCache);
   mark('generated');
+  progress('build');
 
   // ---------- sky + terrain ----------
   const sky = makeSky();
@@ -529,9 +547,9 @@ export async function create(canvas, opts = {}) {
   const sp3 = main.data.spawn, spawnPts = [];
   for (let i = 0; i < sp3.length; i += 3) spawnPts.push(new THREE.Vector3(sp3[i], sp3[i + 1], sp3[i + 2]).add(treePos));
   const petalMat = petalMaterial();
-  // WebGPU: simulated in a compute pass (petalsgpu.js), shed by every cherry, 2.5 times as many; WebGL: on the CPU, from
-  // the main tree
-  const petals = renderer.backend.isWebGPUBackend && opts.gpuPetals !== false
+  // WebGPU: simulated in a compute pass (petalsgpu.js), shed by every cherry, 2.5 times as many; WebGL and WebGPU in
+  // compatibility mode (no storage buffers in vertex shaders, four per compute shader): on the CPU, from the main tree
+  const petals = renderer.backend.isWebGPUBackend && !compat && opts.gpuPetals !== false
     ? makeGpuPetals([main, ...smallTrees].map((t) => ({ spawn: t.data.spawn, pos: t.group.position, scale: t.group.scale.x, weight: 1 })),
       grass.userData.groundAt, Math.round(Q.petals * 2.5), petalMaterial)
     : new PetalSystem(world, spawnPts, Q.petals, petalMat, U.uWindDir.value);
@@ -871,8 +889,10 @@ export async function create(canvas, opts = {}) {
     feedGpuTime(dt * 1000);
     frames++; acc += dt; statT += dt;
     if (statT >= 1) {
-      fpsShown = Math.round(1000 / ((acc / frames) * 1000));
-      opts.onStats && opts.onStats({ fps: fpsShown, quality: tierName, level: qc.level, scale: qc.scale });
+      fpsShown = frames / acc; fpsShown = fpsShown < 10 ? Math.round(fpsShown * 10) / 10 : Math.round(fpsShown);
+      // floor: nothing left to lower (a fixed quality, or the adaptive controller at its lowest settings)
+      const floor = !!opts.fixedQuality || (qc.scale <= qc.minScale && qc.level >= qc.levels.length);
+      opts.onStats && opts.onStats({ fps: fpsShown, quality: tierName, level: qc.level, scale: qc.scale, floor });
       frames = 0; acc = 0; statT = 0;
     }
   }
@@ -883,12 +903,14 @@ export async function create(canvas, opts = {}) {
   const lightR = new THREE.Vector3(), lightU = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
   let figureAnchor = false; // the sun's sharp shadow round the walker's figure, out of walk mode (see step)
   let running = true;
-  let frameNo = 0, warming = false;
+  let frameNo = 0, warming = false, revealing = false;
   const sunScreen = new THREE.Vector3();
   const tmpSize = new THREE.Vector2();
 
   function step(dtIn, doRender = true) {
-    const dt = Math.min(dtIn, 0.05);
+    // real time down to 8 fps, so a slow device (or a tier above what it runs well) still moves at the right speed;
+    // a longer frame (a hitch, a tab in the background) slows the scene rather than jumping it
+    const dt = Math.min(dtIn, 0.125);
     const k = 1 - Math.exp(-dt * 2.5);
     if (weatherTween) {
       const w = weatherTween, e = easeInOut(Math.min(1, (w.t += dt / w.dur)));
@@ -1082,10 +1104,12 @@ export async function create(canvas, opts = {}) {
     if (!doRender) return;
     frameNo++;
     if (probe) probe.beginFrame();
-    sun.shadow.needsUpdate = frameNo % shadowEvery === 0 || frameNo < 3;
-    farShadow.update(scene, U.uSunDir.value, { every: timeTween ? 4 : 15, force: frameNo < 3 || opts.farEveryFrame });
+    // (every pass on the first frames and on those of the warm-up that bring parts of the scene in)
+    const every = frameNo < 3 || revealing;
+    sun.shadow.needsUpdate = frameNo % shadowEvery === 0 || every;
+    farShadow.update(scene, U.uSunDir.value, { every: timeTween ? 4 : 15, force: every || opts.farEveryFrame });
     // the reflector skips when the camera is below the water plane; fall back to the analytic sky then
-    reflSkip = !(frameNo % reflEvery === 0 || frameNo < 3);
+    reflSkip = !(frameNo % reflEvery === 0 || every);
     water.uniforms.uHasRefl.value = reflector && reflEvery < 1e9 && camera.position.y > 0.02 ? 1 : 0;
     // bench-only: sub-pixel view offset, the A/A calibration for sample-placement differences between backends
     if (opts.jitter) { const b = renderer.getDrawingBufferSize(tmpSize); camera.setViewOffset(b.x, b.y, opts.jitter[0], opts.jitter[1], b.x, b.y); }
@@ -1100,7 +1124,7 @@ export async function create(canvas, opts = {}) {
   const frameMs = 1000 / 60;
   let due = 0;
   function loop(now) {
-    if (!running) return;
+    if (!running || lost) return;
     requestAnimationFrame(loop);
     if (now < due - 2) return;
     due += frameMs;
@@ -1112,17 +1136,58 @@ export async function create(canvas, opts = {}) {
   }
   // build pipelines behind the veil (asynchronously on WebGPU)
   mark('ready');
-  if (opts.precompile !== false) await renderer.compileAsync(scene, camera);
+  progress('shaders', 0);
+  if (opts.precompile !== false) {
+    // three builds the objects one after another; one whose pipeline the driver rejects can leave this waiting for
+    // ever (a depth texture sampled without comparison on Android's compatibility mode did), so a minute without an
+    // object done ends the start-up with an error the page shows, rather than a loading screen that never ends
+    let last = performance.now();
+    const compiling = renderer.compileAsync(scene, camera, null, (e) => { last = performance.now(); progress('shaders', e.loaded / e.total); });
+    compiling.catch(() => {}); // (after a stall it may still fail, unwatched)
+    let watch = 0;
+    await Promise.race([compiling, new Promise((_, reject) => {
+      watch = setInterval(() => {
+        // (it moves on animation frames, which stop while the tab is hidden: that time doesn't count)
+        if (document.hidden) { last = performance.now(); return; }
+        if (!lost && performance.now() - last < 60000) return;
+        reject(Object.assign(new Error(lost ? 'the graphics device was lost' : 'preparing the shaders stopped (no progress for a minute)'), { code: lost ? 'lost' : 'stalled' }));
+      }, 1000);
+    })]).finally(() => clearInterval(watch));
+  }
   mark('precompiled');
   // Warm-up behind the loading screen, as games do: the real frame renders into targets compileAsync does not
   // know (the multisampled scene pass, shadow map, reflection, post passes), so their pipelines would otherwise be
-  // built on the first visible frames and stutter. A few hidden frames build and upload everything (the 30 Hz
-  // shadow and reflection passes run on the first ones; three also stalls once around the 16th frame, so 24
-  // frames absorb that too, ~0.4 s here); the page reveals the scene after create() resolves.
+  // built on the first visible frames and stutter. Hidden frames build and upload everything (three also stalls once
+  // around the 16th frame, so at least 24 frames absorb that too); the page reveals the scene after create() resolves.
+  // Building every object for those passes is three's node building on the main thread: in one frame, ~3 s on a fast
+  // desktop CPU and long enough on a slow one for the browser to call the page unresponsive. So the scene's parts come
+  // in over the frames, the rest hidden by their layers (which the frame's own updates leave alone; the lights stay,
+  // as every lit material's build depends on them), as many a frame as the last frame's time allows, every pass drawn
+  // on the frames that bring parts in. The frames are drawn at a quarter of the resolution (the pipelines are the
+  // same at any size), so a weak GPU spends little on them.
   if (!opts.manual && opts.warmup !== false) {
     warming = true;
-    for (let i = 0; i < (opts.warmupFrames ?? 24); i++) { step(1 / 60); await new Promise((r) => requestAnimationFrame(r)); }
-    warming = false;
+    pixelScale = 0.25; resize();
+    const masks = new Map(), parts = scene.children.filter((o) => !o.isLight);
+    for (const p of parts) p.traverse((o) => { masks.set(o, o.layers.mask); o.layers.mask = 0; });
+    // (at least a twelfth of them a frame: a frame is long on a weak GPU too, and the warm-up keeps to ~24 frames)
+    const least = Math.ceil(parts.length / 12);
+    let shown = 0, batch = least;
+    for (let i = 0; (i < (opts.warmupFrames ?? 24) || shown < parts.length) && !lost; i++) {
+      for (const p of parts.slice(shown, shown + batch)) p.traverse((o) => { if (masks.has(o)) o.layers.mask = masks.get(o); });
+      revealing = shown < parts.length;
+      shown = Math.min(parts.length, shown + batch);
+      progress('warm', shown / parts.length);
+      const t0 = performance.now();
+      step(1 / 60);
+      const ms = performance.now() - t0;
+      batch = ms < 60 ? batch * 2 : ms > 250 ? Math.max(least, batch >> 1) : batch;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    // (a part still hidden if the device was lost on the way)
+    for (const [o, m] of masks) o.layers.mask = m;
+    pixelScale = qc.scale; resize();
+    warming = revealing = false;
     mark('warm');
   }
   if (!opts.manual) requestAnimationFrame(loop);
