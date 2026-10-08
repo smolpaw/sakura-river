@@ -37,13 +37,19 @@
 <div class="side" id="side">
   <div class="actions">
     <label class="quality" title="Rendering quality (changing it reloads the scene)">
-      <span class="quality-label">Quality</span>
       <select id="quality" aria-label="Rendering quality">
         <option value="auto">Auto</option>
         <option value="ultra" title="For strong GPUs: supersampled, the most detail; ignores the frame budget">Ultra</option>
         <option value="high">High</option>
         <option value="medium">Medium</option>
         <option value="low">Low</option>
+      </select>
+    </label>
+    <label class="quality rate" title="Frame rate: Auto runs at 60 and drops to 30 on a slow device rather than lose much detail">
+      <select id="rate" aria-label="Frame rate">
+        <option value="auto">Auto · fps</option>
+        <option value="60">60 fps</option>
+        <option value="30">30 fps</option>
       </select>
     </label>
     <button type="button" class="btn icon" id="btn-cine" aria-pressed="false" aria-label="Cinematic" title="Cinematic">

@@ -853,9 +853,16 @@ export async function create(canvas, opts = {}) {
 
   // ---------- adaptive quality: GPU time -> render resolution, then second-order settings ----------
   let frames = 0, acc = 0, statT = 0, fpsShown = 60;
-  // wind-animated shadows and the reflection update at 30 Hz (the visual gate's wind and camera sequences pass)
+  // wind-animated shadows and the reflection update at 30 Hz (the visual gate's wind and camera sequences pass): every
+  // other frame at 60 fps, every frame at 30 (halfRate); the reflection not at all at the controller's last level
   const shadowEvery0 = opts.shadowEvery ?? 2, reflEvery0 = opts.reflEvery ?? 2;
-  let shadowEvery = shadowEvery0, reflEvery = reflEvery0;
+  let shadowEvery = shadowEvery0, reflEvery = reflEvery0, halfRate = false, reflOff = false;
+  function setRates() {
+    const per = (n) => (halfRate ? Math.max(1, Math.round(n / 2)) : n);
+    shadowEvery = per(shadowEvery0); reflEvery = reflOff ? 1e9 : per(reflEvery0);
+  }
+  // the frame rate: 'auto' (60 fps, and 30 when the controller trades frames for detail), 60 or 30
+  const rateMode = (r) => (+r === 30 ? 30 : +r === 60 ? 60 : 'auto');
   // GPU timer queries where available (three leaves trackTimestamp on for WebGL without the timer extension);
   // otherwise frame time, which vsync caps at the refresh interval: over budget then means clearly slower than a
   // 60 Hz frame (like the old ladder's 21 ms), and it never reads a capped 16.7 ms frame as overload
@@ -866,10 +873,13 @@ export async function create(canvas, opts = {}) {
     levels: [
       { apply() { reflLevel = 0.7; }, revert() { reflLevel = 1; } }, // (resize applies it)
       { apply() { grass.userData.setFraction(0.7); }, revert() { grass.userData.setFraction(1); } },
-      { apply() { reflEvery = 1e9; grass.userData.setFraction(0.5); }, revert() { reflEvery = reflEvery0; grass.userData.setFraction(0.7); } },
+      { apply() { reflOff = true; setRates(); grass.userData.setFraction(0.5); }, revert() { reflOff = false; setRates(); grass.userData.setFraction(0.7); } },
     ],
-    onChange: ({ scale }) => { pixelScale = scale; resize(); },
+    // the 30 fps rung needs GPU timings: frame time alone can't tell how far under the 60 fps budget a capped frame is
+    autoHalf: gpuTimed,
+    onChange: ({ scale, half }) => { pixelScale = scale; if (half !== halfRate) { halfRate = half; setRates(); } resize(); },
   });
+  qc.setMode(rateMode(opts.frameRate));
   if (opts.renderScale) qc.setScale(+opts.renderScale); // a starting scale (bench: with fixedQuality it stays)
   let resolving = false;
   function feedGpuTime(frameMs) {
@@ -900,7 +910,7 @@ export async function create(canvas, opts = {}) {
       fpsShown = frames / acc; fpsShown = fpsShown < 10 ? Math.round(fpsShown * 10) / 10 : Math.round(fpsShown);
       // floor: nothing left to lower (a fixed quality, or the adaptive controller at its lowest settings)
       const floor = !!opts.fixedQuality || (qc.scale <= qc.minScale && qc.level >= qc.levels.length);
-      opts.onStats && opts.onStats({ fps: fpsShown, quality: tierName, level: qc.level, scale: qc.scale, floor });
+      opts.onStats && opts.onStats({ fps: fpsShown, rate: halfRate ? 30 : 60, quality: tierName, level: qc.level, scale: qc.scale, floor });
       frames = 0; acc = 0; statT = 0;
     }
   }
@@ -1127,14 +1137,14 @@ export async function create(canvas, opts = {}) {
     if (probe) probe.endFrame();
   }
 
-  // capped at 60 fps: high-refresh displays skip callbacks until the next frame is due (the 2 ms tolerance keeps
+  // capped at 60 fps (30 at half rate): callbacks are skipped until the next frame is due (the 2 ms tolerance keeps
   // a 60 Hz display's jittery timestamps from skipping frames)
-  const frameMs = 1000 / 60;
   let due = 0;
   function loop(now) {
     if (!running || lost) return;
     requestAnimationFrame(loop);
     if (now < due - 2) return;
+    const frameMs = halfRate ? 1000 / 30 : 1000 / 60;
     due += frameMs;
     if (due < now) due = now + frameMs;
     timer.update(now);
@@ -1296,7 +1306,8 @@ export async function create(canvas, opts = {}) {
       });
       return out.sort((a, b) => b.total - a.total);
     },
-    qualityState() { return { tier: tierName, level: qc.level, scale: qc.scale, fps: fpsShown, gpuMs: qc.lastMs }; },
+    qualityState() { return { tier: tierName, level: qc.level, scale: qc.scale, rate: halfRate ? 30 : 60, rateMode: qc.mode, fps: fpsShown, gpuMs: qc.lastMs }; },
+    setFrameRate(r) { qc.setMode(rateMode(r)); }, // 'auto', 60 or 30 (docs/performance.md, Adaptive quality)
     setRenderScale(s) { qc.setScale(+s); }, // the adaptive render scale now (0.6-1; the controller moves it again unless the quality is fixed)
     setAdaptive(on) { opts.fixedQuality = !on; },
     step(dt) { step(dt); },

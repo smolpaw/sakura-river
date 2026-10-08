@@ -17,7 +17,7 @@ Live: https://smolpaw.github.io/sakura-river/ (deployed by GitHub Actions on eve
 
 Drag to look round the scene, scroll or pinch to zoom, right-drag to pan. The buttons by the quality menu: Cinematic (a slow flight round the valley), Orbit (the view turns slowly round), Walk and Reset view. Walk flies the camera into a walker on the footpath beside the cherry tree: W A S D or the arrow keys walk, the mouse looks round (a click on the scene locks the pointer; Esc releases it), Shift hurries; on a touch screen the left thumb walks and the right one looks. The walker keeps to the lanes, the bridge and the temple's steps and terrace. Walk again, Reset view or a second Esc leaves walk mode: the camera flies back out behind the figure, which stays standing where it was left.
 
-The quality menu's Auto picks a tier for the device and lowers the resolution while frames run long; a tier picked by hand stays as it is however slowly the device draws it (the scene still moves at its right speed down to 8 fps). If Auto stays slow at its lowest settings (or under half the frame rate it wants) the page offers to start it on Low from then on (picking a quality in the menu undoes that), and if Low itself stays under 15 fps (likewise) it says the device is below what the scene needs. While loading, the screen names each stage with its progress; if the scene can't start (no WebGPU or WebGL2, the graphics device lost, its shaders stalled) it says why and offers Low quality, the WebGL renderer (when WebGPU failed) or a reload.
+The quality menu's Auto picks a tier for the device and lowers the resolution while frames run long; a tier picked by hand stays as it is however slowly the device draws it (the scene still moves at its right speed down to 8 fps). If Auto stays slow at its lowest settings (or under half the frame rate it wants) the page offers to start it on Low from then on (picking a quality in the menu undoes that), and if Low itself stays under 15 fps (likewise) it says the device is below what the scene needs. While loading, the screen names each stage with its progress; if the scene can't start (no WebGPU or WebGL2, the graphics device lost, its shaders stalled) it says why and offers Low quality, the WebGL renderer (when WebGPU failed) or a reload. The frame-rate menu beside it: Auto runs at 60 fps and drops to 30 on a device that would otherwise lose much of its resolution, going back to 60 when it can; 60 fps or 30 fps holds that rate (30 halves the work on any tier, Ultra included). It applies at once and is remembered.
 
 ## Layout
 
@@ -79,7 +79,7 @@ The quality menu's Auto picks a tier for the device and lowers the resolution wh
 ## Engine API
 
     import { create } from './src/main.js';   // also exposed as window.SakuraRiver.create
-    const scene = create(canvas, { quality, fixedQuality, backend, hour, onProgress, onReady, onStats, onLost, onCinematicChange, onWalkChange });
+    const scene = create(canvas, { quality, fixedQuality, frameRate, backend, hour, onProgress, onReady, onStats, onLost, onCinematicChange, onWalkChange });
     scene.setWeather(id, seconds);        // a preset from WEATHERS in src/weather.js, blended in
     scene.setTimeOfDay(hour, animate, forward); // 0..24; an eased time-lapse, forward through midnight or (forward false) straight there
     scene.timeOfDay();                    // current clock hour (fixed between time-lapses: the clock doesn't tick)
@@ -92,6 +92,7 @@ The quality menu's Auto picks a tier for the device and lowers the resolution wh
     scene.setVolume('music' | 'nature', value0to1);
     scene.soundWaiting();                 // true while the browser holds sound back until a click or key press
     scene.setRenderScale(s);              // the adaptive render scale now, 0.6..1 (the controller moves it again unless the quality is fixed)
+    scene.setFrameRate('auto' | 60 | 30); // the frame-rate cap: auto lets the quality controller drop to 30 fps (also the create option frameRate)
     scene.resetCamera();
     scene.dispose();
 

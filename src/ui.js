@@ -109,6 +109,16 @@ import { WEATHERS, TIMES } from './weather.js';
   $('quality').value = quality;
   $('quality').addEventListener('change', function () { save('sr.quality', this.value); save('sr.autoTier', ''); location.reload(); });
 
+  // ---------- frame rate: Auto (60, or 30 when the device needs it to keep its detail), 60 or 30; no reload ----------
+  var rate = load('sr.rate');
+  if (['60', '30'].indexOf(rate) < 0) rate = 'auto';
+  $('rate').value = rate;
+  $('rate').addEventListener('change', function () {
+    rate = this.value; save('sr.rate', rate);
+    if (rate !== 'auto') $('rate').options[0].textContent = 'Auto · fps';
+    if (engine) engine.setFrameRate(rate);
+  });
+
   // ---------- camera ----------
   $('btn-cine').addEventListener('click', function () {
     var on = this.getAttribute('aria-pressed') !== 'true';
@@ -257,6 +267,7 @@ import { WEATHERS, TIMES } from './weather.js';
       quality: fixed ? quality : autoTier || undefined,
       fixedQuality: fixed,
       backend: backend === 'webgl' ? 'webgl' : undefined,
+      frameRate: rate,
       hour: TIMES.find(function (t) { return t.id === 'night'; }).hour, // open at night
       onProgress: function (p) {
         tier = p.quality; using = p.backend;
@@ -264,10 +275,12 @@ import { WEATHERS, TIMES } from './weather.js';
         stageF = p.f;
         showStage();
       },
-      onStats: function (s) { // shown only when the capped 60 fps drops (58+ is jitter)
+      onStats: function (s) { // shown only when the frame rate drops below its cap, 60 or 30 (within 2 is jitter)
         var el = $('stats');
-        el.hidden = s.fps >= 58;
+        el.hidden = s.fps >= s.rate - 2;
         if (!el.hidden) el.textContent = s.fps + ' fps';
+        var auto = $('rate').options[0], label = 'Auto · ' + s.rate + ' fps';
+        if (rate === 'auto' && auto.textContent !== label) auto.textContent = label;
         watchSpeed(s);
       },
       onLost: lost,
@@ -277,6 +290,7 @@ import { WEATHERS, TIMES } from './weather.js';
     }).then(function (e) {
       if (failed) { try { e.dispose(); } catch (err) { /* the device is gone */ } return; }
       engine = e;
+      e.setFrameRate(rate); // (a choice made while it loaded)
       clearInterval(stageTimer);
       engine.setWeather(WEATHERS[wi].id, 0);
       day.value = engine.timeOfDay();

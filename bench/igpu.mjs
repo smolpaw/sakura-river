@@ -43,7 +43,7 @@ const q = tail.at(-1).q;
 const steady = { fps: 1000 / median(dts), frameMsMedian: median(dts), frameMsP90: quantile(dts, 0.9), quality: q,
   gpuMsMedian: median(tail.map((x) => x.q && x.q.gpuMs).filter((x) => x > 0)) };
 // settle time: first moment after which the controller state no longer changes
-const key = (x) => (x.q ? `${x.q.level}|${x.q.scale}` : '');
+const key = (x) => (x.q ? `${x.q.level}|${x.q.scale}|${x.q.rate}` : '');
 let settleT = 0; for (let i = 1; i < samples.length; i++) if (key(samples[i]) !== key(samples[i - 1])) settleT = samples[i].t - samples[0].t;
 const changes = samples.filter((x, i) => i && key(x) !== key(samples[i - 1])).length;
 log(name, 'steady fps', steady.fps.toFixed(1), 'p90 frame', steady.frameMsP90.toFixed(1), 'ms, quality', JSON.stringify(q), 'settled after', (settleT / 1000).toFixed(1), 's,', changes, 'changes');
@@ -77,6 +77,6 @@ print(json.dumps(out))`], { encoding: 'utf8' });
 await browser.close(); server.close();
 const result = { date: new Date().toISOString(), build: o.build, backend: o.backend, ballastMs: +o.ballast, chromium: version, flags: args, env: { webgl: env.webgl, webgpu: env.webgpu && env.webgpu.description },
   clocksAtStart, seconds: +o.seconds, steady, settleSeconds: settleT / 1000, stateChanges: changes, visual,
-  trace: samples.filter((_, i) => i % 5 === 0).map((x) => ({ t: Math.round(x.t - samples[0].t), dt: +x.dt.toFixed(2), level: x.q && x.q.level, scale: x.q && x.q.scale })) };
+  trace: samples.filter((x, i) => i % 5 === 0 || (i && key(x) !== key(samples[i - 1]))).map((x) => ({ t: Math.round(x.t - samples[0].t), dt: +x.dt.toFixed(2), level: x.q && x.q.level, scale: x.q && x.q.scale, rate: x.q && x.q.rate, gpuMs: x.q && +(+x.q.gpuMs).toFixed(2) })) };
 fs.mkdirSync(path.join(BENCH, 'results'), { recursive: true });
 fs.writeFileSync(path.join(BENCH, 'results', name + '.json'), JSON.stringify(result, null, 1));

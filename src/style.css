@@ -107,10 +107,9 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .seg button:hover:not([aria-pressed="true"]) { color: var(--washi); background: rgba(255, 255, 255, 0.08); }
 
 .actions { display: flex; gap: 8px; justify-content: flex-end; }
-.actions .quality { margin-right: auto; }
+.actions .rate { margin-right: auto; }
 
-.quality { display: inline-flex; align-items: center; gap: 4px; height: 40px; box-sizing: border-box; padding: 0 4px 0 13px; border-radius: 10px;
-  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--washi-dim); }
+.quality { display: inline-flex; align-items: center; height: 40px; box-sizing: border-box; padding: 0 4px 0 8px; border-radius: 10px; }
 .quality select { height: 100%; border: 0; background: transparent; color: var(--washi); font: 500 13px/1 var(--sans); cursor: pointer; padding: 0 6px; }
 .quality option { background: var(--sumi); color: var(--washi); }
 
@@ -139,7 +138,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
   .panel { padding: 12px 14px; gap: 12px; }
   .seg button { padding: 8px 4px; }
   .brand-title { font-size: 32px; }
-  .stats, .quality-label { display: none; }
+  .stats { display: none; }
   .brand { left: 16px; }
   .vol span { display: none; }
 }
