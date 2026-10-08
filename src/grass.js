@@ -11,7 +11,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, int, ivec2, mix, max, min, pow, dot, normalize, clamp, floor, fract, exp, asinh, sin,
   instanceIndex, positionGeometry, cameraPosition, textureLoad, texture, uniform, uniformArray, varyingProperty,
-  transformNormalToView, positionWorld, select, length,
+  transformNormalToView, positionWorld, select, length, Loop,
 } from 'three/tsl';
 import { U, vnoise, sstep, LitMaterial, windOffset, lanternLight, SHADOW_NORMAL_BIAS } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
@@ -91,18 +91,19 @@ export const grassWave = Fn(([p]) => {
 });
 
 // the farmland's own grid (world.js buildFields: y, grass density, grass length, 1 where the mesh is) under (x, z),
-// rows `row0` on in the atlas of all of them, triangle interpolated as its mesh is -> vec4(y, density, length, 1 if
-// the mesh is there all round)
-const fieldsSampler = (tex, nx, nz, [x0, z0, step], row0) => Fn(([p]) => {
-  const u = p.x.sub(x0).div(step), v = p.y.sub(z0).div(step);
-  const i0 = clamp(floor(u), 0, nx - 2), j0 = clamp(floor(v), 0, nz - 2);
+// from a zone's grid in the atlas of all of them (a: its first point's x, z, its step, its first row in the atlas;
+// b: its points across and along), triangle interpolated as its mesh is -> vec4(y, density, length, 1 if the mesh is
+// there all round)
+const fieldsAt = (tex) => Fn(([p, a, b]) => {
+  const u = p.x.sub(a.x).div(a.z), v = p.y.sub(a.y).div(a.z);
+  const i0 = clamp(floor(u), 0, b.x.sub(2)), j0 = clamp(floor(v), 0, b.y.sub(2));
   const fx = clamp(u.sub(i0), 0, 1), fz = clamp(v.sub(j0), 0, 1);
-  const ii = int(i0), jj = int(j0).add(row0);
-  const a = textureLoad(tex, ivec2(ii, jj)), b = textureLoad(tex, ivec2(ii.add(1), jj));
-  const c = textureLoad(tex, ivec2(ii, jj.add(1))), d = textureLoad(tex, ivec2(ii.add(1), jj.add(1)));
-  const lower = a.add(b.sub(a).mul(fx)).add(c.sub(a).mul(fz));
-  const upper = d.add(c.sub(d).mul(fx.oneMinus())).add(b.sub(d).mul(fz.oneMinus()));
-  const ok = min(min(a.w, b.w), min(c.w, d.w));
+  const ii = int(i0), jj = int(j0).add(int(a.w));
+  const c00 = textureLoad(tex, ivec2(ii, jj)), c10 = textureLoad(tex, ivec2(ii.add(1), jj));
+  const c01 = textureLoad(tex, ivec2(ii, jj.add(1))), c11 = textureLoad(tex, ivec2(ii.add(1), jj.add(1)));
+  const lower = c00.add(c10.sub(c00).mul(fx)).add(c01.sub(c00).mul(fz));
+  const upper = c11.add(c01.sub(c11).mul(fx.oneMinus())).add(c10.sub(c11).mul(fz.oneMinus()));
+  const ok = min(min(c00.w, c10.w), min(c01.w, c11.w));
   return vec4(select(fx.add(fz).lessThanEqual(1), lower, upper).xyz, ok);
 });
 
@@ -138,14 +139,21 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
   const atlasTex = new THREE.DataTexture(atlas, AW, AH, THREE.RGBAFormat, THREE.FloatType);
   atlasTex.minFilter = atlasTex.magFilter = THREE.NearestFilter;
   atlasTex.needsUpdate = true;
-  for (const z of farm) z.sample = fieldsSampler(atlasTex, z.f.nx, z.f.nz, z.f.box, z.r0);
+  // each zone's grid (fieldsAt's a and b) and box; looped over in the shader (unrolled, ten zones' lookups made most of
+  // the grass's vertex shader)
+  const fieldsSample = fieldsAt(atlasTex);
+  const uZoneA = uniformArray(farm.map((z) => new THREE.Vector4(z.f.box[0], z.f.box[1], z.f.box[2], z.r0)), 'vec4');
+  const uZoneB = uniformArray(farm.map((z) => new THREE.Vector4(z.f.nx, z.f.nz, 0, 0)), 'vec4');
+  const uZoneBox = uniformArray(farm.map((z) => new THREE.Vector4(...z.box)), 'vec4');
   const ground = Fn(([p]) => {
     const g = terrain(p).toVar();
-    for (const f of farm) {
-      const [x0, z0, x1, z1] = f.box;
-      If(p.x.greaterThan(x0).and(p.x.lessThan(x1)).and(p.y.greaterThan(z0)).and(p.y.lessThan(z1)), () => {
-        const v = f.sample(p);
-        If(v.w.greaterThan(0.5), () => { g.assign(vec4(v.xyz, g.w)); });
+    if (farm.length) {
+      Loop({ start: 0, end: farm.length, type: 'int', name: 'zone' }, ({ zone }) => {
+        const box = uZoneBox.element(zone);
+        If(p.x.greaterThan(box.x).and(p.x.lessThan(box.z)).and(p.y.greaterThan(box.y)).and(p.y.lessThan(box.w)), () => {
+          const v = fieldsSample(p, uZoneA.element(zone), uZoneB.element(zone));
+          If(v.w.greaterThan(0.5), () => { g.assign(vec4(v.xyz, g.w)); });
+        });
       });
     }
     return g;

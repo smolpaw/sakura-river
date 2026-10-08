@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, min, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
-  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step,
+  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop,
 } from 'three/tsl';
 import { U, vnoise, hash12, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
@@ -64,20 +64,26 @@ const laneFrame = (map, dist, earth) => Fn(() => {
   return vec4(s, dir, sstep(1.7, 1.0, L.x.abs()).mul(earth).mul(sstep(LANE_NEAR, LANE_NEAR * 0.6, dist)));
 })();
 // small stones: a jittered grid of cells (`scale` m), the share over `share` holding a stone; x: inside it (0 at its
-// edge), y: its tone, zw: the way out from its middle (the dome's slope)
-const laneStones = (p, scale, seed, share) => {
+// edge), y: its tone, zw: the way out from its middle (the dome's slope). A shader function with its 3x3 search a loop
+// (inlined and unrolled, its three calls were a large part of the terrain's shader); the seeds' offsets are added here
+// so the hashes' inputs round as they always have.
+const laneStonesFn = Fn(([p, scale, seedA, seedB, seedC, share]) => {
   const q = p.div(scale).toVar(), id = floor(q).toVar(), f = fract(q).toVar();
   const d1 = float(8.0).toVar(), tone = float(0).toVar(), off = vec2(0).toVar();
-  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-    const c = id.add(vec2(i, j));
-    const o = vec2(hash12(c.add(seed)), hash12(c.add(seed + 37.1))).mul(0.7).add(0.15);
-    const v = vec2(i, j).add(o).sub(f), d = dot(v, v);
-    If(d.lessThan(d1), () => { d1.assign(d); tone.assign(hash12(c.add(seed + 71.3))); off.assign(v.negate()); });
-  }
+  Loop({ start: -1, end: 2, type: 'int', name: 'lj' }, ({ lj }) => {
+    Loop({ start: -1, end: 2, type: 'int', name: 'li' }, ({ li }) => {
+      const g = vec2(float(li), float(lj)), c = id.add(g);
+      const o = vec2(hash12(c.add(seedA)), hash12(c.add(seedB))).mul(0.7).add(0.15);
+      const v = g.add(o).sub(f), d = dot(v, v);
+      If(d.lessThan(d1), () => { d1.assign(d); tone.assign(hash12(c.add(seedC))); off.assign(v.negate()); });
+    });
+  });
   const r = tone.mul(0.3).add(0.12), d = d1.sqrt();
-  const has = sstep(share, float(share).add(0.05), tone.mul(7.31).fract());
+  const has = sstep(share, share.add(0.05), tone.mul(7.31).fract());
   return vec4(sstep(r, r.mul(0.55), d).mul(has), tone, off.div(r).mul(has).mul(sstep(r, r.mul(0.8), d)));
-};
+}).setLayout({ name: 'laneStones', type: 'vec4', inputs: [{ name: 'p', type: 'vec2' }, { name: 'scale', type: 'float' },
+  { name: 'seedA', type: 'float' }, { name: 'seedB', type: 'float' }, { name: 'seedC', type: 'float' }, { name: 'share', type: 'float' }] });
+const laneStones = (p, scale, seed, share) => laneStonesFn(p, float(scale), float(seed), float(seed + 37.1), float(seed + 71.3), share);
 // the ruts: two shallow hollows 0.6 m either side of the middle (a height in m, and its slope across the lane)
 const rutDepth = 0.05, rutAt = 0.6, rutW = 0.2;
 const rut = (s) => exp(s.abs().sub(rutAt).div(rutW).pow(2.0).negate());
@@ -193,18 +199,23 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
 
 // River stones: a jittered grid of cells, each a rounded stone of its own size and tone (nearest-two distances, so
 // stones meet in crevices of sand), with finer gravel cells between; `under`: the ground's colour, tinting the sand.
-const stones = (p, scale, seed) => {
+// (a shader function with its search a loop, as laneStones)
+const stonesFn = Fn(([p, scale, seedA, seedB, seedC]) => {
   const q = p.div(scale).toVar(), id = floor(q).toVar(), f = fract(q).toVar();
   const d1 = float(8.0).toVar(), d2 = float(8.0).toVar(), tone = float(0).toVar();
-  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-    const c = id.add(vec2(i, j));
-    const o = vec2(hash12(c.add(seed)), hash12(c.add(seed + 37.1))).mul(0.8).add(0.1);
-    const v = vec2(i, j).add(o).sub(f), d = dot(v, v);
-    If(d.lessThan(d1), () => { d2.assign(d1); d1.assign(d); tone.assign(hash12(c.add(seed + 71.3))); }).ElseIf(d.lessThan(d2), () => { d2.assign(d); });
-  }
+  Loop({ start: -1, end: 2, type: 'int', name: 'sj' }, ({ sj }) => {
+    Loop({ start: -1, end: 2, type: 'int', name: 'si' }, ({ si }) => {
+      const g = vec2(float(si), float(sj)), c = id.add(g);
+      const o = vec2(hash12(c.add(seedA)), hash12(c.add(seedB))).mul(0.8).add(0.1);
+      const v = g.add(o).sub(f), d = dot(v, v);
+      If(d.lessThan(d1), () => { d2.assign(d1); d1.assign(d); tone.assign(hash12(c.add(seedC))); }).ElseIf(d.lessThan(d2), () => { d2.assign(d); });
+    });
+  });
   // x: inside the stone (0 at its edge), y: its tone
   return vec2(sstep(0.0, 0.35, d2.sqrt().sub(d1.sqrt())), tone);
-};
+}).setLayout({ name: 'riverStones', type: 'vec2', inputs: [{ name: 'p', type: 'vec2' }, { name: 'scale', type: 'float' },
+  { name: 'seedA', type: 'float' }, { name: 'seedB', type: 'float' }, { name: 'seedC', type: 'float' }] });
+const stones = (p, scale, seed) => stonesFn(p, float(scale), float(seed), float(seed + 37.1), float(seed + 71.3));
 const riverBed = (xz, under) => {
   // the cells' grid warped by a broad noise so stones don't line up in rows
   const w = xz.add(vec2(vnoise(xz.mul(1.3)), vnoise(xz.mul(1.3).add(9.0))).mul(0.18));

@@ -14,7 +14,7 @@
 // copies the wakes into their slots and gives each splash the next ring slot with the time it happened (the shader
 // takes the ring's age from U.uTime). Nothing else on the CPU.
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, dot, abs, sin, sign, length, clamp, max, uniformArray, If } from 'three/tsl';
+import { Fn, float, vec2, dot, abs, sin, sign, length, clamp, max, uniformArray, If, Loop } from 'three/tsl';
 import { U, vnoise, sstep } from './tsl.js';
 
 const N = 12; // points in all
@@ -43,8 +43,9 @@ export function makeTouches() {
     const ac = vec2(fl.y, fl.x.negate());
     const g = vec2(0.0).toVar();
     const run = clamp(speed.mul(2.0), 0.0, 1.6); // (the river speed setting is 0.45 by default)
-    for (let i = 0; i < N; i++) {
-      const a = uA.element(i), b = uB.element(i);
+    // (a loop in the shader: unrolled here, its body twelve times over made most of the water's shader)
+    Loop({ start: 0, end: N, type: 'int', name: 'touch' }, ({ touch }) => {
+      const a = uA.element(touch), b = uB.element(touch);
       If(b.w.greaterThan(1.5), () => {
         const rel = xz.sub(a.xy);
         const u = dot(rel, fl), c = dot(rel, ac), ca = abs(c);
@@ -88,7 +89,7 @@ export function makeTouches() {
           });
         });
       });
-    }
+    });
     return g;
   });
 

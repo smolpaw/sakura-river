@@ -67,11 +67,14 @@ export const lanternLight = Fn(([wp]) => {
 });
 
 // ---------- noise (same math as the GLSL it replaces) ----------
+// Both are shader functions (setLayout), not inlined: inlined, the value noise's ~60 calls (four hashes each) made the
+// water's fragment shader 188 KB of GLSL and the terrain's 140 KB, which slow drivers (ANGLE's D3D11 on Windows) take
+// long enough to compile for the browser's GPU watchdog to reset the device.
 export const hash12 = Fn(([p]) => {
   const p3 = fract(vec3(p.x, p.y, p.x).mul(0.1031)).toVar();
   p3.addAssign(dot(p3, p3.yzx.add(33.33)));
   return fract(p3.x.add(p3.y).mul(p3.z));
-});
+}).setLayout({ name: 'hash12', type: 'float', inputs: [{ name: 'p', type: 'vec2' }] });
 
 export const vnoise = Fn(([p]) => {
   const i = floor(p).toVar(), f = fract(p).toVar();
@@ -80,7 +83,7 @@ export const vnoise = Fn(([p]) => {
   // site, giving one lattice point different hash values from neighbouring cells (visible tears on the water)
   const i10 = floor(p.add(vec2(1, 0))), i01 = floor(p.add(vec2(0, 1))), i11 = floor(p.add(vec2(1, 1)));
   return mix(mix(hash12(i), hash12(i10), u.x), mix(hash12(i01), hash12(i11), u.x), u.y);
-});
+}).setLayout({ name: 'vnoise', type: 'float', inputs: [{ name: 'p', type: 'vec2' }] });
 
 // sin-based hash used by the post passes (GLSL: fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453))
 export const hashSin = Fn(([p]) => fract(sin(dot(p, vec2(12.9898, 78.233))).mul(43758.5453)));
