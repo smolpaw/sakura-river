@@ -861,7 +861,7 @@ export async function create(canvas, opts = {}) {
     const per = (n) => (halfRate ? Math.max(1, Math.round(n / 2)) : n);
     shadowEvery = per(shadowEvery0); reflEvery = reflOff ? 1e9 : per(reflEvery0);
   }
-  // the frame rate: 'auto' (60 fps, and 30 when the controller trades frames for detail), 60 or 30
+  // the frame rate: 'auto' (60 fps, and 30 before the controller lowers any detail), 60 or 30
   const rateMode = (r) => (+r === 30 ? 30 : +r === 60 ? 60 : 'auto');
   // GPU timer queries where available (three leaves trackTimestamp on for WebGL without the timer extension);
   // otherwise frame time, which vsync caps at the refresh interval: over budget then means clearly slower than a

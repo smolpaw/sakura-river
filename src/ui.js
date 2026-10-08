@@ -109,7 +109,7 @@ import { WEATHERS, TIMES } from './weather.js';
   $('quality').value = quality;
   $('quality').addEventListener('change', function () { save('sr.quality', this.value); save('sr.autoTier', ''); location.reload(); });
 
-  // ---------- frame rate: Auto (60, or 30 when the device needs it to keep its detail), 60 or 30; no reload ----------
+  // ---------- frame rate: Auto (60, or 30 before the device would lose detail), 60 or 30; no reload ----------
   var rate = load('sr.rate');
   if (['60', '30'].indexOf(rate) < 0) rate = 'auto';
   $('rate').value = rate;

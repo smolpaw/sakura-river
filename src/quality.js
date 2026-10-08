@@ -1,10 +1,10 @@
 // Adaptive quality driven by GPU time. The main knob is the render scale (the scene pass's resolution, upscaled to
 // the screen); second-order settings step in only at the scale floor and step out first.
 //
-// Frame rate: in mode 'auto' with `autoHalf` (GPU timings available), at the full rate (60 fps) the scale goes down
-// only to `halfAt`; still over budget there, the controller halves the frame rate (30 fps, `half`: the budget per frame
+// Frame rate: in mode 'auto' with `autoHalf` (GPU timings available), the frame rate goes before the detail (owner,
+// 2026-10-08): over budget at the full rate (60 fps), the controller halves it (30 fps, `half`: the budget per frame
 // doubles) at the scale that fits the doubled budget, and only then goes on down to minScale and the second-order
-// settings. A slow device keeps its detail at 30 fps instead of losing it at 60. Back to the full rate only from
+// settings. `halfAt` below 1 would first lower the scale that far at 60 fps. Back to the full rate only from
 // half rate at maxScale with every setting restored: at once when a frame fits the full rate's budget with the dead
 // band to spare, else on trial. A GPU with time to spare at 30 fps lowers its clocks (the RTX 2060 here: 1935 -> ~1080
 // MHz, a frame's GPU time 1.4-1.75x), so a frame that would fit at 60 can read as not fitting at 30; with clear
@@ -19,7 +19,7 @@ export class QualityController {
   constructor({
     targetMs = 14, minScale = 0.5, maxScale = 1, step = 0.05, window = 12, deadband = 0.1,
     panicFactor = 1.6, panicFrames = 6, levels = [], onChange = () => {},
-    mode = 'auto', autoHalf = false, halfAt = 0.75, retryFrames = 720,
+    mode = 'auto', autoHalf = false, halfAt = 1, retryFrames = 720,
   } = {}) {
     Object.assign(this, { targetMs, minScale, maxScale, step, window, deadband, panicFactor, panicFrames, levels, onChange, mode, autoHalf, halfAt, retryFrames });
     this.trial = false; // back at the full rate on trial (from half rate)
