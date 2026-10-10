@@ -69,6 +69,9 @@ const TIERS = {
   medium: { pr: 1.5, ss: 1, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, fireflies: 400, shadow: 2048, far: 2048, impostorCell: 96, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4, atlas: 512, lodScale: 1, nearModels: false },
   low: { pr: 1.25, ss: 1, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, fireflies: 200, shadow: 1024, far: 1024, impostorCell: 64, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0, atlas: 512, lodScale: 1, nearModels: false },
 };
+// the main tree's falling petals and the carpet under it, as a share of the tier's `petals` and `fallen` (the rafts
+// on the water keep the full `fallen`)
+const MAIN_SHED = 0.75;
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
 // the runtime controller corrects from measured frame cost, so this only has to be roughly right. Integrated and
@@ -200,7 +203,7 @@ export async function create(canvas, opts = {}) {
     forest: { name: 'forest', args: { count: Q.forest } },
     cliffs: { name: 'cliffs' },
     bamboo: { name: 'bamboo' },
-    fallen: { name: 'fallen', args: { count: Q.fallen } },
+    fallen: { name: 'fallen', args: { count: Math.round(Q.fallen * MAIN_SHED) } },
     rafts: { name: 'rafts', args: { count: Math.round(Q.fallen * 1.2), tier: tierName } },
   }, { mainThread: opts.workers === false, onJob: (done, total) => progress('generate', done / total) });
   world.setHeightCache(G.heightCache);
@@ -547,11 +550,13 @@ export async function create(canvas, opts = {}) {
   for (let i = 0; i < sp3.length; i += 3) spawnPts.push(new THREE.Vector3(sp3[i], sp3[i + 1], sp3[i + 2]).add(treePos));
   const petalMat = petalMaterial();
   // WebGPU: simulated in a compute pass (petalsgpu.js), shed by every cherry, 2.5 times as many; WebGL and WebGPU in
-  // compatibility mode (no storage buffers in vertex shaders, four per compute shader): on the CPU, from the main tree
+  // compatibility mode (no storage buffers in vertex shaders, four per compute shader): on the CPU, from the main tree.
+  // The main tree sheds MAIN_SHED of a full canopy's share; the pool shrinks with it, so the small cherries keep theirs.
+  const shedders = [main, ...smallTrees].map((t) => ({ spawn: t.data.spawn, pos: t.group.position, scale: t.group.scale.x, weight: t === main ? MAIN_SHED : 1 }));
+  const shedShare = shedders.reduce((a, t) => a + t.spawn.length * t.weight, 0) / shedders.reduce((a, t) => a + t.spawn.length, 0);
   const petals = renderer.backend.isWebGPUBackend && !compat && opts.gpuPetals !== false
-    ? makeGpuPetals([main, ...smallTrees].map((t) => ({ spawn: t.data.spawn, pos: t.group.position, scale: t.group.scale.x, weight: 1 })),
-      grass.userData.groundAt, Math.round(Q.petals * 2.5), petalMaterial)
-    : new PetalSystem(world, spawnPts, Q.petals, petalMat, U.uWindDir.value);
+    ? makeGpuPetals(shedders, grass.userData.groundAt, Math.round(Q.petals * 2.5 * shedShare), petalMaterial)
+    : new PetalSystem(world, spawnPts, Math.round(Q.petals * MAIN_SHED), petalMat, U.uWindDir.value);
   petals.mesh.name = 'petals';
   scene.add(petals.mesh);
   const fallen = makeFallenPetals(G.fallen, petalMat);
