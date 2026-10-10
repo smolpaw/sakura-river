@@ -37,8 +37,8 @@ const starField = Fn(([s]) => {
   const px = length(fwidth(s)).div(m).mul(STAR_N * 0.6).mul(uStarPx);
   const r = length(fract(q).sub(o)).div(px);
   const k = hash12(c.add(5.1)).toVar();
-  // many faint stars, a few bright ones, all below the bloom's threshold (2.2, post.js) at their twinkle's peak: one
-  // over it blooms into a square (its first blur is nearly flat), on ultra's denser pixels most often
+  // many faint stars, a few bright ones, all below the bloom's threshold (2.2, post.js) at their twinkle's peak, so
+  // none blooms
   const b = pow(hash12(c.add(9.7)), 14.0).mul(3.2).min(2.0).add(0.004);
   const twinkle = sin(U.uTime.mul(k.mul(5.0).add(2.0)).add(k.mul(60.0))).mul(0.22).add(0.85);
   const tint = mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.68), hash12(c.add(3.3)));
