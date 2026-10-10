@@ -6,7 +6,7 @@ import {
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop,
 } from 'three/tsl';
-import { U, vnoise, hash12, sstep, LitMaterial, windPosition, windShadowPosition, lanternLight } from './tsl.js';
+import { U, vnoise, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
 import { sunShadow } from './sunshadow.js';
 
@@ -267,7 +267,7 @@ const skyToGrey = () => vec3(dot(U.uSkyAmb, vec3(0.3, 0.6, 0.1))).sub(U.uSkyAmb)
 export function barkMaterial(map, bumpMap) {
   return new LitMaterial({
     map, bumpMap, bumpScale: 0.5, vertexColors: true, roughness: 0.78, metalness: 0, color: new THREE.Color(1.9, 1.75, 1.75),
-    positionNode: windPosition(attribute('aFlex', 'float')), receivedShadowPositionNode: windShadowPosition(),
+    positionNode: treeWindPosition(), receivedShadowPositionNode: windShadowPosition(),
   }, (out) => Fn(() => {
     const vvB = viewDir();
     const rimB = pow(max(float(1.0).sub(max(dot(normalView, normalize(cameraViewMatrix.mul(vec4(vvB, 0.0)).xyz)), 0.0)), 0.0), 3.0);
@@ -298,7 +298,7 @@ const blossomLit = (bend, params) => {
   const canopyNormal = normalize(mix(normalize(normalLocal), attribute('aCanopyN', 'vec3'), bend));
   return new LitMaterial({
     side: THREE.DoubleSide, roughness: 0.72, metalness: 0, ...params,
-    positionNode: windPosition(attribute('aFlex', 'float'), null, canopyNormal), receivedShadowPositionNode: windShadowPosition(),
+    positionNode: treeWindPosition(true, canopyNormal), receivedShadowPositionNode: windShadowPosition(),
     // back faces flip like any double-sided normal (the old 'noFlip' patch never matched the unexpanded chunk)
     normalNode: transformNormalToView(canopyNormal).toVarying('vCanopyNormal').normalize().mul(faceDirection),
   }, blossomLight);
@@ -322,7 +322,7 @@ export function blossomDepthMaterial(atlas, alphaToCoverage) {
     colorNode: texture(atlas, flowerUV()),
     alphaTest: 0.4, side: THREE.DoubleSide, alphaToCoverage, fog: false, colorWrite: false,
     polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: 4,
-    positionNode: windPosition(attribute('aFlex', 'float')),
+    positionNode: treeWindPosition(true),
   });
 }
 
@@ -330,7 +330,7 @@ export function blossomDepthMaterial(atlas, alphaToCoverage) {
 export function blossomShadowMaterial(atlas) {
   return new THREE.MeshBasicNodeMaterial({
     colorNode: texture(atlas, flowerUV()), alphaTest: 0.4, side: THREE.DoubleSide, fog: false,
-    positionNode: windPosition(attribute('aFlex', 'float')),
+    positionNode: treeWindPosition(true),
   });
 }
 

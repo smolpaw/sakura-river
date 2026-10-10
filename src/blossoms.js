@@ -4,8 +4,19 @@
 // them; their shadow proxy keeps every flower). Re-sorted when the camera has moved STEP metres; the buffers are only
 // rewritten when a cell changes sides.
 import * as THREE from 'three/webgpu';
+import { FLOWER_ATTRS } from './tree.js';
 
 const CELL = 1.5, HYST = 1, STEP = 0.5;
+
+// a flower geometry's per-flower attributes from one instanced buffer of treeData's attrs (FLOWER_ATTRS floats each):
+// one interleaved buffer, as WebGPU guarantees only 8 vertex buffers; `canopy`: with the crown's normal (not for shadows)
+export function flowerAttributes(geo, ib, canopy = true) {
+  geo.setAttribute('aBendX', new THREE.InterleavedBufferAttribute(ib, 4, 0));
+  geo.setAttribute('aBendZ', new THREE.InterleavedBufferAttribute(ib, 4, 4));
+  geo.setAttribute('aBob', new THREE.InterleavedBufferAttribute(ib, 3, 8));
+  geo.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(ib, 2, 11));
+  if (canopy) geo.setAttribute('aCanopyN', new THREE.InterleavedBufferAttribute(ib, 3, 13));
+}
 
 // tree: buildTreeObject's result for the main tree; geo: the flower model's geometry
 export function nearBlossoms(tree, geo, mat, near) {
@@ -25,27 +36,25 @@ export function nearBlossoms(tree, geo, mat, near) {
   }
   let at = 0;
   for (const c of cells) { c.start = at; at += c.count; c.c.multiplyScalar(1 / c.count); c.fill = c.start; }
-  const M = new Float32Array(n * 16), C = new Float32Array(n * 3), A = new Float32Array(n * 6);
+  const M = new Float32Array(n * 16), C = new Float32Array(n * 3), A = new Float32Array(n * FLOWER_ATTRS);
   for (let i = 0; i < n; i++) {
     const j = cells[cellOf[i]].fill++;
     M.set(d.matrix.subarray(i * 16, i * 16 + 16), j * 16);
     C.set(d.color.subarray(i * 3, i * 3 + 3), j * 3);
-    A.set(d.attrs.subarray(i * 6, i * 6 + 6), j * 6);
+    A.set(d.attrs.subarray(i * FLOWER_ATTRS, (i + 1) * FLOWER_ATTRS), j * FLOWER_ATTRS);
   }
 
   const mesh = new THREE.InstancedMesh(geo, mat, n);
   mesh.name = 'blossomModels';
   mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
-  const ib = new THREE.InstancedInterleavedBuffer(new Float32Array(n * 6), 6);
-  geo.setAttribute('aFlex', new THREE.InterleavedBufferAttribute(ib, 1, 0));
-  geo.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(ib, 2, 1));
-  geo.setAttribute('aCanopyN', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+  const ib = new THREE.InstancedInterleavedBuffer(new Float32Array(n * FLOWER_ATTRS), FLOWER_ATTRS);
+  flowerAttributes(geo, ib);
   mesh.count = 0;
   mesh.boundingSphere = cards.boundingSphere;
   mesh.castShadow = false; mesh.receiveShadow = cards.receiveShadow;
   group.add(mesh);
 
-  const cardAttrs = cards.geometry.getAttribute('aFlex').data;
+  const cardAttrs = cards.geometry.getAttribute('aBendX').data;
   const draws = [
     { m: mesh.instanceMatrix, c: mesh.instanceColor, a: ib },
     { m: cards.instanceMatrix, c: cards.instanceColor, a: cardAttrs },
@@ -73,7 +82,7 @@ export function nearBlossoms(tree, geo, mat, near) {
         const k = c.near ? 0 : 1, D = draws[k], j = count[k];
         D.m.array.set(M.subarray(c.start * 16, (c.start + c.count) * 16), j * 16);
         D.c.array.set(C.subarray(c.start * 3, (c.start + c.count) * 3), j * 3);
-        D.a.array.set(A.subarray(c.start * 6, (c.start + c.count) * 6), j * 6);
+        D.a.array.set(A.subarray(c.start * FLOWER_ATTRS, (c.start + c.count) * FLOWER_ATTRS), j * FLOWER_ATTRS);
         count[k] += c.count;
       }
       mesh.count = nearCount = count[0];

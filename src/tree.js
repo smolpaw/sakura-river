@@ -45,10 +45,12 @@ export function growTree(seed, cfg, groundAt = () => 0) {
   const nz = makeNoise(seed + 99);
   const k = cfg.scale, D = cfg.maxDepth;
   const branches = [];
-  const anchors = []; // umbel sites: { p, d, f, depth }
+  const anchors = []; // umbel sites: { p, d, f, depth, br, i } (on branch br past its point i)
+  let limbs = 0;
 
-  // rng: the stream this branch and its offshoots draw from (the sprays have their own, so the rest stays the same)
-  function grow(start, dir, length, radius, depth, pathLen, rng = main) {
+  // rng: the stream this branch and its offshoots draw from (the sprays have their own, so the rest stays the same);
+  // up: the wind's hinges between the root and this branch's start (see bendAt); sys: the limb system it belongs to
+  function grow(start, dir, length, radius, depth, pathLen, rng = main, up = [], sys = null) {
     const rr = (a, b) => a + (b - a) * rng();
     const n = depth < 2 ? 6 : 4;
     const step = length / n;
@@ -70,7 +72,12 @@ export function growTree(seed, cfg, groundAt = () => 0) {
       rad.push(lerp(radius, r1, t));
       flex.push(pathLen + step * i);
     }
-    branches.push({ pts, rad, flex, depth });
+    // the first branch past the Blender model starts a limb system, which bobs in the wind on its own phase
+    if (depth === cfg.fused + 1) sys = { phase: (limbs++ * 0.618034) % 1 };
+    const hinges = [];
+    for (let i = 0; i < n; i++) hinges.push(hinge(pts[i], pts[i + 1], (rad[i] + rad[i + 1]) / 2, flex[i], depth > cfg.fused));
+    const br = { pts, rad, flex, depth, up, hinges, sys };
+    branches.push(br);
 
     const at = (t) => {
       const f = t * n, i = Math.min(n - 1, Math.floor(f)), u = f - i;
@@ -79,17 +86,18 @@ export function growTree(seed, cfg, groundAt = () => 0) {
         d: dirs[i].clone().lerp(dirs[i + 1], u).normalize(),
         r: lerp(rad[i], rad[i + 1], u),
         f: lerp(flex[i], flex[i + 1], u),
+        i,
       };
     };
 
     const nU = cfg.umbels[depth] || 0;
     for (let u = 0; u < nU; u++) {
       const s = at(depth === D ? 1 - rng() * rng() * 0.75 : rr(0.3, 1)); // terminal twigs flower towards the tip
-      anchors.push({ p: s.p, d: s.d, f: s.f, depth });
+      anchors.push({ p: s.p, d: s.d, f: s.f, depth, br, i: s.i });
     }
     for (let u = 0; u < ((cfg.fill && cfg.fill[depth]) || 0); u++) {
       const s = at(0.25 + 0.75 * rngFill());
-      anchors.push({ p: s.p, d: s.d, f: s.f, depth });
+      anchors.push({ p: s.p, d: s.d, f: s.f, depth, br, i: s.i });
     }
     if (depth === D) return;
 
@@ -105,7 +113,7 @@ export function growTree(seed, cfg, groundAt = () => 0) {
       if (out.lengthSq() > 1e-4) cd.addScaledVector(out.normalize(), 0.22); // open crown
       cd.normalize();
       const clen = length * (lead ? rr(0.72, 0.84) : rr(0.55, 0.74)), crad = s.r * (lead ? 0.8 : rr(0.52, 0.68));
-      grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f, rng);
+      grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f, rng, up.concat(hinges.slice(0, s.i + 1)), sys);
     };
     for (let c = 0; c < kids; c++) {
       if (depth === 0) {
@@ -116,7 +124,7 @@ export function growTree(seed, cfg, groundAt = () => 0) {
         cd = new V(Math.sin(pol) * Math.cos(az), Math.cos(pol), Math.sin(pol) * Math.sin(az));
         clen = (length - 0.5) * rr(1.1, 1.35);
         crad = s.r * rr(0.66, 0.78);
-        grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f, rng);
+        grow(s.p.clone().addScaledVector(cd, -crad * 0.5), cd, clen, crad, depth + 1, s.f, rng, up.concat(hinges.slice(0, s.i + 1)), sys);
       } else shoot(c === 0, rng);
     }
     // more flowering twigs for full bloom, from their own stream
@@ -145,7 +153,7 @@ export function growTree(seed, cfg, groundAt = () => 0) {
       const y = groundAt(x, z) + lerp(0.45, -0.02, Math.pow(t, 0.6)) - rr * 0.35;
       pts.push(new V(x, y, z)); rad.push(rr); flex.push(0);
     }
-    roots.push({ pts, rad, flex, depth: -1 });
+    roots.push({ pts, rad, flex, depth: -1, up: [], hinges: [], sys: null });
   }
   branches.push(...roots);
 
@@ -159,20 +167,21 @@ export function growTree(seed, cfg, groundAt = () => 0) {
   return { branches, anchors, canopy: { center: c, ext }, nz };
 }
 
-// a branch's centreline as rendered: Catmull-Rom smoothed (rings per depth), plus a closing tip
+// a branch's centreline as rendered: Catmull-Rom smoothed (rings per depth), plus a closing tip; seg: the branch's
+// own segment each point is on
 const RINGS = [24, 14, 10, 7, 5, 4];
 function branchPath(br) {
-  let { pts, rad, flex } = br;
+  let { pts, rad, flex } = br, seg = pts.map((_, i) => i);
   if (br.depth >= 0) {
     const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
     const n = RINGS[Math.min(br.depth, RINGS.length - 1)];
     const np = curve.getPoints(n);
-    const r2 = [], f2 = [];
+    const r2 = [], f2 = [], s2 = [];
     for (let i = 0; i <= n; i++) {
       const t = (i / n) * (pts.length - 1), k = Math.min(pts.length - 2, Math.floor(t)), u = t - k;
-      r2.push(lerp(rad[k], rad[k + 1], u)); f2.push(lerp(flex[k], flex[k + 1], u));
+      r2.push(lerp(rad[k], rad[k + 1], u)); f2.push(lerp(flex[k], flex[k + 1], u)); s2.push(k);
     }
-    pts = np; rad = r2; flex = f2;
+    pts = np; rad = r2; flex = f2; seg = s2;
   }
   const last = pts[pts.length - 1], prev = pts[pts.length - 2];
   const tipDir = last.clone().sub(prev).normalize();
@@ -180,6 +189,7 @@ function branchPath(br) {
     pts: pts.concat([last.clone().addScaledVector(tipDir, rad[rad.length - 1] * 0.8)]),
     rad: rad.concat([0.0005]),
     flex: flex.concat([flex[flex.length - 1]]),
+    seg: seg.concat([seg[seg.length - 1]]),
   };
 }
 
@@ -198,20 +208,48 @@ function frames(pts) {
   return { Ts, Ns };
 }
 
-// wind flexibility from path length along the tree (0 at the trunk)
+// wind flexibility from path length along the tree (0 at the trunk): how much the flowers flutter
 const flexOf = (f) => Math.pow(clamp((f - 2.2) / 14, 0, 1.4), 1.55);
+
+// ---------- the wind's bend ----------
+// Wood bends, it doesn't stretch: each segment of a branch is a hinge at its start that turns everything beyond it by
+// an angle proportional to the wind's push across it and to its compliance (longer and thinner: more; the trunk below
+// BEND_F0 m of path stays put). A point's offset is then the sum of the small turns of the hinges between it and the
+// root, which is linear in the push: bendAt gives it for a unit push along x and along z, which the shader scales by
+// the wind of the moment (tsl.js treeWindPosition), and for a unit push up of the point's own limb system alone (the
+// hinges past the Blender model), which bobs on its own phase. Linear turns lengthen a branch by the square of their
+// angle, so the angles stay small: a point moves by the hinges' sum over long levers, not by any one bending far.
+const BEND = 0.012, BEND_R = 0.1, BEND_P = 0.6, BEND_F0 = 1.6, BEND_F1 = 4;
+function hinge(a, b, r, f, own) {
+  const T = b.clone().sub(a), len = T.length();
+  return { p: a, T: T.multiplyScalar(1 / len), c: BEND * len * Math.pow(BEND_R / r, BEND_P) * smoothstep(BEND_F0, BEND_F1, f), own };
+}
+const turn = (out, c, T, w, r) => out.addScaledVector(w, c * T.dot(r)).addScaledVector(T, -c * w.dot(r));
+const AX = new V(1, 0, 0), AY = new V(0, 1, 0), AZ = new V(0, 0, 1);
+// p: a point of branch br past its point k (the hinges up to and including k turn it)
+function bendAt(br, k, p) {
+  const x = new V(), z = new V(), b = new V(), r = new V();
+  const add = (h) => {
+    r.subVectors(p, h.p);
+    turn(x, h.c, h.T, AX, r); turn(z, h.c, h.T, AZ, r);
+    if (h.own) turn(b, h.c, h.T, AY, r);
+  };
+  for (const h of br.up) add(h);
+  for (let i = 0; i <= Math.min(k, br.hinges.length - 1); i++) add(br.hinges[i]);
+  return { x, z, b };
+}
 
 // ---------- geometry ----------
 // the bark of the branches past cfg.fused (the rest is the Blender model's)
 export function buildBarkGeometry(tree, cfg, groundAt = () => 0) {
-  const P = [], Nn = [], UV = [], F = [], C = [], I = [];
+  const P = [], Nn = [], UV = [], BX = [], BZ = [], BB = [], C = [], I = [];
   const nz = tree.nz;
   const { center, ext } = tree.canopy;
   let vbase = 0;
   const tmpN = new V(), tmpB = new V();
   for (const br of tree.branches) {
     if (br.depth <= cfg.fused) continue;
-    const { pts, rad, flex } = branchPath(br);
+    const { pts, rad, seg } = branchPath(br);
     const r0 = rad[0];
     const radial = br.depth <= 0 ? 18 : r0 > 0.2 ? 14 : r0 > 0.09 ? 10 : r0 > 0.04 ? 7 : r0 > 0.02 ? 5 : 4;
     const n = pts.length;
@@ -224,6 +262,7 @@ export function buildBarkGeometry(tree, cfg, groundAt = () => 0) {
       const B = new V().crossVectors(T, Nv);
       const p = pts[i];
       const hg = p.y - groundAt(p.x, p.z);
+      const bend = bendAt(br, seg[i], p), phase = br.sys ? br.sys.phase : 0;
       for (let j = 0; j <= radial; j++) {
         const a = (j / radial) * Math.PI * 2;
         const ca = Math.cos(a), sa = Math.sin(a);
@@ -242,8 +281,8 @@ export function buildBarkGeometry(tree, cfg, groundAt = () => 0) {
         P.push(p.x + tmpN.x * r, p.y + tmpN.y * r, p.z + tmpN.z * r);
         Nn.push(tmpN.x, tmpN.y, tmpN.z);
         UV.push((j / radial) * circ, s * 0.9);
-        // flex: 0 at trunk, grows with path length
-        F.push(br.depth < 0 ? 0 : flexOf(flex[i]));
+        // the ring moves with its centreline (bendAt); wood doesn't flutter
+        BX.push(bend.x.x, bend.x.y, bend.x.z, 0); BZ.push(bend.z.x, bend.z.y, bend.z.z, phase); BB.push(bend.b.x, bend.b.y, bend.b.z);
         // bark AO + moss near ground
         const q = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y, (p.z - center.z) / ext.z).length();
         let ao = lerp(0.7, 1.0, smoothstep(0.2, 1.05, q));
@@ -263,7 +302,9 @@ export function buildBarkGeometry(tree, cfg, groundAt = () => 0) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
-  g.setAttribute('aFlex', new THREE.Float32BufferAttribute(F, 1));
+  g.setAttribute('aBendX', new THREE.Float32BufferAttribute(BX, 4));
+  g.setAttribute('aBendZ', new THREE.Float32BufferAttribute(BZ, 4));
+  g.setAttribute('aBob', new THREE.Float32BufferAttribute(BB, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
   g.setIndex(vbase > 65535 ? new THREE.Uint32BufferAttribute(I, 1) : new THREE.Uint16BufferAttribute(I, 1));
   g.computeBoundingSphere();
@@ -421,6 +462,9 @@ export function barkTextures({ size, map, bump }) {
 
 // flowers per umbel by quality tier
 const UMBEL = { high: [3, 5], medium: [2, 5], low: [2, 3] };
+// floats per flower in treeData's attrs: aBendX (bend for a push along x, flex), aBendZ (along z, limb phase), aBob,
+// aAtlas.xy, aCanopyN.xyz
+export const FLOWER_ATTRS = 16;
 
 // one tree: bark geometry and flower instance data
 export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
@@ -435,7 +479,7 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   if (cfg.flowerSize > 1) per = [1, Math.max(2, per[1] - 3)];
   const max = t.anchors.length * per[1];
   const matrix = new Float32Array(max * 16), color = new Float32Array(max * 3);
-  const attrs = new Float32Array(max * 6); // aFlex, aAtlas.xy, aCanopyN.xyz
+  const attrs = new Float32Array(max * FLOWER_ATTRS);
   const spawn = [];
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), sv = new V(), col = new THREE.Color();
   const Z = new V(0, 0, 1), UP = new V(0, 1, 0);
@@ -445,7 +489,7 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
     const perp = anyPerp(an.d).applyAxisAngle(an.d, rng() * TAU);
     const mid = an.p.clone().addScaledVector(perp, rr(0.03, 0.12) * k).addScaledVector(UP, 0.03 * k);
     const nF = per[0] + Math.floor(rng() * (per[1] - per[0] + 1));
-    const flex = flexOf(an.f);
+    const flex = flexOf(an.f), bend = bendAt(an.br, an.i, an.p), phase = an.br.sys ? an.br.sys.phase : 0;
     for (let f = 0; f < nF; f++) {
       const p = mid.clone().add(new V(rr(-1, 1), rr(-1, 1), rr(-1, 1)).multiplyScalar(0.12 * k * Math.sqrt(cfg.flowerSize)));
       const nrm = p.clone().sub(an.p).normalize().add(new V(rr(-0.6, 0.6), rr(-0.3, 0.7), rr(-0.6, 0.6))).normalize();
@@ -456,10 +500,11 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
       const cn = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y * 0.8, (p.z - center.z) / ext.z);
       const r = cn.length();
       cn.normalize();
-      const o = n * 6;
-      attrs[o] = flex;
-      attrs[o + 1] = rng() < 0.5 ? 0 : 0.5; attrs[o + 2] = rng() < 0.5 ? 0 : 0.5;
-      attrs[o + 3] = cn.x; attrs[o + 4] = cn.y; attrs[o + 5] = cn.z;
+      const o = n * FLOWER_ATTRS;
+      // the flower moves with the point of the branch it grows from
+      attrs.set([bend.x.x, bend.x.y, bend.x.z, flex, bend.z.x, bend.z.y, bend.z.z, phase, bend.b.x, bend.b.y, bend.b.z], o);
+      attrs[o + 11] = rng() < 0.5 ? 0 : 0.5; attrs[o + 12] = rng() < 0.5 ? 0 : 0.5;
+      attrs[o + 13] = cn.x; attrs[o + 14] = cn.y; attrs[o + 15] = cn.z;
       // inner flowers darker (canopy AO), white to blush
       const ao = lerp(0.45, 1.0, smoothstep(0.3, 1.05, r)) * (0.8 + 0.2 * clamp(cn.y + 0.5, 0, 1));
       const blush = Math.pow(rng(), 1.5);
@@ -470,16 +515,74 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
     }
   }
   return {
-    bark, sig: skeletonSig(t, cfg), n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * 6),
-    spawn: new Float64Array(spawn),
+    bark, sig: skeletonSig(t, cfg), n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * FLOWER_ATTRS),
+    spawn: new Float64Array(spawn), trunkBend: trunkBend(t, cfg),
   };
+}
+
+// The wind's bend along the Blender model's branches (the centrelines it was built round), for trunkBendAttributes:
+// per point its position and its bend for a push along x and along z (TRUNK_BEND floats), each branch's points in a
+// run; runs: [start, count] per branch. The model's part bobs with no limb system.
+const TRUNK_BEND = 9;
+function trunkBend(t, cfg) {
+  const pts = [], runs = [];
+  for (const br of fusedOf(t, cfg)) {
+    const path = branchPath(br), n = path.pts.length - 1; // without the closing tip, as in trunkSkeleton
+    runs.push(pts.length / TRUNK_BEND, n);
+    for (let i = 0; i < n; i++) {
+      const p = path.pts[i], b = bendAt(br, path.seg[i], p);
+      pts.push(p.x, p.y, p.z, b.x.x, b.x.y, b.x.z, b.z.x, b.z.y, b.z.z);
+    }
+  }
+  return { pts: new Float32Array(pts), runs: new Int32Array(runs) };
+}
+
+// aBendX, aBendZ and aBob for the Blender model's vertices (positions: its position array, in the tree's frame): each
+// takes the bend of the nearest point on the centrelines (interpolated along the segment it is nearest), so the model
+// bends as the branches grown onto it do.
+export function trunkBendAttributes(positions, { pts, runs }) {
+  const nv = positions.length / 3, BX = new Float32Array(nv * 4), BZ = new Float32Array(nv * 4), BB = new Float32Array(nv * 3);
+  const segs = [];
+  for (let r = 0; r < runs.length; r += 2) for (let i = runs[r]; i < runs[r] + runs[r + 1] - 1; i++) segs.push(i);
+  // a grid of the segments by their bounds (cells CELL m), so each vertex only tests the segments near it
+  const CELL = 0.75, grid = new Map(), key = (x, y, z) => `${x},${y},${z}`;
+  const P = (i, c) => pts[i * TRUNK_BEND + c];
+  for (const s of segs) {
+    const lo = [0, 1, 2].map((c) => Math.floor(Math.min(P(s, c), P(s + 1, c)) / CELL)), hi = [0, 1, 2].map((c) => Math.floor(Math.max(P(s, c), P(s + 1, c)) / CELL));
+    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) {
+      const k = key(x, y, z);
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(s);
+    }
+  }
+  for (let v = 0; v < nv; v++) {
+    const px = positions[v * 3], py = positions[v * 3 + 1], pz = positions[v * 3 + 2];
+    const cx = Math.floor(px / CELL), cy = Math.floor(py / CELL), cz = Math.floor(pz / CELL);
+    let best = Infinity, bs = -1, bu = 0;
+    // the 3x3x3 cells round it, then wider rings until a segment turns up (the roots' far ends, the trunk's flare)
+    for (let ring = 1; bs < 0 && ring < 8; ring++) for (let x = cx - ring; x <= cx + ring; x++) for (let y = cy - ring; y <= cy + ring; y++) for (let z = cz - ring; z <= cz + ring; z++) {
+      const list = grid.get(key(x, y, z));
+      if (!list) continue;
+      for (const s of list) {
+        const ax = P(s, 0), ay = P(s, 1), az = P(s, 2), dx = P(s + 1, 0) - ax, dy = P(s + 1, 1) - ay, dz = P(s + 1, 2) - az;
+        const u = clamp(((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / Math.max(1e-9, dx * dx + dy * dy + dz * dz), 0, 1);
+        const d = (ax + dx * u - px) ** 2 + (ay + dy * u - py) ** 2 + (az + dz * u - pz) ** 2;
+        if (d < best) { best = d; bs = s; bu = u; }
+      }
+    }
+    if (bs < 0) continue;
+    for (let c = 0; c < 3; c++) {
+      BX[v * 4 + c] = lerp(P(bs, 3 + c), P(bs + 1, 3 + c), bu);
+      BZ[v * 4 + c] = lerp(P(bs, 6 + c), P(bs + 1, 6 + c), bu);
+    }
+  }
+  return { BX, BZ, BB };
 }
 
 // ---------- the Blender model's part ----------
 // The trunk, the roots and the branches to depth cfg.fused are modelled in Blender (tools/cherry.py, one fused and
 // gnarled surface, in src/models/cherry.glb) from this: the same branches the rest of the tree grows from, as rendered
-// (smoothed, with each point's wind flexibility), the canopy the bark's shading darkens towards, and the ground
-// round the tree. The model is only right for the skeleton it was built from: skeletonSig tells if it went stale.
+// (smoothed), the canopy the bark's shading darkens towards, and the ground round the tree. The model is only right for the skeleton it was built from: skeletonSig tells if it went stale.
 const fusedOf = (t, cfg) => t.branches.filter((br) => br.depth <= cfg.fused);
 export function skeletonSig(t, cfg) {
   let h = 0;
@@ -491,9 +594,9 @@ export function trunkSkeleton(world, seed, cfg, pos) {
   const t = growTree(seed, cfg, groundAt);
   const r3 = (v) => [v.x, v.y, v.z].map((a) => +a.toFixed(4));
   const branches = fusedOf(t, cfg).map((br) => {
-    const { pts, rad, flex } = branchPath(br);
+    const { pts, rad } = branchPath(br);
     const n = pts.length - 1; // without the closing tip: the model rounds its own ends
-    return { depth: br.depth, pts: pts.slice(0, n).map(r3), rad: rad.slice(0, n).map((r) => +r.toFixed(4)), flex: flex.slice(0, n).map((f) => +flexOf(f).toFixed(4)) };
+    return { depth: br.depth, pts: pts.slice(0, n).map(r3), rad: rad.slice(0, n).map((r) => +r.toFixed(4)) };
   });
   // ground heights round the tree, 0.5 m apart
   const G = 24, ground = [];

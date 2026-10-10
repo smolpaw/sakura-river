@@ -2,7 +2,7 @@
 // post-lighting hook. One source compiles to WGSL (WebGPU) and GLSL (WebGL2 fallback).
 import * as THREE from 'three/webgpu';
 import {
-  Fn, If, float, vec2, vec3, vec4, uniform, mix, sin, fract, floor, dot, exp, max, abs, clamp, normalize, length, pow,
+  Fn, If, attribute, float, vec2, vec3, vec4, uniform, mix, sin, fract, floor, dot, exp, max, abs, clamp, normalize, length, pow,
   cameraPosition, positionWorld, positionLocal, normalWorld, modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, normalLocal, fog, varyingProperty,
   reference, renderGroup, texture, normalView, BRDF_GGX, BRDF_Lambert, specularColorBlended, specularF90, roughness, diffuseContribution,
 } from 'three/tsl';
@@ -89,6 +89,11 @@ export const vnoise = Fn(([p]) => {
 export const hashSin = Fn(([p]) => fract(sin(dot(p, vec2(12.9898, 78.233))).mul(43758.5453)));
 
 // ---------- wind ----------
+// a leaf's or a petal's shiver at world position wp, -0.8..0.8
+const flutterAt = (wp, t) => sin(t.mul(6.1).add(wp.x.mul(1.7)).add(wp.y.mul(2.3)).add(wp.z.mul(1.1))).mul(0.5)
+  .add(sin(t.mul(9.3).add(wp.z.mul(2.9)).sub(wp.y.mul(1.3))).mul(0.3));
+const FLUTTER = vec3(0.6, 1.0, 0.8).mul(0.06);
+
 // world-space offset for a vertex at world position wp with flexibility flex, at time t
 export const windOffset = Fn(([wp, flex, t]) => {
   const wd = U.uWindDir;
@@ -96,12 +101,11 @@ export const windOffset = Fn(([wp, flex, t]) => {
   const gust = sin(t.mul(0.31).add(wp.x.mul(0.015))).mul(sin(t.mul(0.19).add(1.3).add(wp.z.mul(0.01)))).mul(0.45).add(0.55).toVar();
   const phase = dot(wp.xz, wd).mul(0.09).toVar();
   const main = sin(t.mul(1.25).sub(phase).add(wp.y.mul(0.05))).mul(0.6).add(sin(t.mul(2.07).sub(phase.mul(1.7)).add(wp.x.mul(0.13))).mul(0.3)).toVar();
-  const flutter = sin(t.mul(6.1).add(wp.x.mul(1.7)).add(wp.y.mul(2.3)).add(wp.z.mul(1.1))).mul(0.5)
-    .add(sin(t.mul(9.3).add(wp.z.mul(2.9)).sub(wp.y.mul(1.3))).mul(0.3)).toVar();
+  const flutter = flutterAt(wp, t).toVar();
   const s = U.uWind.mul(flex).toVar();
   const off = dir.mul(s).mul(gust.mul(0.42).add(main.mul(0.28).mul(gust.add(0.4)))).toVar();
   off.addAssign(side.mul(s).mul(0.16).mul(sin(t.mul(1.55).add(wp.z.mul(0.21)).add(wp.x.mul(0.1)))));
-  off.addAssign(vec3(0.6, 1.0, 0.8).mul(flutter).mul(s).mul(s).mul(0.06));
+  off.addAssign(FLUTTER.mul(flutter).mul(s).mul(s));
   off.y.subAssign(s.mul(s).mul(0.12).mul(main.mul(0.5).add(0.5)));
   return off;
 });
@@ -116,12 +120,43 @@ export const receiverShadowPosition = (n = normalLocal) => shadowPos(modelWorldM
 // positionNode for wind-swayed geometry: displace in world space, return to local space.
 // `extra(wp)` may add further world-space displacement (grass wave). Shadow passes reuse positionNode.
 // Pair it with `windShadowPosition` as receivedShadowPositionNode (see above).
-export function windPosition(flexNode, extra = null, shadowNormal = normalLocal) {
+export function windPosition(flexNode, extra = null) {
   return Fn(() => {
     const wp = modelWorldMatrix.mul(vec4(positionLocal, 1.0)).xyz.toVar();
-    restShadowPos.assign(shadowPos(wp, shadowNormal));
+    restShadowPos.assign(shadowPos(wp, normalLocal));
     wp.addAssign(windOffset(wp, flexNode, U.uTime));
     if (extra) extra(wp);
+    return modelWorldMatrixInverse.mul(vec4(wp, 1.0)).xyz;
+  })();
+}
+
+// positionNode for the cherries' bark and flowers. The whole tree takes one wind, its phase from where the tree
+// stands, and the bend baked per vertex (tree.js bendAt: aBendX.xyz and aBendZ.xyz, how far the vertex moves for a
+// unit push along x and along z) turns it into the branches turning at their joints, so the wood never stretches and
+// the crown sways as one; on top each limb system bobs on its own phase (aBob for a unit push up, aBendZ.w the phase).
+// `flutter`: the flowers also shiver on their stalks, by their flexibility (aBendX.w), as windOffset's foliage does.
+// Pair it with `windShadowPosition` as receivedShadowPositionNode.
+export function treeWindPosition(flutter = false, shadowNormal = normalLocal) {
+  return Fn(() => {
+    const bx = attribute('aBendX', 'vec4'), bz = attribute('aBendZ', 'vec4'), bob = attribute('aBob', 'vec3');
+    const wp = modelWorldMatrix.mul(vec4(positionLocal, 1.0)).xyz.toVar();
+    restShadowPos.assign(shadowPos(wp, shadowNormal));
+    const o = modelWorldMatrix.mul(vec4(0.0, 0.0, 0.0, 1.0)).xyz.toVar();
+    const t = U.uTime, wd = U.uWindDir;
+    const gust = sin(t.mul(0.31).add(o.x.mul(0.015))).mul(sin(t.mul(0.19).add(1.3).add(o.z.mul(0.01)))).mul(0.45).add(0.55).toVar();
+    const phase = dot(o.xz, wd).mul(0.09).toVar();
+    const main = sin(t.mul(1.25).sub(phase)).mul(0.6).add(sin(t.mul(2.07).sub(phase.mul(1.7)).add(o.x.mul(0.13))).mul(0.3));
+    const along = gust.mul(0.42).add(main.mul(0.28).mul(gust.add(0.4)));
+    const across = sin(t.mul(1.55).add(o.z.mul(0.21)).add(o.x.mul(0.1))).mul(0.16);
+    const w = wd.mul(along).add(vec2(wd.y.negate(), wd.x).mul(across)).mul(U.uWind).toVar();
+    const lp = bz.w.mul(Math.PI * 2).toVar();
+    const bobbing = sin(t.mul(2.9).add(lp)).mul(0.6).add(sin(t.mul(4.7).add(lp.mul(2.0))).mul(0.4)).mul(gust.add(0.3)).mul(U.uWind).mul(0.5);
+    const off = bx.xyz.mul(w.x).add(bz.xyz.mul(w.y)).add(bob.mul(bobbing));
+    wp.addAssign(modelWorldMatrix.mul(vec4(off, 0.0)).xyz);
+    if (flutter) {
+      const s = U.uWind.mul(bx.w);
+      wp.addAssign(FLUTTER.mul(flutterAt(wp, t)).mul(s).mul(s));
+    }
     return modelWorldMatrixInverse.mul(vec4(wp, 1.0)).xyz;
   })();
 }

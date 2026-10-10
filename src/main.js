@@ -9,12 +9,12 @@ import { createWorld, depthTexture } from './world.js';
 import { U, sceneFog, pcfSoftShadowFilter, setLightMap } from './tsl.js';
 import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
 import { lightMap, lightMapAdd, lamp } from './lights.js';
-import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE } from './tree.js';
+import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE, FLOWER_ATTRS, trunkBendAttributes } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods, makeMerged, makeView, loadModel, ultraUrl, shareInstancedPipelines, modelVertices } from './lods.js';
 import { makeGrass } from './grass.js';
 import { bakeImpostors, makeImpostors } from './impostors.js';
-import { nearBlossoms } from './blossoms.js';
+import { nearBlossoms, flowerAttributes } from './blossoms.js';
 import forestUrl from './models/forest.glb?url&inline';
 import cliffsUrl from './models/cliffs.glb?url&inline';
 import bambooUrl from './models/bamboo.glb?url&inline';
@@ -276,14 +276,17 @@ export async function create(canvas, opts = {}) {
     return t;
   }
   // a trunk merged with its tree's twigs, in their layout: texture coordinates times cherry.py's UV_SCALE, the
-  // wind's flexibility from the colours' alpha
+  // wind's bend from the branches it was built round
   function withTrunk(d, k) {
-    const src = cherry.scene.getObjectByName(`trunk${k}`), t = unpacked(src), { uv, color } = src.geometry.attributes, n = uv.count;
+    const src = cherry.scene.getObjectByName(`trunk${k}`), t = unpacked(src), { uv } = src.geometry.attributes, n = uv.count;
     if (src.userData.sig !== d.sig) console.warn(`src/models/cherry.glb was built for other branches (tree ${k}): run node tools/blender.mjs cherry`);
-    const UV = new Float32Array(n * 2), F = new Float32Array(n);
-    for (let i = 0; i < n; i++) { UV[i * 2] = uv.getX(i) * 16; UV[i * 2 + 1] = uv.getY(i) * 16; F[i] = color.getW(i) * 2; }
+    const UV = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) { UV[i * 2] = uv.getX(i) * 16; UV[i * 2 + 1] = uv.getY(i) * 16; }
     t.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
-    t.setAttribute('aFlex', new THREE.BufferAttribute(F, 1));
+    const { BX, BZ, BB } = trunkBendAttributes(t.attributes.position.array, d.trunkBend);
+    t.setAttribute('aBendX', new THREE.BufferAttribute(BX, 4));
+    t.setAttribute('aBendZ', new THREE.BufferAttribute(BZ, 4));
+    t.setAttribute('aBob', new THREE.BufferAttribute(BB, 3));
     const merged = mergeGeometries([t, d.bark]);
     merged.computeBoundingSphere();
     return merged;
@@ -301,11 +304,7 @@ export async function create(canvas, opts = {}) {
     mesh.name = 'blossoms';
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
-    // one interleaved buffer for the per-flower attributes (fewer vertex buffers; WebGPU guarantees only 8)
-    const ib = new THREE.InstancedInterleavedBuffer(d.attrs, 6);
-    geo.setAttribute('aFlex', new THREE.InterleavedBufferAttribute(ib, 1, 0));
-    geo.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(ib, 2, 1));
-    geo.setAttribute('aCanopyN', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+    flowerAttributes(geo, new THREE.InstancedInterleavedBuffer(d.attrs, FLOWER_ATTRS));
     mesh.receiveShadow = castShadow;
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
@@ -321,9 +320,8 @@ export async function create(canvas, opts = {}) {
     if (castShadow) {
       // cast through a shadow-only proxy on layer 2 (see blossomShadowMaterial), every flower: the cards' own
       // buffers give the near ones up to the modelled flower (src/blossoms.js)
-      const pg = flowerGeo.clone(), pb = new THREE.InstancedInterleavedBuffer(d.attrs.slice(), 6);
-      pg.setAttribute('aFlex', new THREE.InterleavedBufferAttribute(pb, 1, 0));
-      pg.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(pb, 2, 1));
+      const pg = flowerGeo.clone();
+      flowerAttributes(pg, new THREE.InstancedInterleavedBuffer(d.attrs.slice(), FLOWER_ATTRS), false);
       const proxy = new THREE.InstancedMesh(pg, blossomShadowMat, d.n);
       proxy.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix.slice(), 16);
       proxy.boundingSphere = mesh.boundingSphere;

@@ -7,8 +7,8 @@
 # the limbs' bases, burls, and buttresses into the ground; bark grain along the normal; decimated to a budget.
 # Texture coordinates run round and along the branch each face is nearest (the page's bark texture, as on the twigs),
 # stored divided by UV_SCALE so they quantize; the shading is in the vertex colours (ambient occlusion, the crown's
-# shade, moss low on the trunk and on top of the big limbs, lichen), and the wind's flexibility, from the skeleton,
-# halved in their alpha.
+# shade, moss low on the trunk and on top of the big limbs, lichen). The page bends it in the wind by the skeleton's
+# branches (src/tree.js trunkBendAttributes).
 import bpy, bmesh, json, math, os, random, sys
 from mathutils import Vector, noise
 from mathutils.kdtree import KDTree
@@ -37,7 +37,7 @@ class Branch:
         self.depth, self.length, self.r0 = b['depth'], cum[-1], b['rad'][0]
         self.circ = max(1, round(self.r0 * 7))  # bark texture repeats round it, as on the twigs (tree.js)
         n = max(2, int(self.length / ds) + 1)
-        self.s, self.p, self.r, self.f = [], [], [], []
+        self.s, self.p, self.r = [], [], []
         k = 0
         for i in range(n):
             s = self.length * i / (n - 1)
@@ -53,7 +53,6 @@ class Branch:
             self.s.append(s)
             self.p.append(p)
             self.r.append(r)
-            self.f.append(lerp(b['flex'][k], b['flex'][k + 1], u))
         self.t = [(self.p[min(i + 1, n - 1)] - self.p[max(i - 1, 0)]).normalized() for i in range(n)]
         a = V((0, 0, 1)) if abs(self.t[0].z) < 0.9 else V((1, 0, 0))
         self.N = [self.t[0].cross(a).normalized()]
@@ -204,12 +203,11 @@ def trunk(t, seed, res, target):
     ao = vertex_ao(bm, 1.2)
     cc, ce = bl(t['canopy']['center']), t['canopy']['ext']
     ce = V((ce[0], ce[2], ce[1]))
-    flex, cols = [], []
+    cols = []
     for v in bm.verts:
         bi, i = nearest(v.co)
         br = brs[bi]
         p, n = v.co, v.normal
-        flex.append(br.f[i])
         hg = p.z - ground(p)
         q = V(((p.x - cc.x) / ce.x, (p.y - cc.y) / ce.y, (p.z - cc.z) / ce.z)).length
         # the crown's shade and the ground's, as on the twigs (tree.js), and the hollows' from ray casting
@@ -249,7 +247,7 @@ def trunk(t, seed, res, target):
     bm.free()
     ca = me.color_attributes.new('Color', 'FLOAT_COLOR', 'POINT')
     for i, c in enumerate(cols):
-        ca.data[i].color = (*c, flex[i] / 2)
+        ca.data[i].color = (*c, 1.0)
     me.color_attributes.active_color = ca
     ob = link(me, t['name'])
     ob['sig'] = t['sig']
