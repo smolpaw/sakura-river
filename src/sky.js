@@ -120,8 +120,12 @@ export function makeSky() {
       const r = length(vec2(off, max(x.negate(), 0.0))).div(px);
       const along = clamp(x.div(uMeteorLen), 0.0, 1.0);
       const trail = float(1.0).sub(along).mul(float(1.0).sub(along)).mul(step(0.0, dot(d, uMeteorHead)));
-      // (held below the bloom's threshold, like the stars)
-      col.addAssign(vec3(0.85, 0.9, 1.0).mul(exp(r.mul(r).mul(-0.8)).mul(trail).mul(uMeteor).min(2.0).mul(sstep(0.0, 0.08, h))));
+      // the streak held below the bloom's threshold (2.2, post.js), where a line a pixel wide blooms in lumps; a bright
+      // meteor's light over that in a point a few pixels wide at its head, which blooms round
+      const line = exp(r.mul(r).mul(-0.8)).mul(trail).mul(uMeteor).min(2.0);
+      const rh = length(vec2(off, x)).div(px);
+      const head = exp(rh.mul(rh).mul(-0.3)).mul(max(uMeteor.sub(2.0), 0.0));
+      col.addAssign(vec3(0.85, 0.9, 1.0).mul(line.add(head)).mul(sstep(0.0, 0.08, h)));
     });
     // moon: a crescent cut from the disc by a larger circle (a gentle inner arc), shaded as a sphere with seas and
     // craters and a slightly ragged inner edge; the dark part is left to the sky; a glow off the lit limb
