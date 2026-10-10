@@ -1123,7 +1123,7 @@ export async function create(canvas, opts = {}) {
     // (every pass on the first frames and on those of the warm-up that bring parts of the scene in)
     const every = frameNo < 3 || revealing;
     sun.shadow.needsUpdate = frameNo % shadowEvery === 0 || every;
-    farShadow.update(scene, U.uSunDir.value, { every: timeTween ? 4 : 15, force: every || opts.farEveryFrame });
+    farShadow.update(scene, U.uSunDir.value, { every: timeTween ? 4 : 15, force: every || opts.farEveryFrame, warm: warming });
     // the reflector skips when the camera is below the water plane; fall back to the analytic sky then
     reflSkip = !(frameNo % reflEvery === 0 || every);
     water.uniforms.uHasRefl.value = reflector && reflEvery < 1e9 && camera.position.y > 0.02 ? 1 : 0;

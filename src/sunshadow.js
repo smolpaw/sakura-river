@@ -134,10 +134,12 @@ export function makeFarShadow(renderer, size) {
   return {
     // toSun: towards the sun. Redrawn once the sun has moved by more than ~0.04 degrees (only a time-lapse moves it),
     // at most every `every` frames; `force` redraws now. A redraw costs ~1.5 ms of GPU time at 4096 (RTX 2060), so
-    // not every frame.
-    update(scene, toSun, { every = 8, force = false } = {}) {
+    // not every frame. Not drawn with the sun down, except on the warm-up (`warm`): a page opened at night would
+    // otherwise build every caster's pipeline for it in one frame as the first time-lapse brings the sun up (a
+    // visible freeze); the map drawn from below the ground is never seen, as the sun is dark until it is redrawn.
+    update(scene, toSun, { every = 8, force = false, warm = false } = {}) {
       wait--;
-      if (!uOn.value || toSun.y < -0.05) return false;
+      if (!uOn.value || (toSun.y < -0.05 && !warm)) return false;
       if (!force && (wait > 0 || last.dot(toSun) > 0.9999998)) return false;
       last.copy(toSun);
       wait = every;
