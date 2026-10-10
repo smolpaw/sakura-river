@@ -20,9 +20,11 @@ const aces170 = Fn(([color, exposure]) => {
   return clamp(o, 0.0, 1.0);
 });
 
-// r170's UnrealBloomPass, reproduced exactly: luminosity high pass at half size, 5 mips of separable Gaussian
-// blur (kernel radius 3..11, sigma = radius), composite. Its final copy was blended additively with SRC_ALPHA
-// while the composite alpha was strength * sum(mip factors), so the added light is rgb * that alpha.
+// r170's UnrealBloomPass but for the blur: luminosity high pass at half size, 5 mips of separable Gaussian blur
+// (kernel radius 3..11), composite. Its final copy was blended additively with SRC_ALPHA while the composite alpha
+// was strength * sum(mip factors), so the added light is rgb * that alpha. r170's sigma was the kernel radius, so the
+// last tap still weighed 60% of the centre: a near-box blur that drew a small bright light (a firefly's flash) as
+// nested squares. Here sigma is half the last tap's offset (it weighs 14%), with the same taps.
 export function unrealBloom(input, { threshold = 2.2, radius = 0.55, strength = 0.4 } = {}) {
   const u = { strength: uniform(strength), radius: uniform(radius), threshold: uniform(threshold) };
   const size = (w, h) => { const out = []; let x = Math.round(w / 2), y = Math.round(h / 2); for (let i = 0; i < 6; i++) { out.push([Math.max(1, x), Math.max(1, y)]); x = Math.round(x / 2); y = Math.round(y / 2); } return out; };
@@ -37,7 +39,8 @@ export function unrealBloom(input, { threshold = 2.2, radius = 0.55, strength = 
   const inv = kernels.map(() => uniform(new THREE.Vector2(1, 1)));
   const blur = (src, k, invSize, dir) => Fn(() => {
     const coef = [];
-    for (let i = 0; i < k; i++) coef.push(0.39894 * Math.exp((-0.5 * i * i) / (k * k)) / k);
+    const sigma = (k - 1) / 2;
+    for (let i = 0; i < k; i++) coef.push(Math.exp((-0.5 * i * i) / (sigma * sigma)));
     const sum = src.sample(uv()).rgb.mul(coef[0]).toVar();
     let wsum = coef[0];
     for (let i = 1; i < k; i++) {
