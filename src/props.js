@@ -4,12 +4,15 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { makeNoise, mulberry32, clamp, lerp, smoothstep } from './noise.js';
 import { LANTERN_TEXTS } from './lanterns.js';
 import { kit, skyLight } from './temple.js';
+import { KIND, tagKinds } from './kinds.js';
 
 const V = THREE.Vector3;
 
 const STONE = [0.33, 0.31, 0.29];
 const VERM = [0.62, 0.055, 0.02], VERM_D = [0.38, 0.03, 0.012];
 const BRONZE = [0.5, 0.36, 0.12], LACQUER = [0.03, 0.025, 0.025], COPPER = [0.09, 0.13, 0.1], PLANK = [0.25, 0.19, 0.14];
+// the photographed textures the bridge's parts take, by colour (kinds.js)
+const KINDS = [[VERM, KIND.PAINT], [VERM_D, KIND.PAINT], [PLANK, KIND.WOOD], [STONE, KIND.STONE]];
 
 // ---------------- vermilion arched bridge (taiko-bashi) ----------------
 // A lacquered arch on three bents of round piles (through ties, cross braces, copper sheathing at the waterline), the
@@ -220,6 +223,7 @@ export function bridgeData(world, zc) {
       lantern(tip.clone().add(new V(0, -0.05, 0)));
     }
   }
+  tagKinds(k.parts, KINDS);
   skyLight(k.parts);
   const geo = mergeGeometries(k.parts);
   geo.deleteAttribute('aGlow');

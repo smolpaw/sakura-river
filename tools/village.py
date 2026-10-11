@@ -37,18 +37,43 @@ SHU = srgb('#c23b22')        # the torii's vermilion
 BLACK = srgb('#1c1a19')
 LOG = srgb('#5a4330'); LOG_END = srgb('#b89a6c')
 
+# Surface kinds for the photographed textures (src/kinds.js KIND, the same numbers), stored per vertex as kind / 8 in the attribute
+# _KIND: which photo a part takes, worked out from the palette colour it is painted in (scaled by shading or worn
+# towards another, so the nearest entry by hue, then by brightness). Parts that glow (the shoji) take none.
+K_NONE, K_THATCH, K_WOOD, K_PLASTER, K_STONE, K_TILE, K_PAINT, K_CARVED = 0, 1, 2, 3, 4, 5, 6, 7
+PALETTE = [(WOOD, K_WOOD), (WOOD_L, K_WOOD), (WOOD_D, K_WOOD), (LOG, K_WOOD), (SHU, K_PAINT), (PLASTER, K_PLASTER), (STONE, K_STONE),
+           (THATCH, K_THATCH), (THATCH_CUT, K_THATCH), (THATCH_D, K_THATCH), (MOSS, K_THATCH), (TILE, K_TILE), (BLACK, K_NONE)]
+
+
+def surface_kind(c, glow=0.0, palette=PALETTE):
+    if glow > 0:
+        return K_NONE
+    lum = lambda x: 0.2126 * x[0] + 0.7152 * x[1] + 0.0722 * x[2]
+    chroma = lambda x: [v / (x[0] + x[1] + x[2] + 1e-9) for v in x[:3]]
+    a = chroma(c)
+    best = min(palette, key=lambda e: 100 * sum((x - y) ** 2 for x, y in zip(a, chroma(e[0])))
+               + math.log((lum(c) + 1e-4) / (lum(e[0]) + 1e-4)) ** 2)
+    return best[1]
+
 
 class Kit:
     """Parts into one bmesh, each vertex its colour and glow (alpha); flat faces unless smooth."""
 
-    def __init__(self):
+    def __init__(self, palette=PALETTE):
+        self.palette = palette  # (colour, kind) pairs surface_kind picks from
         self.bm = bmesh.new()
         self.col = self.bm.verts.layers.float_color.new('Color')
+        self.kind = self.bm.verts.layers.float.new('_KIND')
+        self.force = None  # a kind for the parts made meanwhile, in place of surface_kind's guess
+
+    def paint(self, v, c, glow):
+        v[self.col] = (*c, glow)
+        v[self.kind] = (self.force if self.force is not None else surface_kind(c, glow, self.palette)) / 8
 
     def mesh(self, verts, faces, c, glow=0.0, smooth=False):
         vs = [self.bm.verts.new(p) for p in verts]
         for v in vs:
-            v[self.col] = (*c, glow)
+            self.paint(v, c, glow)
         for f in faces:
             try:
                 face = self.bm.faces.new([vs[i] for i in f])
@@ -101,7 +126,7 @@ class Kit:
         self.bm.normal_update()
         for v in self.bm.verts[n0:]:
             c, g = colour_fn(v.co, v.normal)
-            v[self.col] = (*c, g)
+            self.paint(v, c, g)
         for f in self.bm.faces[f0:]:
             f.smooth = True
 
@@ -143,7 +168,7 @@ class Kit:
             n = nor[key].normalized()
             q = p - n * disp(p, n) if disp else p
             v = self.bm.verts.new(m @ q)
-            v[self.col] = (*(col(p, n) if callable(col) else col), glow)
+            self.paint(v, col(p, n) if callable(col) else col, glow)
             vs[key] = v
         for q in quads:
             try:
@@ -167,7 +192,7 @@ class Kit:
                     p = a.lerp(b, i / cols)
                     c, g = col(p, (s + i / cols) / n, t)
                     v = self.bm.verts.new(p)
-                    v[self.col] = (*c, g)
+                    self.paint(v, c, g)
                     row.append(v)
             grid.append(row)
         w = n * cols
@@ -188,7 +213,7 @@ class Kit:
         for idx, v in enumerate(new):
             j, i = divmod(idx, seg)
             c, g = col(v.co, min(1.0, j / max(1, len(pts) - 1)), i / seg if j < len(pts) else 0.0)
-            v[self.col] = (*c, g)
+            self.paint(v, c, g)
         for f in self.bm.faces[f0:]:
             f.smooth = True
         return new
@@ -694,7 +719,9 @@ def log_end(k, a, b, r, shade):
     t = d.orthogonal().normalized()
     w = d.cross(t)
     rings = [[b + (t * math.cos(2 * math.pi * i / 8) + w * math.sin(2 * math.pi * i / 8)) * rr for i in range(8)] for rr in (r, r * 0.8)]
+    k.force = K_WOOD
     c = k.mesh(rings[0] + rings[1] + [b], [], LOG_END * shade)
+    k.force = None
     for v in c[:8]:
         v[k.col] = (*(LOG * 0.8), 0.0)
     c[16][k.col] = (*(LOG_END * shade * 0.7), 0.0)
@@ -747,7 +774,9 @@ def koya(name, *, far, near=False):
                 if near:
                     log_end(k, V((x, D / 2 + 0.05, z)), V((x, D / 2 + 0.56, z)), 0.082, shade)
                 else:
+                    k.force = K_WOOD
                     k.cyl(LOG_END * shade, V((x, D / 2 + 0.55, z)), V((x, D / 2 + 0.56, z)), 0.08, seg=5, smooth=False)
+                    k.force = None
     else:
         k.box(LOG * 1.2, (L, 0.5, 1.0), V((0, D / 2 + 0.3, 0.7)))
     return finish(k, name + suffix(far, near), 0.8)
@@ -920,4 +949,4 @@ if __name__ == '__main__':
         ):
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
-                              export_texcoords=False, export_yup=True)
+                              export_texcoords=False, export_yup=True, export_attributes=True)

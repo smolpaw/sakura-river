@@ -4,7 +4,7 @@
 
 A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Deer graze, a heron fishes the shallows, a fisherman and a rice planter work, and birds, butterflies, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
-Everything you see is generated in code: no image assets. The models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models) and the sound (recordings); both are credited below.
+Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, earth), and the sound (recordings); all are credited below.
 
 Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
 
@@ -39,8 +39,8 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - Animals and people: `koi.js`, `deer.js`, `heron.js`, `birds.js`, `perched.js`, `butterflies.js`, `figures.js`.
 - Walk mode: `walk.js` (the path network and the input), `walker.js` (the traveller's body).
 - `src/audio.js`: music and ambience.
-- `src/models/`: models inlined in the page. `public/models/`: models fetched later (the traveller, the people at work, the Ultra tier's near models). `public/audio/`: sounds.
-- `tools/`: model and audio build scripts. `bench/`: headless capture and timing scripts. `docs/performance.md`: renderer performance notes.
+- `src/models/`: models inlined in the page. `public/models/`: models fetched later (the traveller, the people at work, the Ultra tier's near models). `public/audio/`: sounds. `public/textures/`: photographed textures.
+- `tools/`: model, audio and texture build scripts. `bench/`: headless capture and timing scripts. `docs/performance.md`: renderer performance notes.
 
 ## Engine API
 
@@ -98,3 +98,18 @@ Footsteps (every `step-*` file carries the geta recording's knock, so all of the
 Every model except the deer is built by a Blender script in `tools/`, which describes what it builds at its top.
 
 The deer come from the Ultimate Animated Animal Pack by Quaternius (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0: "Deer" (the hinds) and "Stag", as served by Poly Pizza (https://poly.pizza/m/T6Cs7tmMHJ, https://poly.pizza/m/tQdzbZ1Cmw). `tools/models.mjs` trims their clips, bakes in their colours and subdivides them. `src/deer.js` reshapes them into sika deer and paints on their coats.
+
+## Textures
+
+Close up, these surfaces are photographed texture sets from Poly Haven (https://polyhaven.com), CC0, laid over the scene's own colours as detail. `tools/textures.mjs` downloads them into `public/textures/` as WebP.
+
+- The cherries' bark: "Sakura Bark" by Charlotte Baglioni.
+- The boulders, pebbles, the gorge's walls and the village's dry-stone walls: "Lichen Rock" by Rico Cilliers.
+- The lanes' earth: "Stony Dirt Path" by eye-candy.xyz.
+- The farmhouses' thatch: "Thatch Roof Angled" by Rob Tuytel and Dimitrios Savva.
+- Timber (the houses, the temple, the bridge, the lamp posts, the boats; under the vermilion lacquer too): "Weathered Planks" by Dario Barresi and Dimitrios Savva.
+- The storehouse's and the temple's plaster: "Grey Plaster 02" by Rob Tuytel.
+- Roof tiles: "Grey Roof Tiles" by Rob Tuytel.
+- Built stone (foundations, the temple's base, the bridge's abutments): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
+- Carved stone (the Jizō, the stone lanterns, the lamps' feet): "Rock Surface" by Amal Kumar.
+- The woods' bark: "Japanese Cedar Bark" by Charlotte Baglioni.

@@ -332,8 +332,10 @@ function put(L, i, j, color) {
 // applied, a plain index
 function plainGeometry(gltf, name) {
   const src = gltf.scene.getObjectByName(name), g = new THREE.BufferGeometry();
-  for (const k of ['position', 'normal', 'color']) {
-    const a = src.geometry.attributes[k], out = new Float32Array(a.count * a.itemSize);
+  for (const k of ['position', 'normal', 'color', '_kind']) {
+    const a = src.geometry.attributes[k];
+    if (!a) continue; // (_kind: the surface kinds of the models that have them, materials.js PHOTO_KIND)
+    const out = new Float32Array(a.count * a.itemSize);
     for (let i = 0; i < a.count; i++) for (let j = 0; j < a.itemSize; j++) out[i * a.itemSize + j] = a.getComponent(i, j);
     g.setAttribute(k, new THREE.BufferAttribute(out, a.itemSize));
   }

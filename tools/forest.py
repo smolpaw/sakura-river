@@ -10,6 +10,7 @@ from mathutils import Vector, Matrix, noise
 from mathutils.bvhtree import BVHTree
 
 BARK = (0.07, 0.055, 0.045)
+K_BARK = 8  # the bark's surface kind (src/kinds.js KIND.BARK; the crowns' is 0), as kind / 8 in _KIND
 V = Vector
 
 
@@ -177,6 +178,8 @@ def with_leaves(me, n, size, seed, *, shape=(1.0, 0.45), lift=(0.3, 0.9), where=
     corner = [V(c.vector) for c in me.corner_normals]  # kept per corner: sharp edges stay sharp
     ca = me.color_attributes['Color']
     cols = [tuple(d.color) for d in ca.data]
+    ka = me.attributes.get('_KIND')  # (the surface kinds, assemble(): carried over, the leaves none)
+    kinds = [d.value for d in ka.data] if ka else None
     polys = [tuple(p.vertices) for p in me.polygons]
     tri = [(p[0], p[i], p[i + 1]) for p in polys for i in range(1, len(p) - 1)]
     ok = [t for t in tri if where(sum((cos[j] for j in t), V()) / 3, (cos[t[1]] - cos[t[0]]).cross(cos[t[2]] - cos[t[0]]).normalized(), t)]
@@ -212,6 +215,8 @@ def with_leaves(me, n, size, seed, *, shape=(1.0, 0.45), lift=(0.3, 0.9), where=
     for i, c in enumerate(cols):
         oc.data[i].color = c
     out.color_attributes.active_color = oc
+    if kinds is not None:
+        out.attributes.new('_KIND', 'FLOAT', 'POINT').data.foreach_set('value', kinds + [0.0] * (len(cos) - len(kinds)))
     # in place of `me` on its object
     for ob in bpy.data.objects:
         if ob.data == me:
@@ -321,9 +326,10 @@ def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0
     ao = vertex_ao(bm, ao_reach, lambda a, b: a[kind] == b[kind])
     if cards:
         leaf_cards(name, bm, kind, crowns[0][1], mid, soft, low, ao_reach, ao_min, **cards)
-    cols, nors = [], []
+    cols, nors, kinds = [], [], []
     for v in bm.verts:
         n, a, k = v.normal, ao[v.index], v[kind]
+        kinds.append(K_BARK / 8 if k < 0 else 0.0)
         if k < 0:
             c = [x * lerp(0.45, 1.0, a) for x in BARK]
             nors.append(n.copy())
@@ -350,6 +356,7 @@ def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0
     for i, c in enumerate(cols):
         ca.data[i].color = (*c, 1.0)
     me.color_attributes.active_color = ca
+    me.attributes.new('_KIND', 'FLOAT', 'POINT').data.foreach_set('value', kinds)
     me['n_crown'] = n_crown  # (the crowns' vertices come first: near_refine tells them from the bark so)
     link(me, name)
     return me
@@ -543,4 +550,4 @@ if __name__ == '__main__':
         me = KINDS[kind](0, full[kind])
         print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
-                              export_texcoords=True, export_yup=True)
+                              export_texcoords=True, export_yup=True, export_attributes=True)

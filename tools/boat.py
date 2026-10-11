@@ -19,7 +19,7 @@ from mathutils import Vector, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from forest import lerp, link, smoothstep, tris
-from village import Kit, srgb
+from village import Kit, srgb, K_WOOD
 from lamps import finish
 
 V = Vector
@@ -32,6 +32,8 @@ INSIDE = srgb('#6a5948')
 FLOOR = srgb('#463a2e')
 WET = srgb('#2f2a22')      # below the waterline
 ALGAE = srgb('#5e7030')
+# the photographed textures the parts take (village.py surface_kind): all of it cedar
+PALETTE = [(c, K_WOOD) for c in (SILVER, BROWN, INSIDE, FLOOR, WET, ALGAE)]
 WORN = srgb('#a1968a')     # the gunwale's top, worn pale by hands
 BILGE = srgb('#22251d')
 BAMBOO = srgb('#9a8f6e')
@@ -116,7 +118,7 @@ def grid(k, pts, want, smooth=True):
         r = []
         for p, c in row:
             v = k.bm.verts.new(p)
-            v[k.col] = (*c, 0.0)
+            k.paint(v, c, 0.0)
             r.append(v)
         vs.append(r)
     for j in range(len(vs) - 1):
@@ -130,7 +132,7 @@ def poly(k, pts, want):
     vs = []
     for p, cc in pts:
         v = k.bm.verts.new(p)
-        v[k.col] = (*cc, 0.0)
+        k.paint(v, cc, 0.0)
         vs.append(v)
     orient(k.bm.faces.new(vs), want)
     return vs
@@ -193,7 +195,7 @@ def hull(k, far):
                 r = []
                 for a, b in prof:
                     v = k.bm.verts.new(p + up * a + out * b)
-                    v[k.col] = (*c, 0.0)
+                    k.paint(v, c, 0.0)
                     r.append(v)
                 vs.append((r, p + out * 0.013))
             for j in range(len(vs) - 1):
@@ -282,7 +284,7 @@ def gear(k, far):
 
 def boat(level):
     far = level == '_far'
-    k = Kit()
+    k = Kit(PALETTE)
     hull(k, far)
     thwarts(k, far)
     bilge(k, far)
@@ -293,7 +295,7 @@ def boat(level):
 def mask():
     """the hull's inside a little above the waterline, flat: the page draws it into the depth buffer only, so the river's
     surface is not drawn over the floor inside the hull"""
-    k = Kit()
+    k = Kit(PALETTE)
     zm = WATERLINE + 0.035
     xs, n1 = stations(False)
     rows = []
@@ -314,7 +316,7 @@ def mask():
 
 
 def stake():
-    k = Kit()
+    k = Kit(PALETTE)
     rng = random.Random(8)
     col = cedar(9)
     # a round stake, sunk 0.4 m, leaning a little, its top split and darkened
@@ -329,14 +331,14 @@ def stake():
             p = V((math.cos(a) * r, math.sin(a) * r, z))
             v = k.bm.verts.new(p)
             c = BROWN.lerp(SILVER, 0.5 + 0.3 * noise.noise(p * 9)) * (0.6 if z <= 0.05 else 1.0)
-            v[k.col] = (*c, 0.0)
+            k.paint(v, c, 0.0)
             rr.append(v)
         rings.append(rr)
     for j in range(len(rings) - 1):
         for i in range(seg):
             k.bm.faces.new((rings[j][i], rings[j][(i + 1) % seg], rings[j + 1][(i + 1) % seg], rings[j + 1][i])).smooth = True
     capc = k.bm.verts.new(V((0.0, 0.0, top + 0.02)))
-    capc[k.col] = (*(BROWN * 0.6), 0.0)
+    k.paint(capc, BROWN * 0.6, 0.0)
     for i in range(seg):
         k.bm.faces.new((rings[-1][i], rings[-1][(i + 1) % seg], capc))
     k.box(BROWN * 0.35, (0.1, 0.008, 0.12), V((0.0, 0.0, top - 0.04)))  # the split down from its top
@@ -358,4 +360,4 @@ if __name__ == '__main__':
     for me in (boat(''), boat('_far'), mask(), stake()):
         print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
-                              export_texcoords=False, export_yup=True)
+                              export_texcoords=False, export_yup=True, export_attributes=True)

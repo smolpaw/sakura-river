@@ -48,6 +48,7 @@ import { makeDeer } from './deer.js';
 import { makeHerons } from './heron.js';
 import { makeFigures } from './figures.js';
 import * as M from './materials.js';
+import PHOTO_SETS from './textures.json';
 import { createGPUProbe } from './bench-probe-gpu.js';
 import { QualityController } from './quality.js';
 import { hashScene } from './bench-hash.js';
@@ -178,6 +179,14 @@ export async function create(canvas, opts = {}) {
     const k = area.indexOf(Math.min(...area));
     fieldJobs[k].push(i); area[k] += a;
   });
+  // the photographed textures (tools/textures.mjs, public/textures/), fetched while the scene generates; without
+  // them the bark and the stone keep their procedural look
+  const photoLoader = new THREE.TextureLoader();
+  const photoUrl = (n) => new URL(`textures/${n}.webp`, document.baseURI).href;
+  const photosLoading = Promise.all(Object.entries(PHOTO_SETS).map(([name, meta]) =>
+    Promise.all([photoLoader.loadAsync(photoUrl(`${name}_diff`)), photoLoader.loadAsync(photoUrl(`${name}_nor`))]).then(([diff, nor]) => [name, { ...meta, diff, nor }])))
+    .then(Object.fromEntries)
+    .catch((e) => { console.warn('photographed textures not loaded:', e && e.message); return null; });
   const { results: G, stats: genStats } = await runJobs({
     terrain: { name: 'terrain', args: { seg: Q.terrain } },
     // the farmland and village mesh in three jobs that run at once, its zones shared out by area
@@ -249,7 +258,19 @@ export async function create(canvas, opts = {}) {
   const maxAniso = renderer.getMaxAnisotropy();
   const aniso = (n) => Math.min(tierName === 'ultra' ? 16 : n, maxAniso); // ultra: the most the device filters
   atlas.anisotropy = aniso(16); bark.map.anisotropy = aniso(16); bark.bump.anisotropy = aniso(8);
-  const barkMat = M.barkMaterial(bark.map, bark.bump);
+  const photos = await photosLoading;
+  let barkMat;
+  if (photos) {
+    for (const set of Object.values(photos)) {
+      for (const t of [set.diff, set.nor]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso(8); }
+      set.diff.colorSpace = THREE.SRGBColorSpace;
+    }
+    // the bark's texture coordinates are metres round the limb and 0.9 x metres along it
+    const b = photos.sakura_bark;
+    for (const t of [b.diff, b.nor]) t.repeat.set(1 / b.size, 1 / (b.size * 0.9));
+    M.setPhotoTextures(photos);
+    barkMat = M.barkMaterial(b.diff, null, b.nor);
+  } else barkMat = M.barkMaterial(bark.map, bark.bump);
   const a2c = msaa > 0;
   const blossomMat = M.blossomMaterial(atlas, a2c);
   const blossomPrepass = opts.blossomPrepass !== false;
@@ -471,7 +492,7 @@ export async function create(canvas, opts = {}) {
   const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial({ bedded: true }), [70], { lodScale, ...nearOf('cliffs') });
   cliffs.name = 'cliffs';
   scene.add(cliffs);
-  const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial(), [60, 160], { lodScale, ...nearOf('bamboo', 15) });
+  const bamboo = await makeLods(bambooUrl, BAMBOO_KINDS, G.bamboo, M.forestMaterial({ kinds: false }), [60, 160], { lodScale, ...nearOf('bamboo', 15) });
   bamboo.name = 'bamboo';
   scene.add(bamboo);
   const shrubs = await makeLods(shrubsUrl, SHRUB_KINDS, G.shrubs, M.shrubMaterial(), [35, 110], { lodScale, ...nearOf('shrubs') });

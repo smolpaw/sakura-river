@@ -1,0 +1,82 @@
+{
+  "sakura_bark": {
+    "size": 1.6,
+    "mean": [
+      0.2006,
+      0.1418,
+      0.0993
+    ]
+  },
+  "lichen_rock": {
+    "size": 2,
+    "mean": [
+      0.0605,
+      0.0441,
+      0.0301
+    ]
+  },
+  "stony_dirt_path": {
+    "size": 2.17,
+    "mean": [
+      0.066,
+      0.0371,
+      0.0185
+    ]
+  },
+  "thatch_roof_angled": {
+    "size": 0.54,
+    "mean": [
+      0.09,
+      0.0805,
+      0.0674
+    ]
+  },
+  "weathered_planks": {
+    "size": 2,
+    "mean": [
+      0.0805,
+      0.0572,
+      0.0434
+    ]
+  },
+  "grey_plaster_02": {
+    "size": 1,
+    "mean": [
+      0.2712,
+      0.2215,
+      0.1526
+    ]
+  },
+  "grey_roof_tiles": {
+    "size": 3,
+    "mean": [
+      0.1221,
+      0.1094,
+      0.0741
+    ]
+  },
+  "japanese_stone_wall": {
+    "size": 1.9,
+    "mean": [
+      0.2039,
+      0.1888,
+      0.1612
+    ]
+  },
+  "rock_surface": {
+    "size": 2,
+    "mean": [
+      0.1587,
+      0.1179,
+      0.083
+    ]
+  },
+  "japanese_cedar_bark": {
+    "size": 1,
+    "mean": [
+      0.0648,
+      0.0355,
+      0.0175
+    ]
+  }
+}

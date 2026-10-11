@@ -8,12 +8,16 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32, lerp } from './noise.js';
+import { KIND, tagKinds } from './kinds.js';
 
 const V = THREE.Vector3;
 const WOOD = [0.27, 0.1, 0.06], WOOD_D = [0.1, 0.07, 0.05], PLASTER = [0.8, 0.77, 0.7], TILE = [0.2, 0.21, 0.22], TILE_D = [0.11, 0.115, 0.12];
 const ENDS = [0.8, 0.74, 0.58], BRONZE = [0.22, 0.36, 0.3], BRONZE_D = [0.16, 0.2, 0.15], STONE = [0.43, 0.41, 0.38], GRAVEL = [0.6, 0.58, 0.53];
 const OCHRE = [0.62, 0.45, 0.22], PAPER = [0.86, 0.8, 0.66], FIREBOX = [0.5, 0.45, 0.38];
 const SHU = [0.56, 0.07, 0.03], SHU_D = [0.3, 0.05, 0.03]; // the pagoda's vermilion lacquer (the bridge's, weathered)
+// the photographed textures the parts take, by colour (kinds.js)
+const KINDS = [[WOOD, KIND.WOOD], [WOOD_D, KIND.WOOD], [SHU, KIND.PAINT], [SHU_D, KIND.PAINT], [PLASTER, KIND.PLASTER], [TILE, KIND.TILE],
+  [TILE_D, KIND.TILE], [STONE, KIND.STONE]];
 
 // parts in a local frame; at() places what its callback adds (lamps too)
 export function kit() {
@@ -493,6 +497,7 @@ export function templeData(world) {
   const ground = (x, z) => { const p = new V(x, 0, z).applyMatrix4(m); return world.height(p.x, p.z) - T.y; };
   const k = kit();
   const flood = compound(k, T, ground);
+  tagKinds(k.parts, KINDS);
   skyLight(k.parts);
   for (const g of k.parts) g.applyMatrix4(m);
   const flat = (list) => new Float32Array(list.flatMap((p) => p.applyMatrix4(m).toArray()));
