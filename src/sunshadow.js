@@ -39,8 +39,11 @@ export const CLOUDS = {
 // little, so surfaces that are casters too (the terrain, the buildings) do not shadow themselves.
 const farShadow = Fn(([pos, nrm]) => {
   const s = float(1.0).toVar();
+  // (the normal taken outside the branch, CLAUDE.md TSL traps: first built in it, a material's later reads of
+  // normalWorld found it unset whenever this map was off)
+  const n = nrm.toVar();
   If(uOn.greaterThan(0.0), () => {
-    const p = uMat.mul(vec4(pos.add(nrm.mul(uTexel.y.mul(1.5))), 1.0)).toVar();
+    const p = uMat.mul(vec4(pos.add(n.mul(uTexel.y.mul(1.5))), 1.0)).toVar();
     const uv = vec2(p.x, float(1.0).sub(p.y)).toVar();
     const inside = uv.x.greaterThan(0.0).and(uv.x.lessThan(1.0)).and(uv.y.greaterThan(0.0)).and(uv.y.lessThan(1.0)).and(p.z.lessThan(1.0));
     If(inside, () => { s.assign(nodeObject(new MapLookup(rt.depthTexture, uv)).compare(p.z.sub(0.0004))); });

@@ -110,8 +110,10 @@ const kindPhotos = () => {
 };
 // a surface's detail (a colour multiplier; `normal`: its world normal) by its kind, within PHOTO_NEAR. `n`: the
 // geometry's own normal (normalWorldGeometry): normalWorld is the material's normalNode, so a colour reading it builds
-// the normal's code inside the colour's branch.
-const kindPhoto = (kind, n, normal = false) => Fn(() => {
+// the normal's code inside the colour's branch. (`n` is taken outside the branch, CLAUDE.md TSL traps: first built in
+// it, the material's other reads of it beyond PHOTO_NEAR would find it unset.)
+const kindPhoto = (kind, geomN, normal = false) => Fn(() => {
+  const n = geomN.toVar();
   const near = wp.sub(cameraPosition).length().lessThan(PHOTO_NEAR);
   const grad = [dFdx(wp), dFdy(wp)];
   // (the normal starts from the material's own, world space: unchanged where no photo applies)
@@ -325,6 +327,8 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
   const vcol = attribute('color', 'vec3'), earth = sstep(0.0, 0.035, vcol.r.sub(vcol.g)).mul(float(1.0).sub(cover));
   const ground = PHOTO[GROUND.turf] && PHOTO[GROUND.soil];
   const colorNode = Fn(() => {
+    // (the bare earth taken outside the branches that read it, CLAUDE.md TSL traps)
+    const e = earth.toVar();
     // the blades' own patches; blade-scale streaks close by, faded out before they would shimmer
     const patch = patchFrom(n012, n09);
     const streak = float(0).toVar();
@@ -336,14 +340,18 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
     If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, bg ? riverBedPhoto(c, bg) : riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
     // the ground close by, and the lanes underfoot
     const gg = ground ? groundGrad() : null, pg = lane && PHOTO[EARTH_PHOTO] ? earthPhotoGrad() : null; // (outside the branches: WGSL takes derivatives only there)
-    if (ground) c.assign(groundColor(c, dist, earth, lane, gg));
-    if (lane) If(dist.lessThan(LANE_NEAR), () => { c.assign(laneColor(lane, dist, earth, c, pg)); });
+    if (ground) c.assign(groundColor(c, dist, e, lane, gg));
+    if (lane) If(dist.lessThan(LANE_NEAR), () => { c.assign(laneColor(lane, dist, e, c, pg)); });
     return c;
   })();
   const params = { roughness: 0.96, metalness: 0, colorNode };
-  const base = ground ? groundNormal(dist, earth, lane) : normalView;
-  if (lane) params.normalNode = laneNormal(lane, dist, earth, base);
-  else if (ground) params.normalNode = base;
+  if (ground || lane) {
+    params.normalNode = Fn(() => {
+      const e = earth.toVar(); // (as in the colour)
+      const base = ground ? groundNormal(dist, e, lane) : normalView;
+      return lane ? laneNormal(lane, dist, e, base) : base;
+    })();
+  }
   return new LitMaterial(params, (out) => Fn(() => {
     // river-bed caustics and darkening under water: both are exactly zero / one above y = 0.03, so skip them there
     const y = wp.y;
@@ -614,7 +622,7 @@ const lichen = Fn(([p, share]) => {
   return vec3(sstep(1.0, 0.85, best.x), sstep(0.4, 0.95, best.x), best.y);
 }).setLayout({ name: 'lichen', type: 'vec3', inputs: [{ name: 'p', type: 'vec3' }, { name: 'share', type: 'float' }] });
 // the size of a pixel on the stone (m), and how much of the close-up detail applies (fading out towards STONE_NEAR)
-const stoneFoot = (dist) => dist.mul(PIXEL).div(max(dot(normalWorldGeometry, viewDir()).abs(), 0.2));
+const stoneFoot = (dist, n = normalWorldGeometry) => dist.mul(PIXEL).div(max(dot(n, viewDir()).abs(), 0.2));
 const stoneFade = (dist) => sstep(STONE_NEAR, STONE_NEAR * 0.7, dist);
 // the crystals' share of the detail: gone before they would shimmer (about a centimetre across)
 const crystalFade = (fp) => sstep(0.006, 0.003, fp);
@@ -638,13 +646,13 @@ const carvedStone = (w) => {
   };
 };
 
-const stoneColor = (c, vcol, dist, { walls, bedded }) => Fn(() => {
+const stoneColor = (c, vcol, dist, n, { walls, bedded }) => Fn(() => {
   const o = c.toVar();
-  const n = normalWorldGeometry, up = n.y, fp = stoneFoot(dist);
+  const up = n.y, fp = stoneFoot(dist, n);
   // mottling, a hand across, over broader patches
   const mot = vnoise3(wp.mul(9.0)).toVar();
   if (PHOTO.lichen_rock) {
-    o.mulAssign(photoStone(normalWorldGeometry));
+    o.mulAssign(photoStone(n));
   } else {
   const f = vec3(mot.sub(0.5).mul(bedded ? 0.16 : 0.24).add(1.0).mul(vnoise3(wp.mul(2.5).add(31.0)).sub(0.5).mul(0.22).add(1.0))).toVar();
   // the crystals: pale warm feldspar, grey quartz, the fine grain in between with the dark flecks of mica
@@ -729,7 +737,10 @@ export function rockMaterial({ walls = false, bedded = false } = {}) {
   const colorNode = Fn(() => {
     // (the vertex colour multiplied here, not by vertexColors, so the near detail can mix towards its own colours)
     const c = vcol.mul(mix(1.0, 0.5, wet).mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(2.0))).mul(0.3).add(0.85))).toVar();
-    If(dist.lessThan(STONE_NEAR), () => { c.assign(stoneColor(c, vcol, dist, { walls, bedded })); });
+    // (the geometry's normal taken outside the branch, CLAUDE.md TSL traps: first built in it, the normal's code past
+    // STONE_NEAR read it unset and the far stone came out black)
+    const n = normalWorldGeometry.toVar();
+    If(dist.lessThan(STONE_NEAR), () => { c.assign(stoneColor(c, vcol, dist, n, { walls, bedded })); });
     return c;
   })();
   return new LitMaterial({

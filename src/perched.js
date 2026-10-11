@@ -232,7 +232,8 @@ function perchedMaterial(sc, uAmount, uCrow, uCrowTo) {
   const elbow = mix(float(ELBOW.sparrow), float(ELBOW.crow), kind);
   const sx = sign(flyP.x), r = abs(flyP.x), r1 = min(r, elbow), r2 = max(r.sub(elbow), 0.0);
   const flapP = vec3(sx.mul(r1.mul(cos(a1)).add(r2.mul(cos(a2)))), flyP.y.add(r1.mul(sin(a1))).add(r2.mul(sin(a2))), flyP.z);
-  const th = r.greaterThan(elbow).select(a2, a1);
+  // (a mix, not r > elbow ? a2 : a1: that builds a1 inside a2's branch, and the other branch read it unset)
+  const th = mix(a1, a2, r.greaterThan(elbow).select(1.0, 0.0));
   const flapN = vec3(sx.negate().mul(sin(th)), cos(th), 0.0);
   const tilt = mix(float(SHAPES.sparrow.tilt), float(SHAPES.crow.tilt), kind);
   const m = mix(flyAll, spread, isWing);
