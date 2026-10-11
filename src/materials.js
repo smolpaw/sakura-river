@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, min, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
-  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy,
+  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray,
 } from 'three/tsl';
 import { U, vnoise, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
@@ -13,10 +13,15 @@ import { KIND } from './kinds.js';
 
 const wp = positionWorld;
 
-// Photographed texture sets (tools/textures.mjs, public/textures/), loaded by main.js before the materials are built:
-// { <name>: { diff, nor, size (m), mean (linear rgb) } }. Without them every surface keeps its procedural look.
+// Photographed texture sets (tools/textures.mjs, public/textures/), loaded by photos.js before the materials are built:
+// { <name>: { diff, nor, size (m), mean (linear rgb) } } (the surface kinds' sets without diff and nor: theirs are
+// layers of KIND_PHOTO's arrays). Without them every surface keeps its procedural look.
 const PHOTO = {};
-export function setPhotoTextures(t) { Object.assign(PHOTO, t); }
+let KIND_PHOTO = null;
+export function setPhotoTextures({ sets, layers }, { anisotropy = 8 } = {}) {
+  Object.assign(PHOTO, sets);
+  KIND_PHOTO = kindArrays(layers, anisotropy);
+}
 
 // The photos are laid over a surface's own colour as detail: the photo's brightness against its average, with `hue`
 // of its colour against its average's (the surface keeps its tone, and gains the photo's grain, cracks and stains),
@@ -24,29 +29,33 @@ export function setPhotoTextures(t) { Object.assign(PHOTO, t); }
 // axes and blended by the normal (triplanar).
 const lumOf = (v) => dot(v, vec3(0.2126, 0.7152, 0.0722));
 const detailOf = (c, set, amount, hue = 0.3) => {
-  const mean = vec3(...set.mean);
+  const mean = Array.isArray(set.mean) ? vec3(...set.mean) : set.mean;
   return clamp(mix(vec3(1.0), mix(vec3(lumOf(c).div(lumOf(mean))), c.div(mean), hue), amount), 0.15, 2.5);
 };
 const triWeights = (n) => { const a = pow(abs(n), vec3(4.0)); return a.div(a.x.add(a.y).add(a.z)); };
 // a set's map sampled along the three axes at world position p (in the set's tiles); with `grad` ([dpdx, dpdy] of p),
-// by explicit gradients, as WGSL requires inside a branch that varies across pixels
-const triSample = (t, p, w, grad) => {
-  const s = (uv, sel) => (grad ? texture(t, uv).grad(sel(grad[0]), sel(grad[1])) : texture(t, uv));
+// by explicit gradients, as WGSL requires inside a branch that varies across pixels; with `layer`, from that layer of
+// a texture array
+const triSample = (t, p, w, grad, layer) => {
+  const s = (uv, sel) => {
+    const r = grad ? texture(t, uv).grad(sel(grad[0]), sel(grad[1])) : texture(t, uv);
+    return layer ? r.depth(layer) : r;
+  };
   return [s(p.zy, (g) => g.zy), s(p.xz, (g) => g.xz), s(p.xy, (g) => g.xy)];
 };
 const triColor = (set, p, n, grad) => {
-  const w = triWeights(n), [x, y, z] = triSample(set.diff, p, w, grad);
+  const w = triWeights(n), [x, y, z] = triSample(set.diff, p, w, grad, set.layer);
   return x.rgb.mul(w.x).add(y.rgb.mul(w.y)).add(z.rgb.mul(w.z));
 };
 // its normal map the same way (each axis's tangent plane taken as the other two axes), in world space
 const triNormal = (set, p, n, grad, strength = 1) => {
-  const w = triWeights(n), [x, y, z] = triSample(set.nor, p, w, grad);
+  const w = triWeights(n), [x, y, z] = triSample(set.nor, p, w, grad, set.layer);
   const tx = x.xyz.mul(2.0).sub(1.0), ty = y.xyz.mul(2.0).sub(1.0), tz = z.xyz.mul(2.0).sub(1.0);
   return normalize(vec3(0.0, tx.y, tx.x).mul(w.x).add(vec3(ty.x, 0.0, ty.y).mul(w.y)).add(vec3(tz.x, tz.y, 0.0).mul(w.z)).mul(strength).add(n));
 };
 
-// Surface kinds (kinds.js KIND; the attribute _kind, kind / 8, which tools/village.py and kinds.js tagKinds write): the
-// set each takes, how strongly its colour shows and its relief. 0 takes none.
+// Surface kinds (kinds.js KIND, in its order; the attribute _kind, kind / 8, which tools/village.py and kinds.js
+// tagKinds write): the set each takes, how strongly its colour shows and its relief. 0 takes none.
 export const PHOTO_KIND = [null,
   { set: 'thatch_roof_angled', amount: 0.8, hue: 0.25, relief: 1.2 },
   { set: 'weathered_planks', amount: 0.6, hue: 0.2, relief: 0.8 },
@@ -58,34 +67,61 @@ export const PHOTO_KIND = [null,
   { set: 'japanese_cedar_bark', amount: 0.7, hue: 0.2, relief: 1.0 }, // the woods' bark
   { set: 'gravel_ground_01', amount: 0.75, hue: 0.2, relief: 1.0 }, // gravel (the temple's courtyard)
 ];
+// the sets the kinds take, in their layers' order
+export const PHOTO_KIND_SETS = [...new Set(PHOTO_KIND.filter(Boolean).map((k) => k.set))];
 const PHOTO_NEAR = 70; // m: beyond it the surfaces are as without the photos
-// for a material on a model with surface kinds (`only`: the kinds it has, kinds.js KIND): { color: the colour
-// multiplier, normal: the normalNode } by its attribute _kind, or nulls without the photos
-const kindPhotos = (only) => {
-  if (!Object.keys(PHOTO).length) return { color: null, normal: null };
+// The kinds' sets as the layers of two texture arrays (colour, normal; photos.js packs them, each set at the first's
+// resolution), and per kind three vec4s: (layer, amount, hue, relief), (mean, -) and the tiles per metre along x, y, z
+// (a set taller than wide, the woods' bark, keeps its proportions on the sides: its height along y). A surface samples
+// the layer its kind chooses, so a shader holds one copy of the sampling whatever kinds its model has, and two of the
+// 16 textures a WebGPU shader may sample by default.
+function kindArrays(L, anisotropy) {
+  const array = (data, srgb) => {
+    const t = new THREE.DataArrayTexture(data, L.width, L.height, L.names.length);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+    t.anisotropy = anisotropy;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
+  };
+  const kinds = PHOTO_KIND.map((k) => {
+    if (!k) return null;
+    const set = PHOTO[k.set], layer = L.names.indexOf(k.set), s = 1 / set.size;
+    return { ...k, layer, mean: set.mean, scale: [s, s / L.aspect[layer], s] };
+  });
+  const v = (f, empty) => uniformArray(kinds.map((k) => (k ? new THREE.Vector4(...f(k)) : empty)), 'vec4');
+  return {
+    diff: array(L.diff, true), nor: array(L.nor, false), kinds,
+    a: v((k) => [k.layer, k.amount, k.hue, k.relief], new THREE.Vector4()),
+    b: v((k) => [...k.mean, 0], new THREE.Vector4(1, 1, 1, 0)),
+    c: v((k) => [...k.scale, 0], new THREE.Vector4()),
+  };
+}
+// for a material on a model with surface kinds: { color: the colour multiplier, normal: the normalNode } by its
+// attribute _kind, or nulls without the photos
+const kindPhotos = () => {
+  if (!KIND_PHOTO) return { color: null, normal: null };
   const kind = attribute('_kind', 'float').mul(8.0);
   return {
-    color: kindPhoto(kind, normalWorldGeometry, only),
-    normal: cameraViewMatrix.mul(vec4(kindPhoto(kind, normalWorldGeometry, only, true), 0.0)).xyz.normalize(),
+    color: kindPhoto(kind, normalWorldGeometry),
+    normal: cameraViewMatrix.mul(vec4(kindPhoto(kind, normalWorldGeometry, true), 0.0)).xyz.normalize(),
   };
 };
-// a surface's detail (a colour multiplier; `normal`: its world normal) by its kind, within PHOTO_NEAR, for the kinds
-// in `only` (each kind's two maps are two of the 16 textures a WebGPU shader may sample by default). `n`: the
+// a surface's detail (a colour multiplier; `normal`: its world normal) by its kind, within PHOTO_NEAR. `n`: the
 // geometry's own normal (normalWorldGeometry): normalWorld is the material's normalNode, so a colour reading it builds
-// the normal's code inside the colour's first branch, and every later branch nests inside it and never runs.
-const kindPhoto = (kind, n, only, normal = false) => Fn(() => {
+// the normal's code inside the colour's branch.
+const kindPhoto = (kind, n, normal = false) => Fn(() => {
   const near = wp.sub(cameraPosition).length().lessThan(PHOTO_NEAR);
   const grad = [dFdx(wp), dFdy(wp)];
   // (the normal starts from the material's own, world space: unchanged where no photo applies)
   const base = normal ? cameraViewMatrix.transpose().mul(vec4(normalView, 0.0)).xyz.normalize().toVar() : null;
   const r = (normal ? base : vec3(1.0)).toVar();
-  PHOTO_KIND.forEach((k, i) => {
-    const set = k && only.includes(i) && PHOTO[k.set];
-    if (!set) return;
-    const s = 1 / set.size, g = [grad[0].mul(s), grad[1].mul(s)], p = wp.mul(s);
-    If(near.and(abs(kind.sub(i)).lessThan(0.5)), () => {
-      r.assign(normal ? triNormal(set, p, base, g, k.relief) : detailOf(triColor(set, p, n, g), set, k.amount, k.hue));
-    });
+  If(near.and(kind.greaterThan(0.5)), () => {
+    const i = int(kind.add(0.5)), A = KIND_PHOTO.a.element(i), s = KIND_PHOTO.c.element(i).xyz;
+    const set = { diff: KIND_PHOTO.diff, nor: KIND_PHOTO.nor, layer: int(A.x.add(0.5)), mean: KIND_PHOTO.b.element(i).xyz };
+    const g = [grad[0].mul(s), grad[1].mul(s)], p = wp.mul(s);
+    r.assign(normal ? triNormal(set, p, base, g, A.w) : detailOf(triColor(set, p, n, g), set, A.y, A.z));
   });
   return r;
 })();
@@ -208,9 +244,10 @@ const laneColor = (map, dist, earth, c, pg = null) => Fn(() => {
   });
   return o;
 })();
-// the ground's normal in view space, tilted on the lanes close by by the ruts' sides and the pebbles' domes
-const laneNormal = (map, dist, earth) => Fn(() => {
-  const n = normalView.toVar();
+// the ground's normal in view space (`base`, the ground's own), tilted on the lanes close by by the ruts' sides and the
+// pebbles' domes
+const laneNormal = (map, dist, earth, base = normalView) => Fn(() => {
+  const n = base.toVar();
   if (PHOTO[EARTH_PHOTO]) {
     const set = PHOTO[EARTH_PHOTO], pg = earthPhotoGrad();
     If(dist.lessThan(LANE_NEAR), () => {
@@ -234,6 +271,42 @@ const laneNormal = (map, dist, earth) => Fn(() => {
   return n;
 })();
 
+// ---------- the ground close by ----------
+// Within GROUND_NEAR the rest of the ground takes photographed detail too: the turf's (dead blades, twigs, the soil
+// between) where grass grows or the ground is green, packed soil on the bare earth (the yards, levees, dry paddies and
+// banks). On a lane's earth its own (EARTH_PHOTO, laneColor) takes over.
+const GROUND = { turf: 'forrest_ground_01', soil: 'brown_mud_02' };
+const GROUND_NEAR = 40;
+const groundGrad = () => [dFdx(wp.xz), dFdy(wp.xz)]; // (per metre: taken outside the branch, as the lanes')
+const groundMap = (name, map, g) => {
+  const set = PHOTO[name], s = 1 / set.size;
+  return texture(set[map], wp.xz.mul(s)).grad(g[0].mul(s), g[1].mul(s));
+};
+const groundShare = (dist, earth, lane) => {
+  const k = sstep(GROUND_NEAR, GROUND_NEAR * 0.6, dist);
+  return lane && PHOTO[EARTH_PHOTO] ? k.mul(float(1.0).sub(earthPhotoShare(laneFrame(lane, dist, earth), dist, earth))) : k;
+};
+const groundColor = (c, dist, earth, lane, g) => Fn(() => {
+  const o = c.toVar();
+  If(dist.lessThan(GROUND_NEAR), () => {
+    const turf = detailOf(groundMap(GROUND.turf, 'diff', g).rgb, PHOTO[GROUND.turf], 0.7, 0.2);
+    const soil = detailOf(groundMap(GROUND.soil, 'diff', g).rgb, PHOTO[GROUND.soil], 0.7, 0.25);
+    o.mulAssign(mix(vec3(1.0), mix(turf, soil, earth), groundShare(dist, earth, lane)));
+  });
+  return o;
+})();
+// its relief, as the view normal
+const groundNormal = (dist, earth, lane) => Fn(() => {
+  const n = normalView.toVar(), g = groundGrad();
+  If(dist.lessThan(GROUND_NEAR), () => {
+    const tn = mix(groundMap(GROUND.turf, 'nor', g).xyz, groundMap(GROUND.soil, 'nor', g).xyz, earth).mul(2.0).sub(1.0);
+    // (the photos' tangent plane: x along x, their v along z)
+    const t = vec2(tn.x, tn.y.negate()).mul(groundShare(dist, earth, lane));
+    n.assign(normalize(n.add(cameraViewMatrix.mul(vec4(t.x, 0.0, t.y, 0.0)).xyz)));
+  });
+  return n;
+})();
+
 // The ground, with puddles on the bare earth in the rain (mirroring `sky`, its uniforms). With `paddies` it draws the
 // farmland's and the village's mesh (world.js buildFields), where flooded paddies (aWater) are still water too. With
 // `lanes` (world.js LANES) the lanes close by gain their grit, stones and ruts.
@@ -250,6 +323,7 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
   const lane = lanes && laneMap(lanes);
   // (the lanes' detail only where the ground shows bare earth: the vertex colour's dirt, redder than green)
   const vcol = attribute('color', 'vec3'), earth = sstep(0.0, 0.035, vcol.r.sub(vcol.g)).mul(float(1.0).sub(cover));
+  const ground = PHOTO[GROUND.turf] && PHOTO[GROUND.soil];
   const colorNode = Fn(() => {
     // the blades' own patches; blade-scale streaks close by, faded out before they would shimmer
     const patch = patchFrom(n012, n09);
@@ -260,13 +334,16 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
     // the river's bed: rounded stones and gravel, each stone its own grey-brown, sand between, close by only
     const bg = PHOTO[BED_PHOTO] ? bedPhotoGrad() : null; // (outside the branch, as the lanes')
     If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, bg ? riverBedPhoto(c, bg) : riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
-    // the lanes underfoot
-    const pg = lane && PHOTO[EARTH_PHOTO] ? earthPhotoGrad() : null; // (outside the branch: WGSL takes derivatives only there)
+    // the ground close by, and the lanes underfoot
+    const gg = ground ? groundGrad() : null, pg = lane && PHOTO[EARTH_PHOTO] ? earthPhotoGrad() : null; // (outside the branches: WGSL takes derivatives only there)
+    if (ground) c.assign(groundColor(c, dist, earth, lane, gg));
     if (lane) If(dist.lessThan(LANE_NEAR), () => { c.assign(laneColor(lane, dist, earth, c, pg)); });
     return c;
   })();
   const params = { roughness: 0.96, metalness: 0, colorNode };
-  if (lane) params.normalNode = laneNormal(lane, dist, earth);
+  const base = ground ? groundNormal(dist, earth, lane) : normalView;
+  if (lane) params.normalNode = laneNormal(lane, dist, earth, base);
+  else if (ground) params.normalNode = base;
   return new LitMaterial(params, (out) => Fn(() => {
     // river-bed caustics and darkening under water: both are exactly zero / one above y = 0.03, so skip them there
     const y = wp.y;
@@ -547,16 +624,17 @@ const crystalFade = (fp) => sstep(0.006, 0.003, fp);
 // The photographed rock (lichen_rock) over the stones' own colour: its pale green lichen, its brown bare stone.
 const photoStone = (n) => detailOf(triColor(PHOTO.lichen_rock, wp.div(PHOTO.lichen_rock.size), n), PHOTO.lichen_rock, 0.65);
 const photoStoneNormal = (n) => triNormal(PHOTO.lichen_rock, wp.div(PHOTO.lichen_rock.size), n);
-// carved stone (the wayside's statues, the stone lanterns): the finer, calmer weathered stone (rock_surface; the
+// carved stone (the wayside's statues, the stone lanterns): the finer, calmer weathered stone (the CARVED kind's; the
 // lichen's contrast reads as camouflage on carving), `w` of the way (0 where a part is not stone):
 // { color: its colour multiplier, normal: the view normal }, or nulls without the photos
 const carvedStone = (w) => {
-  const set = PHOTO.rock_surface;
-  if (!set) return { color: null, normal: null };
-  const n = normalWorldGeometry, p = wp.div(set.size);
+  const k = KIND_PHOTO && KIND_PHOTO.kinds[KIND.CARVED];
+  if (!k) return { color: null, normal: null };
+  const set = { diff: KIND_PHOTO.diff, nor: KIND_PHOTO.nor, layer: int(k.layer), mean: k.mean };
+  const n = normalWorldGeometry, p = wp.mul(vec3(...k.scale));
   return {
-    color: mix(vec3(1.0), detailOf(triColor(set, p, n), set, 0.7, 0.15), w),
-    normal: normalize(mix(normalView, cameraViewMatrix.mul(vec4(triNormal(set, p, n), 0.0)).xyz, w)),
+    color: mix(vec3(1.0), detailOf(triColor(set, p, n), set, k.amount, k.hue), w),
+    normal: normalize(mix(normalView, cameraViewMatrix.mul(vec4(triNormal(set, p, n, null, k.relief), 0.0)).xyz, w)),
   };
 };
 
@@ -669,7 +747,7 @@ export function rockMaterial({ walls = false, bedded = false } = {}) {
 // trees turn to impostors (main.js IMPOSTOR_FROM, times the tier's lodScale)
 export function forestMaterial({ leaves = null, alphaToCoverage = false, impostorFrom = 140, kinds = true } = {}) {
   const tone = vec3(vnoise(wp.xz.mul(0.5).add(wp.y)).mul(0.4).add(0.8));
-  const bark = !leaves && kinds ? kindPhotos([KIND.BARK]) : { color: null, normal: null }; // (the woods' trunks and limbs: tools/forest.py tags them; the bamboo has none)
+  const bark = !leaves && kinds ? kindPhotos() : { color: null, normal: null }; // (the woods' trunks and limbs: tools/forest.py tags them; the bamboo has none)
   const params = !leaves ? { colorNode: bark.color ? tone.mul(bark.color) : tone, ...(bark.normal ? { normalNode: bark.normal } : {}) } : {
     colorNode: texture(leaves, uv()).mul(vec4(tone, 1.0)), side: THREE.DoubleSide, alphaToCoverage,
     alphaTestNode: sstep(impostorFrom - 20, impostorFrom, wp.sub(cameraPosition).length()).mul(0.55).add(0.45),
@@ -726,7 +804,7 @@ export function templeMaterial(d) {
   const pts = (a) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(vec3(a[i], a[i + 1], a[i + 2])); return out; };
   const lamps = pts(d.lamps), flood = pts(d.flood);
   const glow = attribute('aGlow', 'float');
-  const photo = kindPhotos([KIND.WOOD, KIND.PAINT, KIND.PLASTER, KIND.TILE, KIND.STONE, KIND.GRAVEL]);
+  const photo = kindPhotos();
   // age: grime streaks run down the walls from the eaves, damp at their feet, moss and lichen on what faces up
   const colorNode = Fn(() => {
     const c = attribute('color', 'vec3').mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(5.0))).mul(0.3).add(0.85)).toVar();
@@ -768,7 +846,7 @@ export function templeMaterial(d) {
 // lanterns light the walls near them.
 export function villageMaterial() {
   const col = attribute('color', 'vec4');
-  const photo = kindPhotos([KIND.THATCH, KIND.WOOD, KIND.PLASTER, KIND.STONE, KIND.TILE, KIND.PAINT]);
+  const photo = kindPhotos();
   return new LitMaterial({
     roughness: 0.85, metalness: 0, colorNode: photo.color ? col.rgb.mul(photo.color) : col.rgb, ...(photo.normal ? { normalNode: photo.normal } : {}),
   }, (out) => Fn(() => {
@@ -788,7 +866,7 @@ export function villageMaterial() {
 // The river boats (boat.js) too, with nothing glowing
 export function lampMaterial() {
   const col = attribute('color', 'vec4');
-  const photo = kindPhotos([KIND.WOOD, KIND.CARVED]); // (the posts' and the boats' cedar, the stone feet: tools/lamps.py, tools/boat.py)
+  const photo = kindPhotos(); // (the posts' and the boats' cedar, the stone feet: tools/lamps.py, tools/boat.py)
   return new LitMaterial({
     roughness: 0.8, metalness: 0, colorNode: photo.color ? col.rgb.mul(photo.color) : col.rgb, ...(photo.normal ? { normalNode: photo.normal } : {}),
   }, (out) => Fn(() => {
@@ -852,7 +930,7 @@ export function bridgeMaterial(hang) {
   for (let i = 0; i < hang.length; i += 3) lamps.push(vec3(hang[i], hang[i + 1] - 0.36, hang[i + 2]));
   // the piles darker and greener where the river wets them
   const wet = sstep(0.45, 0.0, wp.y);
-  const photo = kindPhotos([KIND.WOOD, KIND.PAINT, KIND.STONE]);
+  const photo = kindPhotos();
   const tone = mix(vec3(vnoise(wp.xz.mul(4.0).add(wp.y.mul(6.0))).mul(0.24).add(0.88)), vec3(0.45, 0.55, 0.42), wet);
   const colorNode = photo.color ? tone.mul(photo.color) : tone;
   return new LitMaterial({

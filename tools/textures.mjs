@@ -15,7 +15,7 @@ const OUT = path.join(ROOT, 'public', 'textures');
 const SETS = {
   sakura_bark: '2k', lichen_rock: '2k', stony_dirt_path: '2k',
   thatch_roof_angled: '1k', weathered_planks: '1k', grey_plaster_02: '1k', grey_roof_tiles: '1k', japanese_stone_wall: '1k', rock_surface: '1k', japanese_cedar_bark: '1k',
-  ganges_river_pebbles: '1k', gravel_ground_01: '1k',
+  ganges_river_pebbles: '1k', gravel_ground_01: '1k', forrest_ground_01: '1k', brown_mud_02: '1k',
 };
 const QUALITY = { diff: 82, nor_gl: 80 };
 

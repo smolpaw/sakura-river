@@ -4,7 +4,7 @@
 
 A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Deer graze, a heron fishes the shallows, a fisherman and a rice planter work, and birds, butterflies, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
-Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, earth, gravel, the river's bed), and the sound (recordings); all are credited below.
+Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel, the river's bed), and the sound (recordings); all are credited below.
 
 Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
 
@@ -32,6 +32,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - `src/world.js`: terrain height field, river path, the village's paddies, lanes and building pads.
 - `src/quality.js`: adaptive quality. `src/gen/`: worker pool for the generation done during loading.
 - `src/tsl.js`, `src/materials.js`: shared shader nodes and the lit materials (TSL, compiled to WGSL and GLSL).
+- `src/photos.js`, `src/photo-worker.js`, `src/kinds.js`: the photographed textures' loading, and the surface kinds that choose them.
 - `src/lods.js`, `src/impostors.js`: the instanced Blender models with their distance levels, culling and the woods' impostors.
 - `src/lights.js`, `src/sunshadow.js`, `src/post.js`: the lamps' light map, the valley and cloud shadows, light shafts and the final grade.
 - Scenery: `tree.js`, `blossoms.js`, `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.
@@ -115,3 +116,5 @@ Close up, these surfaces are photographed texture sets from Poly Haven (https://
 - The woods' bark: "Japanese Cedar Bark" by Charlotte Baglioni.
 - The river's bed: "Ganges River Pebbles" by Amal Kumar.
 - The temple's gravel courtyard: "Gravel Ground 01" by Rob Tuytel.
+- The ground under the grass and the green yards: "Forest Ground 01" by Rob Tuytel.
+- Bare earth off the lanes (the yards, levees, dry paddies and banks): "Brown Mud 02" by Rob Tuytel.

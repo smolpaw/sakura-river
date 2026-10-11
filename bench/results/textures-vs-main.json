@@ -1,5 +1,5 @@
 {
- "date": "2026-10-11T14:30:29.721Z",
+ "date": "2026-10-11T16:25:50.990Z",
  "workload": "1080p",
  "backend": "webgpu",
  "angle": "default",
@@ -57,19 +57,18 @@
  "clockTolerance": 0.05,
  "clockLock": false,
  "clockAtStart": {
-  "gr": 1920,
+  "gr": 1905,
   "mem": 7000,
   "pstate": "P0",
   "reasons": 0,
-  "temp": 62,
-  "power": 54.02,
+  "temp": 65,
+  "power": 54.39,
   "powerLimit": 170
  },
  "idle": {
   "procs": [
    "Hyprland",
    "Xwayland",
-   "...rack-uuid=3190708988185955192",
    "...rack-uuid=3190708988185955192",
    "...rack-uuid=3190708988185955192",
    "quickshell"
@@ -90,15 +89,15 @@
    }
   },
   "B": {
-   "label": "tex",
+   "label": "arr",
    "build": {
-    "label": "tex",
+    "label": "arr",
     "ref": "WORKTREE",
-    "sha": "2c3ebb51c5cadbe2d8c97add82e22937953095f0",
+    "sha": "1789bf29952c2c2ac77a825070c4d396c845f93c",
     "dirty": true,
     "three": "0.186.1",
-    "builtAt": "2026-10-11T14:23:51.573Z",
-    "bytes": 4452486
+    "builtAt": "2026-10-11T16:12:34.964Z",
+    "bytes": 4456884
    }
   }
  },
@@ -111,85 +110,85 @@
   "B1"
  ],
  "geomeanRatio": {
-  "gpu": 0.9964575917962804,
-  "cpu": 1.0412669447758318
+  "gpu": 0.9769121058348513,
+  "cpu": 1.0361605831242275
  },
  "views": {
   "hero": {
    "gpuRatio": {
-    "ratio": 0.9676185878494792,
-    "lo": 0.8371992098648242,
-    "hi": 1.1135160545833902
+    "ratio": 0.9854617890099886,
+    "lo": 0.8295990916278775,
+    "hi": 1.1641925380996823
    },
    "gpuCyclesRatio": {
-    "ratio": 0.9683524736530714,
-    "lo": 0.837389204786215,
-    "hi": 1.113501676865964
+    "ratio": 0.9825076886096776,
+    "lo": 0.8296430738982739,
+    "hi": 1.1620967601784626
    },
    "cpuRatio": {
-    "ratio": 0.990074050777933,
-    "lo": 0.6998023551646748,
-    "hi": 1.418801018181823
+    "ratio": 1.0749354004773297,
+    "lo": 0.7104679996856111,
+    "hi": 1.5146855289226218
    },
    "A": {
     "gpu": {
-     "median": 6.708,
+     "median": 6.276832,
      "runMedians": [
-      5.804448000000001,
-      6.710432,
-      6.708
+      6.338368,
+      6.228384,
+      6.276832
      ],
-     "bimodality": 0.9987924801626931
+     "bimodality": 0.9984599715348423
     },
     "cpu": {
-     "median": 5.199999999254942,
-     "min": 2.3500000005587935,
+     "median": 5.004999998956919,
+     "min": 2.3450000006705523,
      "runMedians": [
-      5.00499999942258,
-      5.9575000000186265,
-      4.904999999795109
+      4.775000000372529,
+      4.520000000484288,
+      5.217499999329448
      ],
-     "bimodality": 0.49536865952307363
+     "bimodality": 0.6846150718241897
     }
    },
    "B": {
     "gpu": {
-     "median": 6.497312,
+     "median": 6.277152,
      "runMedians": [
-      6.432608,
-      6.57232,
-      5.595488
+      6.2685759999999995,
+      5.45568,
+      6.845376
      ],
-     "bimodality": 0.9984652087006087
+     "bimodality": 0.8890949880813969
     },
     "cpu": {
-     "median": 5.290000000037253,
-     "min": 2.5750000001862645,
+     "median": 5.509999999776483,
+     "min": 2.6650000009685755,
      "runMedians": [
-      5.1499999994412065,
-      5.290000000037253,
-      5.270000000484288
+      5.080000000074506,
+      4.884999999776483,
+      5.634999999776483
      ],
-     "bimodality": 0.6716111508036686
+     "bimodality": 0.7962563840634306
     }
    },
    "labelsA": {
-    "shafts": 0.3952,
-    "bloom": 0.15945599999999996,
-    "grade": 0.296352,
-    "output": 0.125152,
-    "scene": 3.993632,
-    "shadow": 0.339584,
-    "reflection": 1.068336
+    "grade": 0.29568,
+    "output": 0.122432,
+    "scene": 4.1864159999999995,
+    "shafts": 0.394656,
+    "bloom": 0.157152,
+    "shadow": 0.339392,
+    "reflection": 1.065312
    },
    "labelsB": {
-    "grade": 0.29984,
-    "output": 0.123648,
-    "scene": 3.766736,
-    "shafts": 0.400416,
-    "bloom": 0.15801600000000002,
-    "shadow": 0.347648,
-    "reflection": 1.079488
+    "grade": 0.299328,
+    "output": 0.121248,
+    "scene": 3.7909759999999997,
+    "shafts": 0.400688,
+    "bloom": 0.158752,
+    "shadow": 0.347856,
+    "reflection": 1.060848
    },
    "counters": {
     "A": {
@@ -320,7 +319,7 @@
      "drawCalls": 266,
      "triangles": 6868564,
      "passes": 19,
-     "programs": 202,
+     "programs": 201,
      "rtMemMB": 395.85247802734375,
      "bandwidthMB": 300.03216552734375,
      "renderTargets": [
@@ -444,79 +443,79 @@
   },
   "cine250": {
    "gpuRatio": {
-    "ratio": 0.9163635224343666,
-    "lo": 0.8405931330507808,
-    "hi": 1.1279053593544364
+    "ratio": 0.9596025917179214,
+    "lo": 0.8165669833698594,
+    "hi": 1.1591425008771774
    },
    "gpuCyclesRatio": {
-    "ratio": 0.9139808210031012,
-    "lo": 0.838439727462346,
-    "hi": 1.1264559823890299
+    "ratio": 0.9594442962987352,
+    "lo": 0.8154618599488719,
+    "hi": 1.1597505328886857
    },
    "cpuRatio": {
-    "ratio": 0.9906848369359156,
-    "lo": 0.6938464102399382,
-    "hi": 1.456646665228181
+    "ratio": 1.0230627306979407,
+    "lo": 0.6750952396373874,
+    "hi": 1.4638962362383088
    },
    "A": {
     "gpu": {
-     "median": 6.29424,
+     "median": 6.2482240000000004,
      "runMedians": [
-      6.282304,
-      6.29608,
-      6.316912
+      6.241664,
+      5.919136,
+      6.33504
      ],
-     "bimodality": 0.9959473851434617
+     "bimodality": 0.9976930182226287
     },
     "cpu": {
-     "median": 4.71750000026077,
-     "min": 2.3250000001862645,
+     "median": 4.624999999068677,
+     "min": 2.144999999552965,
      "runMedians": [
-      4.474999999627471,
-      5.08750000083819,
-      4.929999999701977
+      4.259999999776483,
+      4.724999998696148,
+      4.565000000409782
      ],
-     "bimodality": 0.7244088695491312
+     "bimodality": 0.5713421472933167
     }
    },
    "B": {
     "gpu": {
-     "median": 5.772992,
+     "median": 5.9488959999999995,
      "runMedians": [
-      5.649664,
-      5.960912,
-      5.704384
+      5.900848,
+      5.887504,
+      5.960304000000001
      ],
-     "bimodality": 0.9783454053632102
+     "bimodality": 0.9987612273475137
     },
     "cpu": {
-     "median": 4.892500000074506,
-     "min": 2.315000000409782,
+     "median": 4.727500000037253,
+     "min": 2.380000000819564,
      "runMedians": [
-      5.127499999944121,
-      4.944999999832362,
-      4.28499999968335
+      4.767500000074506,
+      4.772499999962747,
+      4.322499999776483
      ],
-     "bimodality": 0.4417654141077417
+     "bimodality": 0.7781381619226647
     }
    },
    "labelsA": {
-    "grade": 0.296672,
-    "output": 0.12528,
-    "scene": 3.60696,
-    "shafts": 0.372448,
-    "bloom": 0.16182399999999997,
-    "shadow": 0.340448,
-    "reflection": 1.04168
+    "grade": 0.296192,
+    "output": 0.122912,
+    "scene": 3.570272,
+    "shadow": 0.34016,
+    "reflection": 1.038496,
+    "shafts": 0.372096,
+    "bloom": 0.159072
    },
    "labelsB": {
-    "grade": 0.29865600000000003,
-    "output": 0.123168,
-    "scene": 3.4906560000000004,
-    "shafts": 0.37419199999999997,
-    "bloom": 0.15937600000000002,
-    "shadow": 0.345712,
-    "reflection": 1.048
+    "grade": 0.298912,
+    "output": 0.121248,
+    "scene": 3.477888,
+    "shadow": 0.347584,
+    "reflection": 1.036176,
+    "shafts": 0.37564800000000004,
+    "bloom": 0.161104
    },
    "counters": {
     "A": {
@@ -647,7 +646,7 @@
      "drawCalls": 248,
      "triangles": 6433510,
      "passes": 19,
-     "programs": 202,
+     "programs": 201,
      "rtMemMB": 395.85247802734375,
      "bandwidthMB": 300.03216552734375,
      "renderTargets": [
@@ -771,79 +770,79 @@
   },
   "cine750": {
    "gpuRatio": {
-    "ratio": 1.1169311585569932,
-    "lo": 0.8593289039501525,
-    "hi": 1.1860085239934361
+    "ratio": 1.1272984200006255,
+    "lo": 0.8550486691832019,
+    "hi": 1.2422764812335778
    },
    "gpuCyclesRatio": {
-    "ratio": 1.1172486260516101,
-    "lo": 0.8604149586139299,
-    "hi": 1.1859945978829154
+    "ratio": 1.1274337661148615,
+    "lo": 0.8560355245898762,
+    "hi": 1.2474439076246389
    },
    "cpuRatio": {
-    "ratio": 1.1284025787245733,
-    "lo": 0.7495427329040023,
-    "hi": 1.5919454640799506
+    "ratio": 1.0368630285995553,
+    "lo": 0.6591902621194423,
+    "hi": 1.4879995448404186
    },
    "A": {
     "gpu": {
-     "median": 5.5599039999999995,
+     "median": 5.503424,
      "runMedians": [
-      5.5469919999999995,
-      5.550784,
-      6.159968
+      5.503424,
+      6.054031999999999,
+      5.324576
      ],
-     "bimodality": 0.9980908831756211
+     "bimodality": 0.9982586270072819
     },
     "cpu": {
-     "median": 4.807500000111759,
-     "min": 2.3549999985843897,
+     "median": 4.582500000484288,
+     "min": 2.475000001490116,
      "runMedians": [
-      4.367500000167638,
-      4.68250000057742,
-      4.90999999968335
+      4.745000000111759,
+      4.560000000521541,
+      4.53000000026077
      ],
-     "bimodality": 0.614271691138219
+     "bimodality": 0.8195062434547854
     }
    },
    "B": {
     "gpu": {
-     "median": 6.413488,
+     "median": 6.677488,
      "runMedians": [
-      6.449952,
-      6.463936,
-      6.361824
+      6.692,
+      5.589696,
+      6.749392
      ],
-     "bimodality": 0.9615781139843855
+     "bimodality": 0.9981825685419259
     },
     "cpu": {
-     "median": 5.857499999925494,
-     "min": 2.9950000001117587,
+     "median": 4.77000000141561,
+     "min": 2.4450000002980232,
      "runMedians": [
-      5.959999999962747,
-      4.84499999973923,
-      4.947499999776483
+      4.820000000298023,
+      4.77000000141561,
+      4.754999999888241
      ],
-     "bimodality": 0.5088316272678853
+     "bimodality": 0.8344657919765609
     }
    },
    "labelsA": {
-    "bloom": 0.16083199999999997,
-    "grade": 0.299904,
-    "output": 0.125264,
-    "scene": 3.6242400000000004,
-    "shafts": 0.44652800000000004,
-    "shadow": 0.341968,
-    "reflection": 1.122368
+    "grade": 0.297728,
+    "output": 0.12224,
+    "scene": 3.563904,
+    "shafts": 0.44399999999999995,
+    "bloom": 0.15840000000000004,
+    "shadow": 0.340016,
+    "reflection": 1.109728
    },
    "labelsB": {
-    "grade": 0.300528,
-    "output": 0.123296,
-    "scene": 3.5547839999999997,
-    "shafts": 0.446512,
-    "bloom": 0.158848,
-    "shadow": 0.346752,
-    "reflection": 1.129328
+    "grade": 0.300608,
+    "output": 0.121824,
+    "scene": 3.511776,
+    "shadow": 0.347616,
+    "reflection": 1.113696,
+    "shafts": 0.447872,
+    "bloom": 0.15990400000000005
    },
    "counters": {
     "A": {
@@ -974,7 +973,7 @@
      "drawCalls": 262,
      "triangles": 6411928,
      "passes": 19,
-     "programs": 202,
+     "programs": 201,
      "rtMemMB": 395.85247802734375,
      "bandwidthMB": 300.03216552734375,
      "renderTargets": [
@@ -1098,79 +1097,79 @@
   },
   "walk": {
    "gpuRatio": {
-    "ratio": 0.9547066658171702,
-    "lo": 0.8648873870915186,
-    "hi": 1.12276455754732
+    "ratio": 0.9813171912152456,
+    "lo": 0.8567883628638118,
+    "hi": 1.1662733532776106
    },
    "gpuCyclesRatio": {
-    "ratio": 0.9497032333508924,
-    "lo": 0.8561440593518823,
-    "hi": 1.1229235004044513
+    "ratio": 0.9739397385808856,
+    "lo": 0.8465590582514325,
+    "hi": 1.1569622021718091
    },
    "cpuRatio": {
-    "ratio": 0.9954775688419844,
-    "lo": 0.6718620902752419,
-    "hi": 1.5133625960089159
+    "ratio": 1.0468329447466957,
+    "lo": 0.6966925539622375,
+    "hi": 1.4650941498521537
    },
    "A": {
     "gpu": {
-     "median": 5.326656,
+     "median": 5.351488,
      "runMedians": [
-      5.342208,
-      5.329536,
-      5.149392
+      5.35072,
+      5.2375039999999995,
+      5.352848
      ],
-     "bimodality": 0.9978948287606999
+     "bimodality": 0.9973336786427184
     },
     "cpu": {
-     "median": 4.785000000149012,
-     "min": 2.375,
+     "median": 4.8275000005960464,
+     "min": 2.125,
      "runMedians": [
-      4.785000000149012,
-      4.547499999869615,
-      4.4874999998137355
+      4.34499999973923,
+      5.007499999366701,
+      4.580000000074506
      ],
-     "bimodality": 0.6729358112200009
+     "bimodality": 0.7023113175584401
     }
    },
    "B": {
     "gpu": {
-     "median": 5.164992,
+     "median": 5.657728,
      "runMedians": [
-      5.233088,
-      4.706464,
-      5.164992
+      5.65808,
+      5.150096,
+      4.835072
      ],
-     "bimodality": 0.9974682931017725
+     "bimodality": 0.9983025273694028
     },
     "cpu": {
-     "median": 4.5200000000186265,
-     "min": 2.184999999590218,
+     "median": 5.167500000447035,
+     "min": 2.3650000002235174,
      "runMedians": [
-      4.80750000057742,
-      4.122500000521541,
-      4.827500000130385
+      4.5400000009685755,
+      5.169999999925494,
+      4.875000000931323
      ],
-     "bimodality": 0.6887157292136574
+     "bimodality": 0.7061360822414735
     }
    },
    "labelsA": {
-    "grade": 0.298608,
-    "output": 0.122832,
-    "scene": 2.9330879999999997,
-    "shadow": 0.343264,
-    "reflection": 0.720592,
-    "shafts": 0.449008,
-    "bloom": 0.153408
+    "grade": 0.297232,
+    "output": 0.120048,
+    "scene": 2.88784,
+    "shadow": 0.341856,
+    "reflection": 0.716192,
+    "shafts": 0.44787200000000005,
+    "bloom": 0.151488
    },
    "labelsB": {
-    "grade": 0.298048,
-    "output": 0.120384,
-    "scene": 3.222208,
-    "shafts": 0.448992,
-    "bloom": 0.152832,
-    "shadow": 0.3472,
-    "reflection": 0.84464
+    "grade": 0.301408,
+    "output": 0.119552,
+    "scene": 2.882944,
+    "shafts": 0.45528,
+    "bloom": 0.155296,
+    "shadow": 0.351808,
+    "reflection": 0.730144
    },
    "counters": {
     "A": {
@@ -1301,7 +1300,7 @@
      "drawCalls": 228,
      "triangles": 4716655,
      "passes": 19,
-     "programs": 205,
+     "programs": 204,
      "rtMemMB": 395.85247802734375,
      "bandwidthMB": 300.03216552734375,
      "renderTargets": [
@@ -1425,77 +1424,77 @@
   },
   "crown": {
    "gpuRatio": {
-    "ratio": 1.0390243959603342,
-    "lo": 0.7982914547329003,
-    "hi": 1.2079610205755376
+    "ratio": 0.8505462810085815,
+    "lo": 0.7806622068868448,
+    "hi": 1.2388762971318132
    },
    "gpuCyclesRatio": {
-    "ratio": 1.0419084117910138,
-    "lo": 0.7983552438544982,
-    "hi": 1.2180337124909224
+    "ratio": 0.8524413291027904,
+    "lo": 0.7800645719296789,
+    "hi": 1.2457972965865318
    },
    "cpuRatio": {
-    "ratio": 1.1109938805244655,
-    "lo": 0.6939686649864516,
-    "hi": 1.5884228450946307
+    "ratio": 1.0005802705998517,
+    "lo": 0.6460955062907224,
+    "hi": 1.5238430623487709
    },
    "A": {
     "gpu": {
-     "median": 4.609504,
+     "median": 5.130592,
      "runMedians": [
-      4.686752,
-      4.382208,
-      4.584448
+      5.550464,
+      5.570464,
+      4.577952
      ],
-     "bimodality": 0.9982791206004319
+     "bimodality": 0.9976252154892846
     },
     "cpu": {
-     "median": 4.072499999776483,
-     "min": 1.940000000409782,
+     "median": 4.509999999776483,
+     "min": 1.924999998882413,
      "runMedians": [
-      3.6450000004842877,
-      4.052499999757856,
-      4.1499999994412065
+      4.0150000005960464,
+      5.260000000707805,
+      3.650000000372529
      ],
-     "bimodality": 0.8168901254400147
+     "bimodality": 0.6544266052250215
     }
    },
    "B": {
     "gpu": {
-     "median": 4.836224,
+     "median": 4.531488,
      "runMedians": [
-      5.028672,
-      4.71024,
-      4.447312
+      4.547776,
+      4.385263999999999,
+      4.419584
      ],
-     "bimodality": 0.996691754611515
+     "bimodality": 0.9978920428702632
     },
     "cpu": {
-     "median": 4.632499999832362,
-     "min": 1.9949999991804361,
+     "median": 4.535000000149012,
+     "min": 2.1150000002235174,
      "runMedians": [
-      3.8399999998509884,
-      4.969999999273568,
-      4.352500000037253
+      4.077499999664724,
+      4.535000000149012,
+      4.319999999366701
      ],
-     "bimodality": 0.5393306990922604
+     "bimodality": 0.7336334078589681
     }
    },
    "labelsA": {
-    "bloom": 0.166416,
-    "grade": 0.298752,
-    "output": 0.12784,
-    "scene": 3.224768,
-    "shadow": 0.345792,
-    "reflection": 1.1624
+    "grade": 0.298416,
+    "output": 0.124848,
+    "scene": 3.166208,
+    "shadow": 0.3432,
+    "reflection": 1.140192,
+    "bloom": 0.16566399999999998
    },
    "labelsB": {
-    "grade": 0.298816,
-    "output": 0.125216,
-    "scene": 3.2832,
-    "bloom": 0.16483200000000003,
-    "shadow": 0.347168,
-    "reflection": 1.138272
+    "grade": 0.300032,
+    "output": 0.123232,
+    "scene": 3.119104,
+    "bloom": 0.164848,
+    "shadow": 0.34984000000000004,
+    "reflection": 1.1284640000000001
    },
    "counters": {
     "A": {
@@ -1626,7 +1625,7 @@
      "drawCalls": 177,
      "triangles": 8013257,
      "passes": 16,
-     "programs": 208,
+     "programs": 207,
      "rtMemMB": 395.85247802734375,
      "bandwidthMB": 282.23431396484375,
      "renderTargets": [
@@ -1754,7 +1753,7 @@
    "arm": "A",
    "i": 2,
    "contended": null,
-   "createMs": 5058.0649999994785,
+   "createMs": 4815.054999999702,
    "canvas": [
     1920,
     1080
@@ -1762,219 +1761,41 @@
    "backend": "webgpu",
    "contaminated": false,
    "clocks": {
-    "n": 345,
+    "n": 341,
     "median": 1905,
     "min": 405,
     "p10": 1365,
     "p90": 1920,
-    "mean": 1713.4347826086957,
-    "bimodality": 0.7977063211873232
+    "mean": 1702.126099706745,
+    "bimodality": 0.7920471597187299
    },
    "logs": [],
    "views": {
     "hero": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 156,
-      "noClock": 0
-     },
-     "grMedian": 1905,
-     "n": 120,
-     "gpuMedian": 5.804448000000001,
-     "cpuMedian": 5.00499999942258,
-     "cpuTotalMedian": 5.387500000651926
-    },
-    "cine250": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 151,
-      "noClock": 0
-     },
-     "grMedian": 1905,
-     "n": 120,
-     "gpuMedian": 6.282304,
-     "cpuMedian": 4.474999999627471,
-     "cpuTotalMedian": 4.724999999627471
-    },
-    "cine750": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 204,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 5.5469919999999995,
-     "cpuMedian": 4.367500000167638,
-     "cpuTotalMedian": 5.172500000335276
-    },
-    "walk": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
       "noGpu": 154,
       "noClock": 0
      },
+     "grMedian": 1920,
+     "n": 120,
+     "gpuMedian": 6.338368,
+     "cpuMedian": 4.775000000372529,
+     "cpuTotalMedian": 5.502499999478459
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 173,
+      "noClock": 0
+     },
      "grMedian": 1905,
      "n": 120,
-     "gpuMedian": 5.342208,
-     "cpuMedian": 4.785000000149012,
-     "cpuTotalMedian": 4.672500000335276
-    },
-    "crown": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 183,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 4.686752,
-     "cpuMedian": 3.6450000004842877,
-     "cpuTotalMedian": 3.885000000242144
-    }
-   }
-  },
-  {
-   "arm": "B",
-   "i": 0,
-   "contended": null,
-   "createMs": 6103.620000000112,
-   "canvas": [
-    1920,
-    1080
-   ],
-   "backend": "webgpu",
-   "contaminated": false,
-   "clocks": {
-    "n": 352,
-    "median": 1890,
-    "min": 300,
-    "p10": 1365,
-    "p90": 1905,
-    "mean": 1694.0198863636363,
-    "bimodality": 0.8442017605963819
-   },
-   "logs": [],
-   "views": {
-    "hero": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 142,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 6.432608,
-     "cpuMedian": 5.1499999994412065,
-     "cpuTotalMedian": 5.34250000026077
-    },
-    "cine250": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 130,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 5.649664,
-     "cpuMedian": 5.127499999944121,
-     "cpuTotalMedian": 5.337499999906868
-    },
-    "cine750": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 158,
-      "noClock": 0
-     },
-     "grMedian": 1875,
-     "n": 120,
-     "gpuMedian": 6.449952,
-     "cpuMedian": 5.959999999962747,
-     "cpuTotalMedian": 5.197499999776483
-    },
-    "walk": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 1,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 5.233088,
-     "cpuMedian": 4.80750000057742,
-     "cpuTotalMedian": 4.8374999994412065
-    },
-    "crown": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 1,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 5.028672,
-     "cpuMedian": 3.8399999998509884,
-     "cpuTotalMedian": 4.742500000167638
-    }
-   }
-  },
-  {
-   "arm": "B",
-   "i": 2,
-   "contended": null,
-   "createMs": 5818.484999999404,
-   "canvas": [
-    1920,
-    1080
-   ],
-   "backend": "webgpu",
-   "contaminated": false,
-   "clocks": {
-    "n": 352,
-    "median": 1875,
-    "min": 615,
-    "p10": 1216.5,
-    "p90": 1905,
-    "mean": 1692.4005681818182,
-    "bimodality": 0.8024219645172818
-   },
-   "logs": [],
-   "views": {
-    "hero": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 157,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 6.57232,
-     "cpuMedian": 5.290000000037253,
-     "cpuTotalMedian": 5.835000000428408
-    },
-    "cine250": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 102,
-      "noClock": 0
-     },
-     "grMedian": 1890,
-     "n": 120,
-     "gpuMedian": 5.960912,
-     "cpuMedian": 4.944999999832362,
-     "cpuTotalMedian": 4.627499999478459
+     "gpuMedian": 6.241664,
+     "cpuMedian": 4.259999999776483,
+     "cpuTotalMedian": 4.865000000223517
     },
     "cine750": {
      "rejected": {
@@ -1983,45 +1804,45 @@
       "noGpu": 169,
       "noClock": 0
      },
-     "grMedian": 1875,
+     "grMedian": 1905,
      "n": 120,
-     "gpuMedian": 6.463936,
-     "cpuMedian": 4.84499999973923,
-     "cpuTotalMedian": 5.1450000000186265
+     "gpuMedian": 5.503424,
+     "cpuMedian": 4.745000000111759,
+     "cpuTotalMedian": 5.080000001005828
     },
     "walk": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 1,
+      "noGpu": 175,
       "noClock": 0
      },
-     "grMedian": 1860,
+     "grMedian": 1905,
      "n": 120,
-     "gpuMedian": 4.706464,
-     "cpuMedian": 4.122500000521541,
-     "cpuTotalMedian": 4.712500000372529
+     "gpuMedian": 5.35072,
+     "cpuMedian": 4.34499999973923,
+     "cpuTotalMedian": 4.5874999994412065
     },
     "crown": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 155,
+      "noGpu": 165,
       "noClock": 0
      },
-     "grMedian": 1875,
+     "grMedian": 1890,
      "n": 120,
-     "gpuMedian": 4.71024,
-     "cpuMedian": 4.969999999273568,
-     "cpuTotalMedian": 4.055000000633299
+     "gpuMedian": 5.550464,
+     "cpuMedian": 4.0150000005960464,
+     "cpuTotalMedian": 3.6000000005587935
     }
    }
   },
   {
-   "arm": "A",
-   "i": 1,
+   "arm": "B",
+   "i": 0,
    "contended": null,
-   "createMs": 4947.260000000708,
+   "createMs": 5004.335000000894,
    "canvas": [
     1920,
     1080
@@ -2029,13 +1850,13 @@
    "backend": "webgpu",
    "contaminated": false,
    "clocks": {
-    "n": 350,
+    "n": 347,
     "median": 1890,
-    "min": 405,
+    "min": 300,
     "p10": 1365,
-    "p90": 1905,
-    "mean": 1726.3285714285714,
-    "bimodality": 0.8658239274744036
+    "p90": 1920,
+    "mean": 1712.2046109510086,
+    "bimodality": 0.817390662142757
    },
    "logs": [],
    "views": {
@@ -2043,74 +1864,163 @@
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 132,
+      "noGpu": 144,
       "noClock": 0
      },
-     "grMedian": 1875,
+     "grMedian": 1890,
      "n": 120,
-     "gpuMedian": 6.710432,
-     "cpuMedian": 5.9575000000186265,
-     "cpuTotalMedian": 5.472500000149012
+     "gpuMedian": 6.2685759999999995,
+     "cpuMedian": 5.080000000074506,
+     "cpuTotalMedian": 4.809999999590218
     },
     "cine250": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 158,
+      "noGpu": 174,
       "noClock": 0
      },
-     "grMedian": 1890,
+     "grMedian": 1905,
      "n": 120,
-     "gpuMedian": 6.29608,
-     "cpuMedian": 5.08750000083819,
-     "cpuTotalMedian": 4.965000000782311
+     "gpuMedian": 5.900848,
+     "cpuMedian": 4.767500000074506,
+     "cpuTotalMedian": 5.212500000372529
     },
     "cine750": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 173,
+      "noGpu": 172,
       "noClock": 0
      },
-     "grMedian": 1875,
+     "grMedian": 1890,
      "n": 120,
-     "gpuMedian": 5.550784,
-     "cpuMedian": 4.68250000057742,
-     "cpuTotalMedian": 4.72499999916181
+     "gpuMedian": 6.692,
+     "cpuMedian": 4.820000000298023,
+     "cpuTotalMedian": 5.194999999366701
     },
     "walk": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 161,
+      "noGpu": 157,
       "noClock": 0
      },
-     "grMedian": 1875,
+     "grMedian": 1890,
      "n": 120,
-     "gpuMedian": 5.329536,
-     "cpuMedian": 4.547499999869615,
-     "cpuTotalMedian": 5.0125000001862645
+     "gpuMedian": 5.65808,
+     "cpuMedian": 4.5400000009685755,
+     "cpuTotalMedian": 4.72999999858439
     },
     "crown": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 179,
+      "noGpu": 142,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 4.547776,
+     "cpuMedian": 4.077499999664724,
+     "cpuTotalMedian": 4.03249999973923
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 2,
+   "contended": null,
+   "createMs": 5367.220000000671,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 346,
+    "median": 1875,
+    "min": 300,
+    "p10": 1260,
+    "p90": 1905,
+    "mean": 1647.2687861271677,
+    "bimodality": 0.8451038085309234
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 163,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 5.45568,
+     "cpuMedian": 4.884999999776483,
+     "cpuTotalMedian": 6.17750000115484
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 154,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 5.887504,
+     "cpuMedian": 4.772499999962747,
+     "cpuTotalMedian": 5.139999999664724
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 162,
       "noClock": 0
      },
      "grMedian": 1875,
      "n": 120,
-     "gpuMedian": 4.382208,
-     "cpuMedian": 4.052499999757856,
-     "cpuTotalMedian": 3.967499999795109
+     "gpuMedian": 5.589696,
+     "cpuMedian": 4.77000000141561,
+     "cpuTotalMedian": 5.525000001303852
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 172,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 5.150096,
+     "cpuMedian": 5.169999999925494,
+     "cpuTotalMedian": 4.334999999962747
+    },
+    "crown": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 154,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 4.385263999999999,
+     "cpuMedian": 4.535000000149012,
+     "cpuTotalMedian": 4.082499999552965
     }
    }
   },
   {
    "arm": "A",
-   "i": 0,
+   "i": 1,
    "contended": null,
-   "createMs": 4878.584999999963,
+   "createMs": 4641.355000000447,
    "canvas": [
     1920,
     1080
@@ -2121,10 +2031,10 @@
     "n": 353,
     "median": 1875,
     "min": 300,
-    "p10": 1185,
+    "p10": 1365,
     "p90": 1905,
-    "mean": 1644.2634560906515,
-    "bimodality": 0.845105956918498
+    "mean": 1705.198300283286,
+    "bimodality": 0.8383703280371848
    },
    "logs": [],
    "views": {
@@ -2132,53 +2042,231 @@
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 163,
+      "noGpu": 160,
       "noClock": 0
      },
      "grMedian": 1875,
      "n": 120,
-     "gpuMedian": 6.708,
-     "cpuMedian": 4.904999999795109,
-     "cpuTotalMedian": 5.494999999646097
+     "gpuMedian": 6.228384,
+     "cpuMedian": 4.520000000484288,
+     "cpuTotalMedian": 5.807500000111759
     },
     "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 148,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 5.919136,
+     "cpuMedian": 4.724999998696148,
+     "cpuTotalMedian": 5.417499999515712
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 150,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.054031999999999,
+     "cpuMedian": 4.560000000521541,
+     "cpuTotalMedian": 5.302500000223517
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 130,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 5.2375039999999995,
+     "cpuMedian": 5.007499999366701,
+     "cpuTotalMedian": 4.66749999858439
+    },
+    "crown": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 143,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 5.570464,
+     "cpuMedian": 5.260000000707805,
+     "cpuTotalMedian": 4.325000001117587
+    }
+   }
+  },
+  {
+   "arm": "A",
+   "i": 0,
+   "contended": null,
+   "createMs": 6094.984999999404,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 368,
+    "median": 1875,
+    "min": 405,
+    "p10": 900,
+    "p90": 1905,
+    "mean": 1657.5407608695652,
+    "bimodality": 0.834810398729778
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 203,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.276832,
+     "cpuMedian": 5.217499999329448,
+     "cpuTotalMedian": 5.784999999217689
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 153,
+      "noClock": 0
+     },
+     "grMedian": 1890,
+     "n": 120,
+     "gpuMedian": 6.33504,
+     "cpuMedian": 4.565000000409782,
+     "cpuTotalMedian": 4.910000000149012
+    },
+    "cine750": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
       "noGpu": 184,
       "noClock": 0
      },
-     "grMedian": 1875,
-     "n": 120,
-     "gpuMedian": 6.316912,
-     "cpuMedian": 4.929999999701977,
-     "cpuTotalMedian": 4.944999999832362
-    },
-    "cine750": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 171,
-      "noClock": 0
-     },
      "grMedian": 1860,
      "n": 120,
-     "gpuMedian": 6.159968,
-     "cpuMedian": 4.90999999968335,
-     "cpuTotalMedian": 4.862500000279397
+     "gpuMedian": 5.324576,
+     "cpuMedian": 4.53000000026077,
+     "cpuTotalMedian": 5.292499999515712
     },
     "walk": {
      "rejected": {
       "clock": 0,
       "throttle": 0,
-      "noGpu": 152,
+      "noGpu": 134,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 5.352848,
+     "cpuMedian": 4.580000000074506,
+     "cpuTotalMedian": 4.379999999888241
+    },
+    "crown": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 153,
       "noClock": 0
      },
      "grMedian": 1860,
      "n": 120,
-     "gpuMedian": 5.149392,
-     "cpuMedian": 4.4874999998137355,
-     "cpuTotalMedian": 4.537500000093132
+     "gpuMedian": 4.577952,
+     "cpuMedian": 3.650000000372529,
+     "cpuTotalMedian": 3.7549999998882413
+    }
+   }
+  },
+  {
+   "arm": "B",
+   "i": 1,
+   "contended": null,
+   "createMs": 6480.660000000149,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "backend": "webgpu",
+   "contaminated": false,
+   "clocks": {
+    "n": 372,
+    "median": 1875,
+    "min": 435,
+    "p10": 933,
+    "p90": 1905,
+    "mean": 1668.991935483871,
+    "bimodality": 0.8254343515488779
+   },
+   "logs": [],
+   "views": {
+    "hero": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 149,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.845376,
+     "cpuMedian": 5.634999999776483,
+     "cpuTotalMedian": 5.659999999217689
+    },
+    "cine250": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 142,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 5.960304000000001,
+     "cpuMedian": 4.322499999776483,
+     "cpuTotalMedian": 5.274999998509884
+    },
+    "cine750": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 166,
+      "noClock": 0
+     },
+     "grMedian": 1875,
+     "n": 120,
+     "gpuMedian": 6.749392,
+     "cpuMedian": 4.754999999888241,
+     "cpuTotalMedian": 5.587500000372529
+    },
+    "walk": {
+     "rejected": {
+      "clock": 0,
+      "throttle": 0,
+      "noGpu": 174,
+      "noClock": 0
+     },
+     "grMedian": 1860,
+     "n": 120,
+     "gpuMedian": 4.835072,
+     "cpuMedian": 4.875000000931323,
+     "cpuTotalMedian": 5.157500001601875
     },
     "crown": {
      "rejected": {
@@ -2187,100 +2275,11 @@
       "noGpu": 161,
       "noClock": 0
      },
-     "grMedian": 1860,
-     "n": 120,
-     "gpuMedian": 4.584448,
-     "cpuMedian": 4.1499999994412065,
-     "cpuTotalMedian": 3.897499999962747
-    }
-   }
-  },
-  {
-   "arm": "B",
-   "i": 1,
-   "contended": null,
-   "createMs": 7115.020000000484,
-   "canvas": [
-    1920,
-    1080
-   ],
-   "backend": "webgpu",
-   "contaminated": false,
-   "clocks": {
-    "n": 363,
-    "median": 1875,
-    "min": 300,
-    "p10": 405,
-    "p90": 1905,
-    "mean": 1558.099173553719,
-    "bimodality": 0.8284003743221504
-   },
-   "logs": [],
-   "views": {
-    "hero": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 158,
-      "noClock": 0
-     },
      "grMedian": 1875,
      "n": 120,
-     "gpuMedian": 5.595488,
-     "cpuMedian": 5.270000000484288,
-     "cpuTotalMedian": 5.005000000353903
-    },
-    "cine250": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 184,
-      "noClock": 0
-     },
-     "grMedian": 1875,
-     "n": 120,
-     "gpuMedian": 5.704384,
-     "cpuMedian": 4.28499999968335,
-     "cpuTotalMedian": 5.252499999478459
-    },
-    "cine750": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 163,
-      "noClock": 0
-     },
-     "grMedian": 1875,
-     "n": 120,
-     "gpuMedian": 6.361824,
-     "cpuMedian": 4.947499999776483,
-     "cpuTotalMedian": 5.199999999720603
-    },
-    "walk": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 137,
-      "noClock": 0
-     },
-     "grMedian": 1860,
-     "n": 120,
-     "gpuMedian": 5.164992,
-     "cpuMedian": 4.827500000130385,
-     "cpuTotalMedian": 4.162499999627471
-    },
-    "crown": {
-     "rejected": {
-      "clock": 0,
-      "throttle": 0,
-      "noGpu": 158,
-      "noClock": 0
-     },
-     "grMedian": 1875,
-     "n": 120,
-     "gpuMedian": 4.447312,
-     "cpuMedian": 4.352500000037253,
-     "cpuTotalMedian": 4.004999999888241
+     "gpuMedian": 4.419584,
+     "cpuMedian": 4.319999999366701,
+     "cpuTotalMedian": 3.737500000745058
     }
    }
   }
