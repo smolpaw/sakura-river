@@ -10,8 +10,8 @@ Procedural Three.js scene. README.md has the commands, the file layout and the e
 
 ## Conventions
 
-- Everything visual is generated in code: no image assets, no hand-made models. Models are built by Blender scripts in `tools/` (`node tools/blender.mjs [name]`) into `src/models/` and `public/models/`. Modelling in Blender is Claude's job (the owner has Blender installed but doesn't use it). Judge models under the scene's lighting (look captures), not only in Blender renders.
-- The only exceptions are the sounds (`tools/audio.mjs`) and the deer (`tools/models.mjs`). A new sound or model source needs a licence that allows this and a credit in README.md.
+- Our own models are built by Blender scripts in `tools/` (`node tools/blender.mjs [name]`) into `src/models/` and `public/models/`. Modelling in Blender is Claude's job (the owner has Blender installed but doesn't use it). Judge models under the scene's lighting (look captures), not only in Blender renders.
+- Outside assets (textures, models, sounds) are allowed. Each needs a licence that allows this use and a credit in README.md; the sounds come in through `tools/audio.mjs`, the deer through `tools/models.mjs` and the textures through `tools/textures.mjs`.
 - The cherries' trunk model is built from `src/tree.js`'s skeletons. After changing how the trees grow, where they stand or the ground under them, run `node tools/blender.mjs cherry`; the console warns when the model no longer fits. Keep the farmland and building pads in `src/world.js` clear of the small cherries (its `CLEAR` list) for the same reason.
 - `three` is pinned. The materials subclass three internals (`PhysicalLightingModel`), `main.js` wraps `renderer._getFallback` and `lods.js` patches `WGSLNodeBuilder.getUniformFromNode`. After any upgrade, check the look and `createMs`.
 - The time of day doesn't tick (owner decision): only the time-lapse to a newly picked time moves it. Don't propose a running clock.
