@@ -20,6 +20,7 @@ Procedural Three.js scene. README.md has the commands, the file layout and the e
 ## TSL traps
 
 - Assign three's lighting properties (`diffuseContribution`, `roughness`, …) unconditionally, never inside an `If`: on frames that skip the branch, the lighting comes out black. Compute a factor instead.
+- A node first built inside an `If` keeps its variable there, so later reads of the same node outside the branch (shared nodes such as `normalWorldGeometry`, or three's own `normalWorld`) find it unset and the surface turns black where the branch is skipped. Take such nodes into a `toVar()` before the branch. `select(a, b)` compiles to an if/else the same way. `bench/shaders.mjs <build> --unset` lists every such read.
 - An `Fn` without `setLayout` is inlined, so nested `Loop`s inside it share the variable `i` and break silently. Give the loops names: `Loop({ start: 0, end: n, type: 'int', name: 'puff' }, ({ puff }) => …)`.
 - Inlining copies the `Fn` into every call site, and a JS `for` unrolls. Bloated shaders compile slowly enough to trip GPU watchdogs. Give reused helpers a `setLayout` and use `Loop`. `bench/shaders.mjs` lists the shaders by size.
 
