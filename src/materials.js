@@ -56,6 +56,7 @@ export const PHOTO_KIND = [null,
   { set: 'weathered_planks', amount: 0.3, hue: 0.0, relief: 0.5 }, // painted wood (lacquer): the grain under it
   { set: 'rock_surface', amount: 0.7, hue: 0.15, relief: 1.0 }, // carved stone
   { set: 'japanese_cedar_bark', amount: 0.7, hue: 0.2, relief: 1.0 }, // the woods' bark
+  { set: 'gravel_ground_01', amount: 0.75, hue: 0.2, relief: 1.0 }, // gravel (the temple's courtyard)
 ];
 const PHOTO_NEAR = 70; // m: beyond it the surfaces are as without the photos
 // for a material on a model with surface kinds (`only`: the kinds it has, kinds.js KIND): { color: the colour
@@ -257,7 +258,8 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
     const carpet = grassColor(clamp(gr.z.add(patch.mul(0.12)), 0.0, 1.0), mix(0.5, 0.74, far).mul(patch.mul(0.12).add(1.0)).mul(streak.add(1.0)));
     const c = mix(attribute('color', 'vec3').mul(dn.mul(0.42).add(0.7)), carpet, cover).toVar();
     // the river's bed: rounded stones and gravel, each stone its own grey-brown, sand between, close by only
-    If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
+    const bg = PHOTO[BED_PHOTO] ? bedPhotoGrad() : null; // (outside the branch, as the lanes')
+    If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, bg ? riverBedPhoto(c, bg) : riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
     // the lanes underfoot
     const pg = lane && PHOTO[EARTH_PHOTO] ? earthPhotoGrad() : null; // (outside the branch: WGSL takes derivatives only there)
     if (lane) If(dist.lessThan(LANE_NEAR), () => { c.assign(laneColor(lane, dist, earth, c, pg)); });
@@ -321,6 +323,15 @@ const stonesFn = Fn(([p, scale, seedA, seedB, seedC]) => {
 }).setLayout({ name: 'riverStones', type: 'vec2', inputs: [{ name: 'p', type: 'vec2' }, { name: 'scale', type: 'float' },
   { name: 'seedA', type: 'float' }, { name: 'seedB', type: 'float' }, { name: 'seedC', type: 'float' }] });
 const stones = (p, scale, seed) => stonesFn(p, float(scale), float(seed), float(seed + 37.1), float(seed + 71.3));
+// with the photographed river pebbles (ganges_river_pebbles; `pg`: the gradients of its texture coordinates, taken
+// outside any branch): the bed is the photo's stones, scaled to the procedural bed's tones
+const BED_PHOTO = 'ganges_river_pebbles';
+const bedPhotoGrad = () => { const s = 1 / PHOTO[BED_PHOTO].size; return [dFdx(wp.xz).mul(s), dFdy(wp.xz).mul(s)]; };
+const riverBedPhoto = (under, pg) => {
+  const set = PHOTO[BED_PHOTO];
+  const c = texture(set.diff, wp.xz.div(set.size)).grad(pg[0], pg[1]).rgb;
+  return mix(under, vec3(0.2, 0.18, 0.15), 0.7).mul(detailOf(c, set, 0.9, 0.6));
+};
 const riverBed = (xz, under) => {
   // the cells' grid warped by a broad noise so stones don't line up in rows
   const w = xz.add(vec2(vnoise(xz.mul(1.3)), vnoise(xz.mul(1.3).add(9.0))).mul(0.18));
@@ -715,7 +726,7 @@ export function templeMaterial(d) {
   const pts = (a) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(vec3(a[i], a[i + 1], a[i + 2])); return out; };
   const lamps = pts(d.lamps), flood = pts(d.flood);
   const glow = attribute('aGlow', 'float');
-  const photo = kindPhotos([KIND.WOOD, KIND.PAINT, KIND.PLASTER, KIND.TILE, KIND.STONE]);
+  const photo = kindPhotos([KIND.WOOD, KIND.PAINT, KIND.PLASTER, KIND.TILE, KIND.STONE, KIND.GRAVEL]);
   // age: grime streaks run down the walls from the eaves, damp at their feet, moss and lichen on what faces up
   const colorNode = Fn(() => {
     const c = attribute('color', 'vec3').mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(5.0))).mul(0.3).add(0.85)).toVar();

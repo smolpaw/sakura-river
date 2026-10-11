@@ -17,7 +17,7 @@ const OCHRE = [0.62, 0.45, 0.22], PAPER = [0.86, 0.8, 0.66], FIREBOX = [0.5, 0.4
 const SHU = [0.56, 0.07, 0.03], SHU_D = [0.3, 0.05, 0.03]; // the pagoda's vermilion lacquer (the bridge's, weathered)
 // the photographed textures the parts take, by colour (kinds.js)
 const KINDS = [[WOOD, KIND.WOOD], [WOOD_D, KIND.WOOD], [SHU, KIND.PAINT], [SHU_D, KIND.PAINT], [PLASTER, KIND.PLASTER], [TILE, KIND.TILE],
-  [TILE_D, KIND.TILE], [STONE, KIND.STONE]];
+  [TILE_D, KIND.TILE], [STONE, KIND.STONE], [GRAVEL, KIND.GRAVEL]];
 
 // parts in a local frame; at() places what its callback adds (lamps too)
 export function kit() {

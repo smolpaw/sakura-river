@@ -4,7 +4,7 @@
 
 A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Deer graze, a heron fishes the shallows, a fisherman and a rice planter work, and birds, butterflies, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
-Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, earth), and the sound (recordings); all are credited below.
+Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, earth, gravel, the river's bed), and the sound (recordings); all are credited below.
 
 Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
 
@@ -113,3 +113,5 @@ Close up, these surfaces are photographed texture sets from Poly Haven (https://
 - Built stone (foundations, the temple's base, the bridge's abutments): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
 - Carved stone (the Jizō, the stone lanterns, the lamps' feet): "Rock Surface" by Amal Kumar.
 - The woods' bark: "Japanese Cedar Bark" by Charlotte Baglioni.
+- The river's bed: "Ganges River Pebbles" by Amal Kumar.
+- The temple's gravel courtyard: "Gravel Ground 01" by Rob Tuytel.
