@@ -9,7 +9,9 @@
 // downstream (never the bank), the egrets any way. The heron's feet stand on the river bed DEPTH m under the water,
 // and it steps only where the water stays between ankle and shin deep and within RANGE m of where it began (koi.js
 // keeps the koi off that stretch, heronClearings); the egrets wade inside their paddy, the feet just under its
-// water. The egrets leave for their roost in the evening and come back in the morning. Lit by the scene's own
+// water. The egrets leave for their roost in the evening and come back in the morning. The heron is wary: when the
+// walker comes within FLUSH m (the camera within CAMERA_FLUSH) it croaks and flies off (birds.js flies it) to its other
+// stretch of the same bank, OTHER_Z, and a few quiet minutes later flies home. Lit by the scene's own
 // material, as the deer are (the sun's shadows, fog, the lamps' light, the ground's bounce); both cast shadows.
 // The heron's marks are drawn over its vertex colours from the bind pose: the black stripe from the eye back to the
 // crest, the yellow eye, the streaks down the neck's front. The heron's legs leave a wake in the current and each
@@ -35,6 +37,9 @@ const PADDY = [-67, -90.5]; // the egrets' paddy, by the valley lane
 const FAR = { heron: 30, egret: 18 }; // m: the lighter models beyond
 const ROOST = [5.3, 18.7]; // the clock hours the egrets are in their paddy
 const PAUSE = [15, 40]; // s of idling between a stalk or a preen
+const OTHER_Z = -46; // the heron's other stretch of the same bank, downstream, where it flies when disturbed
+const FLUSH = 14, CAMERA_FLUSH = 3.5; // m: the heron takes off when the walker (the camera) comes this close
+const RETURN = [120, 240], CLEAR = 22; // s before it flies home, once no one is within CLEAR m of there
 const FOOT_X = 0.032; // tools/heron.py FOOT: each foot this far to its side of the middle
 const STEPS = [[-1, 0.9, 2.5], [1, 2.6, 4.2]]; // tools/heron.py stalk_pose: each foot's step (side, lifted, set down, s)
 
@@ -97,7 +102,8 @@ const birdMaterial = (colorNode) => new LitMaterial({ roughness: 0.85, metalness
   return out.add(diffuseColor.rgb.mul(lanternLight(positionWorld).add(groundBounce()).add(rim)));
 })());
 
-export async function makeHerons(world) {
+// birds: birds.js (the heron's flight)
+export async function makeHerons(world, birds) {
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(heronUrl);
   const src = gltf.scene;
   src.updateMatrixWorld(true);
@@ -159,9 +165,10 @@ export async function makeHerons(world) {
   // the heron: feet on the bed DEPTH under the water, facing the river (side on to the views from downstream)
   const hx = shallow(world, HOME_Z);
   const heron = make('heron', hx, world.height(hx, HOME_Z), HOME_Z, -Math.PI / 2 - 0.25, 1);
+  heron.homeZ = HOME_Z; // the stretch it is on now
   // its headings: along the bank half the time (where it can step), else out over the river; never the bank
-  const down = Math.atan2(world.riverX(HOME_Z + 1) - world.riverX(HOME_Z - 1), 2); // facing downstream along the bank
   heron.pick = () => {
+    const z = heron.homeZ, down = Math.atan2(world.riverX(z + 1) - world.riverX(z - 1), 2); // facing downstream along the bank
     const r = rng();
     if (r < 0.3) return down + (rng() - 0.5) * 0.3;
     if (r < 0.6) return down - Math.PI + (rng() - 0.5) * 0.3;
@@ -169,8 +176,27 @@ export async function makeHerons(world) {
   };
   heron.stand = (x, z) => {
     const d = -world.height(x, z);
-    return d >= WADE[0] && d <= WADE[1] && Math.abs(z - HOME_Z) < RANGE ? world.height(x, z) : null;
+    return d >= WADE[0] && d <= WADE[1] && Math.abs(z - heron.homeZ) < RANGE ? world.height(x, z) : null;
   };
+  // off to its other stretch when disturbed, home again once all is quiet; hidden while the flight (birds.js) has it
+  heron.trip = null; heron.back = 0;
+  const flyTo = (z) => {
+    const p = heron.root.position, x = shallow(world, z), to = new THREE.Vector3(x, world.height(x, z), z);
+    heron.trip = z; heron.act = null; heron.root.visible = false;
+    events.push({ kind: 'heron', x: p.x, y: p.y + 1, z: p.z }); // the croak as it goes
+    birds.heron(p, to, () => {
+      heron.trip = null; heron.homeZ = z;
+      heron.root.position.copy(to);
+      heron.yaw = heron.yawTo = -Math.PI / 2 + (rng() - 0.5) * 0.6;
+      heron.root.rotation.y = heron.yaw;
+      heron.A.idle.reset().play();
+      for (const n of ['stalk', 'preen']) heron.A[n].stop();
+      heron.next = PAUSE[0] + rng() * 10;
+      heron.back = now + RETURN[0] + rng() * (RETURN[1] - RETURN[0]);
+    });
+  };
+  let now = 0, calm = false;
+  const walkerAt = new THREE.Vector3(), events = [];
   // the egrets: two in one paddy, a few metres apart, feet just under its water
   const egrets = [];
   for (let r = 0; r < 6 && egrets.length < 2; r += 0.5) {
@@ -187,7 +213,7 @@ export async function makeHerons(world) {
       egrets.push(e);
     }
   }
-  const birds = [heron, ...egrets];
+  const all = [heron, ...egrets];
   const fwd = new THREE.Vector3();
   // the heron's legs in the current, the rings of its steps (touches.js)
   const wakes = STEPS.map(() => ({ x: 0, z: 0, r: 0.012, len: 0.9, amp: 0.85, lambda: 0.045 })), splashes = [];
@@ -201,6 +227,7 @@ export async function makeHerons(world) {
       // (three's yaw: local x -> (cos, -sin), local z -> (sin, cos))
       const w = wakes[i];
       w.x = p.x + lx * c + lz * s; w.z = p.z - lx * s + lz * c;
+      w.amp = heron.trip === null ? 0.85 : 0;
       if (heron.act === 'stalk') {
         if (stalkT < t0 && t >= t0) splashes.push({ x: w.x, z: w.z, amp: 0.45, r: 0.01 });
         if (stalkT < t1 && t >= t1) splashes.push({ x: w.x, z: w.z, amp: 0.9, r: 0.01 });
@@ -210,15 +237,31 @@ export async function makeHerons(world) {
   };
 
   return {
-    group, wakes, splashes,
-    info: () => birds.map((b) => ({ kind: b.kind, x: +b.root.position.x.toFixed(2), y: +b.root.position.y.toFixed(3), z: +b.root.position.z.toFixed(2), yaw: +b.root.rotation.y.toFixed(2), act: b.act, visible: b.root.visible })),
+    group, wakes, splashes, events, // events: calls for the sound (audio.js call), taken each frame
+    info(o = {}) {
+      if (o.calm !== undefined) calm = !!o.calm;
+      if (o.fly) flyTo(heron.homeZ === HOME_Z ? OTHER_Z : HOME_Z);
+      return all.map((b) => ({ kind: b.kind, x: +b.root.position.x.toFixed(2), y: +b.root.position.y.toFixed(3), z: +b.root.position.z.toFixed(2), yaw: +b.root.rotation.y.toFixed(2), act: b.act, visible: b.root.visible, flying: b === heron && heron.trip !== null }));
+    },
     // warming: the warm-up shows every bird and both its models, so their pipelines are built behind the loading veil,
     // not when one first comes into view
-    update(dt, hour, camera, warming = false) {
+    // walker: where the walker's feet are ({x, y, z}) or null
+    update(dt, hour, camera, warming = false, walker = null) {
       dt = Math.min(dt, 0.1);
+      now += dt;
       const away = hour < ROOST[0] || hour > ROOST[1];
-      for (const b of birds) {
-        b.root.visible = warming || b.kind === 'heron' || !away;
+      // the heron: off when someone comes close; home a few minutes after, if no one is near there
+      if (walker) walkerAt.set(walker.x, walker.y + 1, walker.z);
+      const near = (P, r, k) => Math.min(walker ? walkerAt.distanceTo(P) / r : Infinity, camera.position.distanceTo(P) / (r * k));
+      if (heron.trip === null && !warming && !calm) {
+        if (near(heron.root.position, FLUSH, CAMERA_FLUSH / FLUSH) < 1) flyTo(heron.homeZ === HOME_Z ? OTHER_Z : HOME_Z);
+        else if (heron.homeZ !== HOME_Z && now > heron.back) {
+          const hx = shallow(world, HOME_Z);
+          if (near(new THREE.Vector3(hx, 0, HOME_Z), CLEAR, 0.3) > 1) flyTo(HOME_Z); else heron.back = now + 30;
+        }
+      }
+      for (const b of all) {
+        b.root.visible = warming || (b.kind === 'heron' ? heron.trip === null : !away);
         if (!b.root.visible) continue;
         const d = camera ? camera.position.distanceTo(b.root.position) : 0;
         const nearOn = d < FAR[b.kind];

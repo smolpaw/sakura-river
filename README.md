@@ -2,9 +2,9 @@
 
 [![A cherry tree in bloom by a river, a red drum bridge, a pagoda and a snow-capped mountain](docs/screenshot.jpg)](https://smolpaw.github.io/sakura-river/)
 
-A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Deer graze, a heron fishes the shallows, a fisherman and a rice planter work, and birds, butterflies, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
+A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Sika deer keep their day's round on the far bank and watch whoever comes near, a heron fishes the shallows, ducks, turtles, a kingfisher and wagtails live along the river, white-eyes work the blossom, a fisherman and a rice planter work, and birds, butterflies, bats, frogs, a tanuki, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
-Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the boulders (scanned rocks, simplified in Blender), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel), and the sound (recordings); all are credited below.
+Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the boulders (scanned rocks, simplified in Blender), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel), and the sound (recordings); all are credited below.
 
 Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
 
@@ -17,7 +17,7 @@ Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
 
 The page must be served over HTTP to load the sounds (`dist/audio/`) and the walker's and the people's models (`dist/models/`). Opened as a file, it runs without them.
 
-Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender models; needs `blender` on the PATH or `BLENDER=`), `node tools/models.mjs` (the deer) and `node tools/audio.mjs` (the sounds; needs ffmpeg).
+Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender models; needs `blender` on the PATH or `BLENDER=`) and `node tools/audio.mjs` (the sounds; needs ffmpeg).
 
 ## Controls
 
@@ -37,7 +37,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - `src/lights.js`, `src/sunshadow.js`, `src/post.js`: the lamps' light map, the valley and cloud shadows, light shafts and the final grade.
 - Scenery: `tree.js`, `blossoms.js`, `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.
 - Sky and water: `sky.js`, `weather.js`, `water.js`, `touches.js`, `petals.js`, `petalsgpu.js`, `fx.js`, `fireflies.js`.
-- Animals and people: `koi.js`, `deer.js`, `heron.js`, `birds.js`, `perched.js`, `butterflies.js`, `figures.js`.
+- Animals and people: `koi.js`, `deer.js`, `heron.js`, `ducks.js`, `turtles.js`, `frogs.js`, `tanuki.js`, `birds.js`, `perched.js`, `butterflies.js`, `figures.js`.
 - Walk mode: `walk.js` (the path network and the input), `walker.js` (the traveller's body).
 - `src/audio.js`: music and ambience.
 - `src/models/`: models inlined in the page. `public/models/`: models fetched later (the traveller, the people at work, the Ultra tier's near models). `public/audio/`: sounds. `public/textures/`: photographed textures.
@@ -88,6 +88,15 @@ Ambience:
 - The fisherman's tune (`fisher-*`; the humming lowered by three semitones): "Auld Lang Syne unmastered, whistles and hums" by fallbackcrush, Freesound, CC BY 4.0. https://freesound.org/people/fallbackcrush/sounds/413563/
 - Bamboo: "Bamboo grove in Tsuji, Rittō City, Shiga Prefecture, Japan - Wind in Bamboo" by Greg Peterson, radio aporee, CC BY-SA 3.0. https://archive.org/details/aporee_43162_49194
 
+Animals (xeno-canto recordings are CC BY-NC-SA 4.0):
+- Sika deer's alarm whistles: XC961992 and XC961990, Sika Deer (*Cervus nippon*), Japan, by Joshua Chong, xeno-canto. https://xeno-canto.org/961992 https://xeno-canto.org/961990
+- Grey heron's croaks: XC998335 and XC1102109, Grey Heron (*Ardea cinerea*), Ireland, by Paul Kelly, xeno-canto. https://xeno-canto.org/998335 https://xeno-canto.org/1102109
+- Kingfisher's calls: XC785257, Common Kingfisher (*Alcedo atthis*), Sweden, by Teet Sirotkin, xeno-canto. https://xeno-canto.org/785257
+- Japanese wagtail's flight calls: XC527476, Japanese Wagtail (*Motacilla grandis*), Japan, by Markus Jacobs, xeno-canto. https://xeno-canto.org/527476
+- Spot-billed duck's quacks: XC858061, Eastern Spot-billed Duck (*Anas zonorhyncha*), Japan, by Joshua Chong, xeno-canto. https://xeno-canto.org/858061
+- White-eye's song: XC993083, Warbling White-eye (*Zosterops japonicus*), Japan, by Xavier Riera, xeno-canto. https://xeno-canto.org/993083
+- The plop into water: "Fishing Lure Plop Water - Game SFX (2 or 2)" by el_boss, Freesound, CC0. https://freesound.org/people/el_boss/sounds/853279/
+
 Footsteps (every `step-*` file carries the geta recording's knock, so all of them are CC BY-SA 3.0):
 - Geta: "Kamigyo Ward, Kyoto - wooden clogs" by OR poiesis, radio aporee, CC BY-SA 3.0. https://archive.org/details/aporee_25634_29691
 - Boards: "Walk on Pontoon" by Joseph Sardin, BigSoundBank, CC0. https://bigsoundbank.com/walk-on-pontoon-s1845.html
@@ -96,11 +105,9 @@ Footsteps (every `step-*` file carries the geta recording's knock, so all of the
 
 ## Models
 
-Every model except the deer is built by a Blender script in `tools/`, which describes what it builds at its top.
+Every model is built by a Blender script in `tools/`, which describes what it builds at its top.
 
 The boulders are photogrammetry scans from Poly Haven (https://polyhaven.com), CC0, which `tools/rocks.py` downloads, simplifies and shades: "Namaqualand Boulder 04" by Jenelle van Heerden, "Namaqualand Boulder 06" by Greg Zaal and Jenelle van Heerden, "Namaqualand Boulder 05" by Jenelle van Heerden and Dario Barresi, "Boulder 01" by Rico Cilliers, and one stone of "Namaqualand Boulders 01" by Greg Zaal and Jenelle van Heerden.
-
-The deer come from the Ultimate Animated Animal Pack by Quaternius (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0: "Deer" (the hinds) and "Stag", as served by Poly Pizza (https://poly.pizza/m/T6Cs7tmMHJ, https://poly.pizza/m/tQdzbZ1Cmw). `tools/models.mjs` trims their clips, bakes in their colours and subdivides them. `src/deer.js` reshapes them into sika deer and paints on their coats.
 
 ## Textures
 

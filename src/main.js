@@ -44,7 +44,12 @@ import { makeKoi, koiClearing } from './koi.js';
 import { makeTouches } from './touches.js';
 import { makeBirds } from './birds.js';
 import { makeButterflies } from './butterflies.js';
-import { makePerched } from './perched.js';
+import { makePerched, crownPoints, rockTops } from './perched.js';
+import { makeTurtles } from './turtles.js';
+import { makeDucks } from './ducks.js';
+import { makeFrogs } from './frogs.js';
+import { makeTanuki } from './tanuki.js';
+import { makeDropped } from './dropped.js';
 import { makeDeer } from './deer.js';
 import { makeHerons } from './heron.js';
 import { makeFigures } from './figures.js';
@@ -614,11 +619,23 @@ export async function create(canvas, opts = {}) {
   scene.add(birds.group);
   const butterflies = makeButterflies(world, { tree: [TX, TZ], flowers: G.flowers, posts: G.lanterns.lists[0], small: Lay.small, tier: tierName });
   scene.add(butterflies.mesh);
-  const perched = makePerched(world, { lantern: G.lanterns, tree: [TX, TZ] }); // sparrows on the lantern ropes and the bridge's rails, a crow on the torii
+  // sparrows on the lantern ropes and the bridge's rails, a crow on the torii, white-eyes in the cherry, wagtails on the river's rocks
+  const riverRocks = rockTops(world, rocks, G.rocks.rocksInWater);
+  const perched = makePerched(world, { lantern: G.lanterns, tree: [TX, TZ], crowns: [main, ...smallTrees].map((t) => crownPoints(t)), rocks: riverRocks });
   scene.add(perched.mesh);
-  const deer = await makeDeer(world, Lay.graze);
+  const dropped = makeDropped(world, [TX, TZ]); // whole flowers the sparrows bite off, falling and lying under the tree
+  scene.add(dropped.mesh);
+  const turtles = makeTurtles(world, riverRocks); // basking on a rock in the river
+  scene.add(turtles.mesh);
+  const ducks = makeDucks(world, G.rocks.rocksInWater); // a pair of spot-billed ducks on the river
+  scene.add(ducks.group);
+  const frogs = makeFrogs(world); // on the paddies' edges beside the lanes
+  scene.add(frogs.mesh);
+  const tanuki = makeTanuki(world); // about the village's field edges after dark
+  scene.add(tanuki.mesh);
+  const deer = await makeDeer(world, Lay, G.lanterns.lists[0]);
   scene.add(deer.group);
-  const herons = await makeHerons(world);
+  const herons = await makeHerons(world, birds);
   scene.add(herons.group);
   const rain = makeRain(Q.rain);
   rain.name = 'rain';
@@ -1033,20 +1050,31 @@ export async function create(canvas, opts = {}) {
     koi.update(dt, U.uTime.value);
     boats.update(U.uTime.value, camera.position);
     rafts.geometry.instanceCount = Math.round(G.rafts.n * Math.min(1, S.petals / 0.6)); // fewer when fewer petals fall
-    deer.update(dt);
-    herons.update(dt, clockH, camera, warming);
+    deer.update(dt, { hour: clockH, rain: S.rain, camera, walker: walker && walk.state, warming });
+    herons.update(dt, clockH, camera, warming, walker && walk.state);
     // the lanterns come on at dusk
     U.uLights.value = smoothstep(7 + 9 * (skyNow.gloom || 0), -2.5, skyNow.elev); // earlier under heavy cloud
     lanterns.halos.visible = templeGlows.visible = fireGlows.visible = fires.visible = sparks.visible = warming || U.uLights.value > 0.001;
     fireflies.update({ lights: U.uLights.value, elev: skyNow.elev, rain: S.rain, wind: S.wind / 1.6, warming });
     figures.update(dt, { hour: clockH, rain: S.rain, lights: U.uLights.value, camera, warming });
-    touches.update(U.uTime.value, [herons, boats, figures, koi]);
+    touches.update(U.uTime.value, [herons, boats, figures, koi, perched, turtles, ducks]);
     // the hearths' smoke: thickest when the rice is on, morning and evening; thinned by rain
     const cook = Math.exp(-(((clockH - 6.8) / 1.3) ** 2)) + Math.exp(-(((clockH - 17.8) / 1.4) ** 2));
     smoke.uAmount.value = (0.3 + 0.7 * Math.min(1, cook)) * (1 - 0.6 * S.rain);
     birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     butterflies.update({ hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, warming });
     perched.update({ hour: clockH, rain: S.rain, wind: S.wind / 1.6, camera, walker: walker && walk.state, warming });
+    for (const b of perched.bitten()) dropped.drop(b);
+    dropped.update(dt, { wind: S.wind / 1.6, windDir: U.uWindDir.value });
+    turtles.update(dt, { hour: clockH, rain: S.rain, clouds: S.clouds, camera, walker: walker && walk.state, warming });
+    ducks.update(dt, { hour: clockH, rain: S.rain, camera, walker: walker && walk.state, warming });
+    frogs.update(dt, { camera, walker: walker && walk.state });
+    tanuki.update(dt, { hour: clockH, camera, walker: walker && walk.state, warming });
+    // the animals' calls, from where each is
+    for (const s of [deer, herons, perched, turtles, ducks, frogs]) {
+      for (const e of s.events) sound.call(e.kind, e.x, e.y, e.z, camera);
+      s.events.length = 0;
+    }
     sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera, fisher: figures.voice() });
 
     // camera
@@ -1357,9 +1385,14 @@ export async function create(canvas, opts = {}) {
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
     backend: backendName,
     birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
-    perchInfo(o) { return perched.info(o); }, // the perched birds: where each sits, the crow's state; { calm: true } keeps the crow put
+    perchInfo(o) { return perched.info(o); }, // the perched birds: each one's species and place, the crow's and the sparrow groups' states; { calm: true }: none minds anyone
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
-    heronInfo() { return herons.info(); }, // the heron and the egrets: where each stands, its heading, its clip
+    deerInfo(o) { return deer.info(o); }, // each deer: where, heading, speed, what it is doing, how alarmed; the herd's plan; { calm: true } keeps them from minding the observer
+    tanukiInfo(o) { return tanuki.info(o); }, // the tanuki: where it is, what it is doing; { calm: true }: it minds no one, { at: [x, z] }: put it there
+    frogInfo() { return frogs.info(); }, // the frogs by the lanes: each one's place, state, kind
+    duckInfo(o) { return ducks.info(o); }, // the ducks: each one's state, place, heading, speed; { calm: true }: they mind no one, { fly: true }: off now
+    turtleInfo(o) { return turtles.info(o); }, // the basking turtles: their rock, each one's state; { calm: true }: they mind no one, { out: true }: all out now
+    heronInfo(o) { return herons.info(o); }, // the heron and the egrets: where each stands, its heading, its clip, the heron in flight; { calm: true }: the heron minds no one, { fly: true }: off now
     figureInfo() { return figures.info(); }, figureAct(name) { figures.act(name); }, // the fisherman and the planter; start one's second clip (lift, stretch)
     touchInfo() { return touches.info(); }, touchRing(x, z, amp = 1, r, hx, hz) { touches.ring(x, z, amp, r, hx, hz); }, // the water's touch points; a ring at (x, z) now
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera

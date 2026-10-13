@@ -1,8 +1,9 @@
 // Birds in flight, in the background: swallows hunting over the river by day (high in fair weather, skimming the
 // water under heavy cloud and in drizzle, as the saying has it before rain; gone in heavy rain), black kites circling
 // high on clear days and drifting downwind, and crows flying home to the temple woods at dusk (out again at dawn, the
-// odd pair by day). None at night; lightning scatters them for a while. Paths run on the CPU (a few dozen birds);
-// the vertex stage flaps the wings.
+// odd pair by day); bats jinking low over the river from dusk into the night and before dawn; and the grey heron when
+// heron.js sends it off its stretch of shallows. Lightning scatters them for a while. Paths run on the CPU (a few
+// dozen birds); the vertex stage flaps the wings.
 import * as THREE from 'three/webgpu';
 import { vec3, sin, cos, abs, sign, min, max, mix, attribute, positionGeometry, normalGeometry, transformNormalToView, faceDirection } from 'three/tsl';
 import { LitMaterial } from './tsl.js';
@@ -37,7 +38,25 @@ const SPECIES = {
     flap: { hz: 3.6, o1: 0.1, a1: 0.5, o2: 0.05, a2: 0.35, lag: 0.9, glide: [0.06, -0.08], on: [3, 8], off: [0.6, 1.4] },
   },
 };
-const COUNT = { swallow: 10, kite: 3, crow: 22 };
+// the grey heron's flight (heron.js sends it off when someone comes close): the neck drawn back, the bill forward, the
+// legs trailing past the tail, broad bowed wings in slow deep beats
+SPECIES.heron = {
+  span: 1.75, elbow: 0.2, top: [0.2, 0.21, 0.23], belly: [0.42, 0.42, 0.41],
+  body: [[0.21, 0, 0], [0.15, 0.012, 0.012], [0.1, 0.03, 0.04], [0.0, 0.035, 0.035], [-0.12, 0.025, 0.025], [-0.16, 0, 0]],
+  tail: [[0.015, -0.12], [0.02, -0.36], [0.005, -0.37], [0, -0.2]],
+  wing: [[0.03, 0.09, -0.1], [0.2, 0.1, -0.14], [0.38, 0.08, -0.13], [0.5, 0.03, -0.06]],
+  flap: { hz: 2.0, o1: 0.05, a1: 0.45, o2: -0.05, a2: 0.3, lag: 0.6, glide: [0.05, -0.08], on: [3, 6], off: [0.8, 1.5] },
+};
+// bats (pipistrelles, aburakōmori) over the river at dusk and before dawn: broad membranous wings, quick shallow beats,
+// no glides; flight that jinks after insects
+SPECIES.bat = {
+  span: 0.34, elbow: 0.24, top: [0.03, 0.022, 0.016], belly: [0.05, 0.035, 0.025],
+  body: [[0.12, 0, 0], [0.09, 0.05, 0.05], [0.0, 0.07, 0.06], [-0.1, 0.04, 0.04], [-0.14, 0, 0]],
+  tail: [[0.03, -0.12], [0.18, -0.2], [0.0, -0.28]],
+  wing: [[0.06, 0.1, -0.12], [0.24, 0.08, -0.26], [0.38, 0.12, -0.2], [0.5, 0.08, -0.06]],
+  flap: { hz: 11, o1: 0.15, a1: 0.7, o2: -0.1, a2: 0.5, lag: 0.5, glide: [0.2, -0.1], on: [10, 20], off: [0.01, 0.02] },
+};
+const COUNT = { swallow: 10, kite: 3, crow: 22, heron: 1, bat: 8 };
 
 function birdGeometry(sp) {
   const P = [], N = [], C = [], W = [], I = [], S = sp.span;
@@ -191,6 +210,30 @@ export function makeBirds(world, tree) {
     }
   }
 
+  // ---------- bats: jinking low over the river and its banks near the view, from dusk ----------
+  function bats(dt, presence) {
+    const { birds } = kinds.bat, n = birds.length;
+    const pick = (b) => {
+      const f = rand(0, 30), sd = rand(-12, 12), z = view.z + fwd.z * f + fwd.x * sd, hw = world.riverHW(z);
+      b.tx = world.riverX(z) + rand(-1, 1) * (hw + 6); b.tz = z; b.ty = ground(b.tx, b.tz) + rand(1.5, 6);
+      b.v = rand(5, 8); b.retarget = rand(0.25, 0.9); // a snap after an insect every second or so
+    };
+    for (const b of birds) {
+      const want = presence > (b.i + 0.5) / n;
+      if (b.state === 'away') { if (want) { pick(b); arrive(b, b.tx, b.ty, b.tz, 60); pick(b); } continue; }
+      if (b.state === 'in') {
+        if (!want) leave(b);
+        else if ((b.retarget -= dt) <= 0 || flatDist(b) < 2) pick(b);
+      }
+      // round the cherry tree's crown, not through it
+      const dx = b.x - tree.x, dz = b.z - tree.z, d = Math.hypot(dx, dz);
+      if (b.state === 'in' && d < 9 && b.y < 9) { b.tx = tree.x + (dx / d) * 14; b.tz = tree.z + (dz / d) * 14; b.retarget = 0.4; }
+      fly(b, dt, 7, 5, 0.5);
+      b.y = Math.max(b.y, ground(b.x, b.z) + 0.8);
+      if (b.state === 'leave' && Math.hypot(b.x - cam.x, b.z - cam.z) > 160) away(b);
+    }
+  }
+
   // ---------- kites: slow circles high over the valley, the circles drifting downwind ----------
   function kites(dt, presence, t) {
     const { birds } = kinds.kite, n = birds.length;
@@ -282,6 +325,21 @@ export function makeBirds(world, tree) {
     }
   }
 
+  // ---------- the heron, sent off from where it stood: up and along, then gliding down to where it lands ----------
+  let heronTrip = null;
+  function heronFlight(dt) {
+    const b = kinds.heron.birds[0], h = heronTrip;
+    if (!h) return;
+    const left = Math.hypot(h.to.x - b.x, h.to.z - b.z);
+    b.tx = h.to.x; b.tz = h.to.z;
+    // cruising a few metres up, coming down over the last 20 m; slowing to land
+    b.ty = left > 20 ? Math.max(h.from.y, h.to.y) + 7 : lerp(h.to.y + 0.4, Math.max(h.from.y, h.to.y) + 7, smoothstep(2, 20, left));
+    b.v = lerp(3, 9, smoothstep(1, 12, left));
+    b.beat = left > 12 || b.y < b.ty - 1; // gliding in to land
+    if (left < 0.8 && b.y < h.to.y + 1) { heronTrip = null; away(b); h.landed(); return; }
+    fly(b, dt, 1.2, 3, 0.3);
+  }
+
   function write(kind, dt) {
     const { sp, birds, aPose, aLook } = kind;
     for (const b of birds) {
@@ -321,8 +379,19 @@ export function makeBirds(world, tree) {
       const mode = dusk > 0.3 ? 'dusk' : dawn > 0.3 ? 'dawn' : 'day';
       const rate = (1 - smoothstep(0.35, 0.7, ctx.rain)) * calm * (dusk / 14 + dawn / 16 + (day * (1 - dusk) * (1 - dawn)) / 45);
       crows(dt, rate, mode, ctx.t);
+      // bats: out as the light goes until well into the night, and again before dawn; not in rain or a gale
+      const batTime = smoothstep(18.2, 18.8, h) * (1 - smoothstep(21.5, 22.5, h)) + smoothstep(3.6, 4.0, h) * (1 - smoothstep(4.8, 5.3, h));
+      bats(dt, batTime * (1 - smoothstep(0.15, 0.4, ctx.rain)) * (1 - gale));
+      heronFlight(dt);
       for (const name in kinds) write(kinds[name], dt);
       env.first = false;
+    },
+    // the heron flies from `from` (where its standing model was) to `to` (Vector3s, where its feet go), then calls landed()
+    heron(from, to, landed) {
+      const b = kinds.heron.birds[0];
+      b.x = from.x; b.y = from.y + 0.6; b.z = from.z; b.yaw = Math.atan2(to.x - from.x, to.z - from.z);
+      b.pitch = 0.3; b.bank = 0; b.v = 3; b.state = 'in'; b.beat = true; b.A = 1;
+      heronTrip = { from: from.clone(), to: to.clone(), landed };
     },
     // debug: the birds in the air, per species [x, y, z]
     info() {

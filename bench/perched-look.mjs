@@ -1,12 +1,12 @@
 // The perched birds (src/perched.js): captures of views at times and weathers, a view can be set relative to one
-// bird's perch; prints where they sit and the crow's state.
+// bird's perch; prints where they sit and the crow's and the sparrow groups' states.
 //   BENCH_HEADLESS=1 LOOK_BACKEND=webgl node bench/perched-look.mjs <build> <outPrefix> '<json shots>'
 // shots: [{ "id": "name", "view": "hero" | [x, y, z, tx, ty, tz] | { "bird": i, "off": [dx, dy, dz], "look": [dx, dy, dz] },
 //           or "walk": { "at": [x, z], "bird": i, "look": [dx, dy, dz] }, "time": 0.35, "set": { "rain": 1 }, "calm": true,
 //           "after": [0, 0.5] }]
 //   (bird: the camera at the bird's perch + off, looking at the perch + look (default 6 cm up); walk: walk mode, the
-//   walker standing at [x, z] (on the network) looking at the bird; calm: the crow stays
-//   put however close the camera comes; after: seconds of rendered frames before each capture)
+//   walker standing at [x, z] (on the network) looking at the bird; calm: no bird minds the camera or the walker
+//   however close they come; after: seconds of rendered frames before each capture)
 import fs from 'node:fs';
 import path from 'node:path';
 import { startServer, BENCH } from './lib/serve.mjs';
@@ -55,7 +55,7 @@ try {
       done = a;
       await page.evaluate((o) => H.capture(o, 1 / 60), `${prefix}-${s.id}${s.after ? `-${a}s` : ''}.png`);
       const st = await page.evaluate(() => H.call('perchInfo'));
-      console.log(s.id, a, JSON.stringify({ amount: st.amount, visible: st.visible, crow: st.crow }));
+      console.log(s.id, a, JSON.stringify({ amount: st.amount, visible: st.visible, crow: st.crow, groups: st.groups }));
     }
   }
   const stats = await page.evaluate(() => H.meshStats());

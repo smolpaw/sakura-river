@@ -480,12 +480,14 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   const max = t.anchors.length * per[1];
   const matrix = new Float32Array(max * 16), color = new Float32Array(max * 3);
   const attrs = new Float32Array(max * FLOWER_ATTRS);
-  const spawn = [];
+  const spawn = [], perches = [];
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), sv = new V(), col = new THREE.Color();
   const Z = new V(0, 0, 1), UP = new V(0, 1, 0);
   const { center, ext } = t.canopy;
   let n = 0;
-  for (const an of t.anchors) {
+  for (const [ai, an] of t.anchors.entries()) {
+    // every fifth flowering point: a place on its twig for a bird (perched.js), along the twig
+    if (ai % 5 === 0) perches.push(an.p.x, an.p.y, an.p.z, an.d.x, an.d.y, an.d.z);
     const perp = anyPerp(an.d).applyAxisAngle(an.d, rng() * TAU);
     const mid = an.p.clone().addScaledVector(perp, rr(0.03, 0.12) * k).addScaledVector(UP, 0.03 * k);
     const nF = per[0] + Math.floor(rng() * (per[1] - per[0] + 1));
@@ -516,7 +518,7 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   }
   return {
     bark, sig: skeletonSig(t, cfg), n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * FLOWER_ATTRS),
-    spawn: new Float64Array(spawn), trunkBend: trunkBend(t, cfg),
+    spawn: new Float64Array(spawn), trunkBend: trunkBend(t, cfg), perches: new Float32Array(perches),
   };
 }
 
