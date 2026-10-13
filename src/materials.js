@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, min, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
-  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray,
+  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray, uniform,
 } from 'three/tsl';
 import { U, vnoise, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
@@ -312,7 +312,7 @@ const groundNormal = (dist, earth, lane) => Fn(() => {
 // The ground, with puddles on the bare earth in the rain (mirroring `sky`, its uniforms). With `paddies` it draws the
 // farmland's and the village's mesh (world.js buildFields), where flooded paddies (aWater) are still water too. With
 // `lanes` (world.js LANES) the lanes close by gain their grit, stones and ruts.
-export function terrainMaterial({ sky, paddies = false, lanes = null }) {
+export function terrainMaterial({ sky, paddies = false, lanes = null, ao = null }) {
   const n09 = vnoise(wp.xz.mul(0.9)), n012 = vnoise(wp.xz.mul(0.12));
   const dn = n09.mul(0.5).add(vnoise(wp.xz.mul(3.7)).mul(0.3)).add(n012.mul(0.45));
   // where grass grows (aGround: density, length, tint, as grass.js reads them) the ground takes the grass's colour:
@@ -326,9 +326,12 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
   // (the lanes' detail only where the ground shows bare earth: the vertex colour's dirt, redder than green)
   const vcol = attribute('color', 'vec3'), earth = sstep(0.0, 0.035, vcol.r.sub(vcol.g)).mul(float(1.0).sub(cover));
   const ground = PHOTO[GROUND.turf] && PHOTO[GROUND.soil];
+  const aoFrame = ao && uniform(ao.frame);
   const colorNode = Fn(() => {
     // (the bare earth taken outside the branches that read it, CLAUDE.md TSL traps)
     const e = earth.toVar();
+    // the buildings' occlusion of the ground (groundao.js)
+    const occ = ao ? texture(ao.tex, wp.xz.sub(aoFrame.xy).div(aoFrame.zw)).r.toVar() : null;
     // the blades' own patches; blade-scale streaks close by, faded out before they would shimmer
     const patch = patchFrom(n012, n09);
     const streak = float(0).toVar();
@@ -341,6 +344,7 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
     const gg = ground ? groundGrad() : null, pg = lane && PHOTO[EARTH_PHOTO] ? earthPhotoGrad() : null; // (outside the branches: WGSL takes derivatives only there)
     if (ground) c.assign(groundColor(c, dist, e, lane, gg));
     if (lane) If(dist.lessThan(LANE_NEAR), () => { c.assign(laneColor(lane, dist, e, c, pg)); });
+    if (occ) c.mulAssign(occ);
     return c;
   })();
   const params = { roughness: 0.96, metalness: 0, colorNode };

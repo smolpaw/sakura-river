@@ -39,6 +39,7 @@ import { buildPipeline, discardMultisampleStores } from './post.js';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
+import { makeGroundAO, occluderBoxes } from './groundao.js';
 import { makeKoi, koiClearing } from './koi.js';
 import { makeTouches } from './touches.js';
 import { makeBirds } from './birds.js';
@@ -235,7 +236,9 @@ export async function create(canvas, opts = {}) {
   sky.mesh.name = 'sky';
   scene.add(sky.mesh);
   const terrainGeo = G.terrain.geo;
-  const terrain = new THREE.Mesh(terrainGeo, M.terrainMaterial({ sky, lanes: world.LANES }));
+  // the ground's occlusion by the buildings (groundao.js), filled once they stand
+  const groundAO = makeGroundAO();
+  const terrain = new THREE.Mesh(terrainGeo, M.terrainMaterial({ sky, lanes: world.LANES, ao: groundAO }));
   terrain.receiveShadow = true;
   terrain.name = 'terrain';
   scene.add(terrain);
@@ -256,7 +259,7 @@ export async function create(canvas, opts = {}) {
   scene.add(hemi);
   // the village's farmland: rice paddies, flooded or dry, terraced up the slopes (world.js buildFields)
   const fieldParts = fieldJobs.map((_, k) => G[`fields${k}`]);
-  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky, paddies: true, lanes: world.LANES }));
+  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky, paddies: true, lanes: world.LANES, ao: groundAO }));
   fields.receiveShadow = true;
   fields.name = 'fields';
   scene.add(fields);
@@ -499,6 +502,22 @@ export async function create(canvas, opts = {}) {
   const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village.lists, villageMat, [90], { lodScale, ...nearOf('village') });
   village.name = 'village';
   scene.add(village);
+  // the ground's occlusion by the farmhouses (their far models: the same outline in fewer triangles), the temple and
+  // the dry-stone walls (their far level, flagged in aStone.w), worked out in a worker while the rest is built
+  let groundAOJob;
+  {
+    const occluders = [];
+    village.traverse((o) => {
+      const L = o.userData.level;
+      if (L && L.src.name.endsWith('_far') && L.M.length) occluders.push({ geometry: L.src.geometry, matrices: L.M });
+    });
+    temple.updateMatrixWorld(true);
+    temple.traverse((o) => { if (o.isMesh) occluders.push({ geometry: o.geometry, matrix: o.matrixWorld }); });
+    walls.updateMatrixWorld(true);
+    walls.traverse((o) => { if (o.isMesh && o.geometry.attributes.aStone && o.geometry.attributes.aStone.array[3] === 255) occluders.push({ geometry: o.geometry, matrix: o.matrixWorld }); });
+    groundAOJob = runJobs({ groundAO: { name: 'groundAO', args: { boxes: occluderBoxes(occluders), cache: G.heightCache } } }, { mainThread: opts.workers === false })
+      .then(({ results }) => groundAO.set(results.groundAO), (e) => console.warn('ground occlusion not worked out:', e && e.message));
+  }
   // the waterwheel, turned by the river (a full and a far model, switched as the village's, and the near one)
   const wheel = new THREE.Group();
   if (G.village.wheel) {
@@ -1173,6 +1192,7 @@ export async function create(canvas, opts = {}) {
     step(dt);
     adapt(dt);
   }
+  await groundAOJob; // (before the compile uploads its texture)
   // build pipelines behind the veil (asynchronously on WebGPU)
   mark('ready');
   progress('shaders', 0);

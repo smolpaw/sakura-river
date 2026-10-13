@@ -10,6 +10,7 @@ import { lanternData, lanternGeometry, paintLanternInk } from '../lanterns.js';
 import { bannerData, paintBannerInk } from './banners.js';
 import { tessellate } from '../stress.js';
 import { villageData } from '../village.js';
+import { groundOcclusion } from '../groundao.js';
 import { waysideData, waysideRoofs, waysideClearings } from '../wayside.js';
 import { lerp } from '../noise.js';
 import { layout, rockAvoid, trunkAvoid, underTree, lawn, turf } from './layout.js';
@@ -27,6 +28,11 @@ export const JOBS = {
     return world().buildTerrain(seg[0], seg[1], (x, z) => [1 - 0.85 * tf.density(x, z), lerp(0.13, 1, lw(x, z))]);
   },
   heightCache: () => world().computeHeightCache(),
+  // the ground's occlusion by the buildings (groundao.js), from their triangles' boxes; `cache`: the heightCache job's
+  groundAO: ({ boxes, cache }) => {
+    world().setHeightCache(cache);
+    return groundOcclusion(boxes, world().heightFast);
+  },
   depth: ({ tier }) => world().buildDepthMap(rockPlan(world(), tier, xz(L().tree)).rocksInWater),
   river: () => world().buildRiver(),
   trees: ({ list, tier, triMul }) => list.map((t) => treeData(world(), t.seed, t.small ? SMALL_TREE : MAIN_TREE, xz(t.pos), tier, triMul)),
@@ -76,4 +82,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 90, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, groundAO: 60, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 90, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 7, rafts: 8, river: 3 };
