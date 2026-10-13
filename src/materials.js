@@ -336,8 +336,7 @@ export function terrainMaterial({ sky, paddies = false, lanes = null }) {
     const carpet = grassColor(clamp(gr.z.add(patch.mul(0.12)), 0.0, 1.0), mix(0.5, 0.74, far).mul(patch.mul(0.12).add(1.0)).mul(streak.add(1.0)));
     const c = mix(attribute('color', 'vec3').mul(dn.mul(0.42).add(0.7)), carpet, cover).toVar();
     // the river's bed: rounded stones and gravel, each stone its own grey-brown, sand between, close by only
-    const bg = PHOTO[BED_PHOTO] ? bedPhotoGrad() : null; // (outside the branch, as the lanes')
-    If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, bg ? riverBedPhoto(c, bg) : riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
+    If(wp.y.lessThan(0.08).and(dist.lessThan(60.0)), () => { c.assign(mix(c, riverBed(wp.xz, c), sstep(0.08, -0.06, wp.y).mul(sstep(60.0, 35.0, dist)))); });
     // the ground close by, and the lanes underfoot
     const gg = ground ? groundGrad() : null, pg = lane && PHOTO[EARTH_PHOTO] ? earthPhotoGrad() : null; // (outside the branches: WGSL takes derivatives only there)
     if (ground) c.assign(groundColor(c, dist, e, lane, gg));
@@ -408,15 +407,6 @@ const stonesFn = Fn(([p, scale, seedA, seedB, seedC]) => {
 }).setLayout({ name: 'riverStones', type: 'vec2', inputs: [{ name: 'p', type: 'vec2' }, { name: 'scale', type: 'float' },
   { name: 'seedA', type: 'float' }, { name: 'seedB', type: 'float' }, { name: 'seedC', type: 'float' }] });
 const stones = (p, scale, seed) => stonesFn(p, float(scale), float(seed), float(seed + 37.1), float(seed + 71.3));
-// with the photographed river pebbles (ganges_river_pebbles; `pg`: the gradients of its texture coordinates, taken
-// outside any branch): the bed is the photo's stones, scaled to the procedural bed's tones
-const BED_PHOTO = 'ganges_river_pebbles';
-const bedPhotoGrad = () => { const s = 1 / PHOTO[BED_PHOTO].size; return [dFdx(wp.xz).mul(s), dFdy(wp.xz).mul(s)]; };
-const riverBedPhoto = (under, pg) => {
-  const set = PHOTO[BED_PHOTO];
-  const c = texture(set.diff, wp.xz.div(set.size)).grad(pg[0], pg[1]).rgb;
-  return mix(under, vec3(0.2, 0.18, 0.15), 0.7).mul(detailOf(c, set, 0.9, 0.6));
-};
 const riverBed = (xz, under) => {
   // the cells' grid warped by a broad noise so stones don't line up in rows
   const w = xz.add(vec2(vnoise(xz.mul(1.3)), vnoise(xz.mul(1.3).add(9.0))).mul(0.18));

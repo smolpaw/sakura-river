@@ -114,7 +114,6 @@ Close up, these surfaces are photographed texture sets from Poly Haven (https://
 - Built stone (foundations, the temple's base, the bridge's abutments): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
 - Carved stone (the Jizō, the stone lanterns, the lamps' feet): "Rock Surface" by Amal Kumar.
 - The woods' bark: "Japanese Cedar Bark" by Charlotte Baglioni.
-- The river's bed: "Ganges River Pebbles" by Amal Kumar.
 - The temple's gravel courtyard: "Gravel Ground 01" by Rob Tuytel.
 - The ground under the grass and the green yards: "Forest Ground 01" by Rob Tuytel.
 - Bare earth off the lanes (the yards, levees, dry paddies and banks): "Brown Mud 02" by Rob Tuytel.

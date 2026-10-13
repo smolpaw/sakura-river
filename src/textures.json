@@ -79,14 +79,6 @@
       0.0175
     ]
   },
-  "ganges_river_pebbles": {
-    "size": 2.16,
-    "mean": [
-      0.2265,
-      0.19,
-      0.1505
-    ]
-  },
   "gravel_ground_01": {
     "size": 3,
     "mean": [
