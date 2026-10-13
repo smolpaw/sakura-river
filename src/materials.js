@@ -309,6 +309,9 @@ const groundNormal = (dist, earth, lane) => Fn(() => {
   return n;
 })();
 
+// the buildings' occlusion of the ground at the fragment (groundao.js: the terrain's, and the temple's floors')
+const groundOcc = (ao) => { const f = uniform(ao.frame); return texture(ao.tex, wp.xz.sub(f.xy).div(f.zw)).r; };
+
 // The ground, with puddles on the bare earth in the rain (mirroring `sky`, its uniforms). With `paddies` it draws the
 // farmland's and the village's mesh (world.js buildFields), where flooded paddies (aWater) are still water too. With
 // `lanes` (world.js LANES) the lanes close by gain their grit, stones and ruts.
@@ -326,12 +329,11 @@ export function terrainMaterial({ sky, paddies = false, lanes = null, ao = null 
   // (the lanes' detail only where the ground shows bare earth: the vertex colour's dirt, redder than green)
   const vcol = attribute('color', 'vec3'), earth = sstep(0.0, 0.035, vcol.r.sub(vcol.g)).mul(float(1.0).sub(cover));
   const ground = PHOTO[GROUND.turf] && PHOTO[GROUND.soil];
-  const aoFrame = ao && uniform(ao.frame);
   const colorNode = Fn(() => {
     // (the bare earth taken outside the branches that read it, CLAUDE.md TSL traps)
     const e = earth.toVar();
     // the buildings' occlusion of the ground (groundao.js)
-    const occ = ao ? texture(ao.tex, wp.xz.sub(aoFrame.xy).div(aoFrame.zw)).r.toVar() : null;
+    const occ = ao ? groundOcc(ao).toVar() : null;
     // the blades' own patches; blade-scale streaks close by, faded out before they would shimmer
     const patch = patchFrom(n012, n09);
     const streak = float(0).toVar();
@@ -805,7 +807,7 @@ export function shrubMaterial() {
 
 // the temple (temple.js). After dusk the hall's paper doors and the lanterns' fireboxes glow (aGlow: strength), the
 // lanterns light what is near them, and floodlights in the gravel wash the pagoda from below (fading with height).
-export function templeMaterial(d) {
+export function templeMaterial(d, { ao = null } = {}) {
   const pts = (a) => { const out = []; for (let i = 0; i < a.length; i += 3) out.push(vec3(a[i], a[i + 1], a[i + 2])); return out; };
   const lamps = pts(d.lamps), flood = pts(d.flood);
   const glow = attribute('aGlow', 'float');
@@ -814,6 +816,8 @@ export function templeMaterial(d) {
   const colorNode = Fn(() => {
     const c = attribute('color', 'vec3').mul(vnoise(wp.xz.mul(3.0).add(wp.y.mul(5.0))).mul(0.3).add(0.85)).toVar();
     if (photo.color) c.mulAssign(photo.color);
+    // the floors (what faces up: the courtyard, the steps, the plinths) as the ground round the buildings (groundao.js)
+    if (ao) c.mulAssign(mix(1.0, groundOcc(ao), sstep(0.85, 0.95, normalWorldGeometry.y)));
     const side = float(1.0).sub(normalWorldGeometry.y.abs());
     const streak = sstep(0.4, 0.95, vnoise(vec2(wp.x.add(wp.z).mul(2.3), wp.y.mul(0.22))));
     c.mulAssign(mix(1.0, 0.7, streak.mul(side)));

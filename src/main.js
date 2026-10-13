@@ -387,7 +387,7 @@ export async function create(canvas, opts = {}) {
   const bridge = makeBridge(G.props.bridge, M.bridgeMaterial(G.props.bridge.lamps.hang));
   bridge.mesh.name = 'bridge';
   scene.add(bridge.mesh);
-  const temple = makeTemple(G.props.temple, M.templeMaterial(G.props.temple));
+  const temple = makeTemple(G.props.temple, M.templeMaterial(G.props.temple, { ao: groundAO }));
   temple.name = 'temple';
   scene.add(temple);
   // the stone lanterns up the temple's approach; their glows with the temple's
@@ -502,8 +502,9 @@ export async function create(canvas, opts = {}) {
   const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village.lists, villageMat, [90], { lodScale, ...nearOf('village') });
   village.name = 'village';
   scene.add(village);
-  // the ground's occlusion by the farmhouses (their far models: the same outline in fewer triangles), the temple and
-  // the dry-stone walls (their far level, flagged in aStone.w), worked out in a worker while the rest is built
+  // the ground's occlusion by the farmhouses (their far models: the same outline in fewer triangles), the temple (its
+  // floors too) and the dry-stone walls (their far level, flagged in aStone.w), worked out in a worker while the rest
+  // is built
   let groundAOJob;
   {
     const occluders = [];
@@ -512,10 +513,10 @@ export async function create(canvas, opts = {}) {
       if (L && L.src.name.endsWith('_far') && L.M.length) occluders.push({ geometry: L.src.geometry, matrices: L.M });
     });
     temple.updateMatrixWorld(true);
-    temple.traverse((o) => { if (o.isMesh) occluders.push({ geometry: o.geometry, matrix: o.matrixWorld }); });
+    temple.traverse((o) => { if (o.isMesh) occluders.push({ geometry: o.geometry, matrix: o.matrixWorld, floor: true }); });
     walls.updateMatrixWorld(true);
     walls.traverse((o) => { if (o.isMesh && o.geometry.attributes.aStone && o.geometry.attributes.aStone.array[3] === 255) occluders.push({ geometry: o.geometry, matrix: o.matrixWorld }); });
-    groundAOJob = runJobs({ groundAO: { name: 'groundAO', args: { boxes: occluderBoxes(occluders), cache: G.heightCache } } }, { mainThread: opts.workers === false })
+    groundAOJob = runJobs({ groundAO: { name: 'groundAO', args: { ...occluderBoxes(occluders), cache: G.heightCache } } }, { mainThread: opts.workers === false })
       .then(({ results }) => groundAO.set(results.groundAO), (e) => console.warn('ground occlusion not worked out:', e && e.message));
   }
   // the waterwheel, turned by the river (a full and a far model, switched as the village's, and the near one)

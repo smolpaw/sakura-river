@@ -29,9 +29,9 @@ export const JOBS = {
   },
   heightCache: () => world().computeHeightCache(),
   // the ground's occlusion by the buildings (groundao.js), from their triangles' boxes; `cache`: the heightCache job's
-  groundAO: ({ boxes, cache }) => {
+  groundAO: ({ boxes, floors, cache }) => {
     world().setHeightCache(cache);
-    return groundOcclusion(boxes, world().heightFast);
+    return groundOcclusion({ boxes, floors }, world().heightFast);
   },
   depth: ({ tier }) => world().buildDepthMap(rockPlan(world(), tier, xz(L().tree)).rocksInWater),
   river: () => world().buildRiver(),

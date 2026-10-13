@@ -1,7 +1,9 @@
 // The ground's occlusion by the buildings: how much of the sky a point of the ground sees past the farmhouses, the
 // temple and the dry-stone walls close by, as a texture over their ground (CELL m a texel) that the terrain's colour is
 // multiplied by (materials.js terrainMaterial). It darkens the ground along a wall's foot and under the eaves, where a
-// building meets the ground; the sun's shadow does the rest. The page makes the texture empty (no occlusion) before
+// building meets the ground; the sun's shadow does the rest. The temple's courtyard, steps and plinths are its own
+// model's floors, raised over the terrain: there the ground is the floor (the temple's material takes the texture on
+// what faces up). The page makes the texture empty (no occlusion) before
 // the terrain's material, gathers the buildings' triangles once they stand (occluderBoxes), works the occlusion out
 // in a generation worker (groundOcclusion, the groundAO job) while it builds the rest, and sets it before the first
 // compile uploads the texture (a data texture keeps the size it is first uploaded at).
@@ -30,12 +32,13 @@ export function makeGroundAO() {
   return { tex, frame, set };
 }
 
-// The buildings' triangles in the world, each as its box seen from above and its top: [x0, z0, x1, z1, top, ...].
-// occluders: [{ geometry, matrices (Float32Array, 16 a copy) or matrix (THREE.Matrix4) }]
+// The buildings' triangles in the world, each as its box seen from above and its top: { boxes: [x0, z0, x1, z1, top,
+// ...], floors: the same for the triangles that face up in the occluders flagged `floor` }.
+// occluders: [{ geometry, matrices (Float32Array, 16 a copy) or matrix (THREE.Matrix4), floor }]
 export function occluderBoxes(occluders) {
   let n = 0;
   for (const o of occluders) n += ((o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3) * (o.matrices ? o.matrices.length / 16 : 1);
-  const out = new Float32Array(n * 5), m = new THREE.Matrix4();
+  const out = new Float32Array(n * 5), m = new THREE.Matrix4(), floors = [];
   let t = 0;
   for (const o of occluders) {
     const g = o.geometry, p = g.attributes.position, idx = g.index, count = idx ? idx.count : p.count;
@@ -54,15 +57,21 @@ export function occluderBoxes(occluders) {
         out[t++] = Math.min(w[a], w[b], w[c]); out[t++] = Math.min(w[a + 2], w[b + 2], w[c + 2]);
         out[t++] = Math.max(w[a], w[b], w[c]); out[t++] = Math.max(w[a + 2], w[b + 2], w[c + 2]);
         out[t++] = Math.max(w[a + 1], w[b + 1], w[c + 1]);
+        if (o.floor) {
+          // (facing up: the normal's y over its length, from the edges' cross product)
+          const ux = w[b] - w[a], uy = w[b + 1] - w[a + 1], uz = w[b + 2] - w[a + 2], vx = w[c] - w[a], vy = w[c + 1] - w[a + 1], vz = w[c + 2] - w[a + 2];
+          const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+          if (Math.abs(ny) > 0.95 * Math.hypot(nx, ny, nz)) floors.push(...out.subarray(t - 5, t));
+        }
       }
     }
   }
-  return out;
+  return { boxes: out, floors: new Float32Array(floors) };
 }
 
-// The occlusion over the buildings' ground from their boxes (occluderBoxes) and the ground's height(x, z): { data
-// (bytes, 255 open), nx, nz, x0, z0 }, or null without buildings.
-export function groundOcclusion(boxes, height) {
+// The occlusion over the buildings' ground from their boxes and floors (occluderBoxes) and the ground's height(x, z):
+// { data (bytes, 255 open), nx, nz, x0, z0 }, or null without buildings.
+export function groundOcclusion({ boxes, floors }, height) {
   if (!boxes.length) return null;
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
   for (let t = 0; t < boxes.length; t += 5) {
@@ -78,6 +87,13 @@ export function groundOcclusion(boxes, height) {
     const i0 = Math.floor((boxes[t] - x0) / CELL), i1 = Math.floor((boxes[t + 2] - x0) / CELL);
     const j0 = Math.floor((boxes[t + 1] - z0) / CELL), j1 = Math.floor((boxes[t + 3] - z0) / CELL), top = boxes[t + 4];
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (H[j * nx + i] < top) H[j * nx + i] = top;
+  }
+  // the floors' height over each cell (the highest, where a cell holds several)
+  const F = new Float32Array(nx * nz).fill(-Infinity);
+  for (let t = 0; t < floors.length; t += 5) {
+    const i0 = Math.floor((floors[t] - x0) / CELL), i1 = Math.floor((floors[t + 2] - x0) / CELL);
+    const j0 = Math.floor((floors[t + 1] - z0) / CELL), j1 = Math.floor((floors[t + 3] - z0) / CELL), y = floors[t + 4];
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (F[j * nx + i] < y) F[j * nx + i] = y;
   }
   // where any building is within REACH (the rest stays open)
   const near = new Uint8Array(nx * nz), r = Math.ceil(REACH / CELL);
@@ -99,7 +115,7 @@ export function groundOcclusion(boxes, height) {
   for (let j = 1; j < nz - 1; j++) for (let i = 1; i < nx - 1; i++) {
     const c = j * nx + i;
     if (!near[c]) continue;
-    const g = height(x0 + (i + 0.5) * CELL, z0 + (j + 0.5) * CELL);
+    const g = F[c] > -Infinity ? F[c] : height(x0 + (i + 0.5) * CELL, z0 + (j + 0.5) * CELL);
     // the sky each way: the sine of the highest building's angle above the ground, out to REACH (horizon-based)
     let occ = 0;
     for (let d = 0, k = 0; d < DIRS; d++) {
