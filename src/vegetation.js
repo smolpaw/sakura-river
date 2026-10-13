@@ -160,7 +160,7 @@ export function makeFlowers(d, mat) {
 
 // ---------- rocks ----------
 // Boulders along the banks and in the shallows, stones at the water's edge: Blender models (lods.js, tools/rocks.py),
-// a boulder about 2.5 × 2.1 × 1.4 round its origin at scale 1, the stone the same shape.
+// a boulder about 2.5 × 2 × 1.2 round its origin at scale 1, the stone the same shape.
 export const ROCK_KINDS = ['rock0', 'rock1', 'rock2', 'rock3', 'rock4'];
 
 // rock/pebble placements; the returned rng continues into rocksData's instancing (same sequence as before)

@@ -4,7 +4,7 @@
 
 A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Deer graze, a heron fishes the shallows, a fisherman and a rice planter work, and birds, butterflies, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
-Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel, the river's bed), and the sound (recordings); all are credited below.
+Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the deer (ready-made models), the boulders (scanned rocks, simplified in Blender), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel), and the sound (recordings); all are credited below.
 
 Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
 
@@ -97,6 +97,8 @@ Footsteps (every `step-*` file carries the geta recording's knock, so all of the
 ## Models
 
 Every model except the deer is built by a Blender script in `tools/`, which describes what it builds at its top.
+
+The boulders are photogrammetry scans from Poly Haven (https://polyhaven.com), CC0, which `tools/rocks.py` downloads, simplifies and shades: "Namaqualand Boulder 04" by Jenelle van Heerden, "Namaqualand Boulder 06" by Greg Zaal and Jenelle van Heerden, "Namaqualand Boulder 05" by Jenelle van Heerden and Dario Barresi, "Boulder 01" by Rico Cilliers, and one stone of "Namaqualand Boulders 01" by Greg Zaal and Jenelle van Heerden.
 
 The deer come from the Ultimate Animated Animal Pack by Quaternius (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0: "Deer" (the hinds) and "Stag", as served by Poly Pizza (https://poly.pizza/m/T6Cs7tmMHJ, https://poly.pizza/m/tQdzbZ1Cmw). `tools/models.mjs` trims their clips, bakes in their colours and subdivides them. `src/deer.js` reshapes them into sika deer and paints on their coats.
 
