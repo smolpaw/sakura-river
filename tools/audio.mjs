@@ -7,8 +7,9 @@
 //   it, so the page can loop [PAD, PAD + length] and stay seamless whatever the MP3 decoder does with encoder delay and
 //   padding.
 //   They are levelled to BED_LUFS, with the peak held under -1 dBFS.
-// - One-shots (thunder, bush-warbler songs, the temple bell, the fisherman's tune) are trimmed, faded and
-//   peak-normalised (the bell and the tune levelled); mono, panned by the page.
+// - One-shots (thunder, bush-warbler songs, the temple bell, the fisherman's tune, the animals' calls and the plop of
+//   one going into the water) are trimmed, faded and peak-normalised (the bell and the tune levelled); mono, panned by
+//   the page.
 // - Footsteps (geta on four surfaces) are cut at each step's onset, layered with a geta's wooden knock where the
 //   recording is not of geta, and levelled to one loudness; mono.
 // - Music tracks are copied without their tags; their loudness is printed for the gains in src/audio.js.
@@ -30,6 +31,17 @@ const SRC = {
   rain: 'https://opengameart.org/sites/default/files/amb_rain2.flac',
   birds: 'https://archive.org/download/aporee_68851_79871/LDoltonKamikosawaForestBirdsQuiet250612.wav',
   uguisu: 'https://xeno-canto.org/993079/download',
+  // the animals (src/audio.js CALLS): sika deer alarm whistles, grey heron croaks, kingfisher calls, Japanese wagtail
+  // flight calls, spot-billed duck quacks, white-eye song, and a lure's plop into water for whatever goes in
+  sika1: 'https://xeno-canto.org/961992/download',
+  sika2: 'https://xeno-canto.org/961990/download',
+  heron1: 'https://xeno-canto.org/998335/download',
+  heron2: 'https://xeno-canto.org/1102109/download',
+  kawasemi: 'https://xeno-canto.org/785257/download',
+  sekirei: 'https://xeno-canto.org/527476/download',
+  karugamo: 'https://xeno-canto.org/858061/download',
+  mejiro: 'https://xeno-canto.org/993083/download',
+  plop: 'https://cdn.freesound.org/previews/853/853279_9129912-hq.mp3',
   lapping: 'https://archive.org/download/aporee_24924_28918/12140612binaural2496.mp3',
   bell: 'https://archive.org/download/aporee_31518_36212/54Miidera.mp3',
   waterwheel: BSB('2768'),
@@ -76,6 +88,18 @@ const SHOTS = [
   // voice, formants and tempo kept; the phrases' times in src/audio.js (TUNE)
   { out: 'fisher-whistle', src: 'tune', at: 0, len: 40.2, af: 'highpass=f=600,highpass=f=600,lowpass=f=6000', lufs: -20, fade: 0.4 },
   { out: 'fisher-hum', src: 'tune', at: 40.3, len: 47.4, af: 'highpass=f=80,rubberband=pitch=0.8409:formant=preserved:pitchq=quality', lufs: -20, fade: 0.4 },
+  // the animals' calls, each cut round one call (or one short bout) where the recording is clean; the low band's
+  // wind and traffic cut under each animal's own voice
+  { out: 'sika-1', src: 'sika1', at: 0.08, len: 0.6, af: 'highpass=f=700', peak: -3, fade: 0.25 },
+  { out: 'sika-2', src: 'sika2', at: 0.45, len: 0.9, af: 'highpass=f=900', peak: -3, fade: 0.35 },
+  { out: 'heron-1', src: 'heron1', at: 2.85, len: 0.75, af: 'highpass=f=250', peak: -3, fade: 0.2 },
+  { out: 'heron-2', src: 'heron1', at: 3.95, len: 0.75, af: 'highpass=f=250', peak: -3, fade: 0.2 },
+  { out: 'heron-3', src: 'heron2', at: 2.6, len: 0.6, af: 'highpass=f=250', peak: -3, fade: 0.2 },
+  ...[[1.0, 0.9], [3.15, 0.9], [12.55, 2.2]].map(([at, len], i) => ({ out: `kawasemi-${i + 1}`, src: 'kawasemi', at, len, af: 'highpass=f=3000', peak: -6, fade: 0.15 })),
+  ...[[0.05, 0.5], [1.35, 0.5], [5.2, 0.5]].map(([at, len], i) => ({ out: `sekirei-${i + 1}`, src: 'sekirei', at, len, af: 'highpass=f=1800', peak: -6, fade: 0.12 })),
+  ...[[0.6, 2.6], [23.8, 2.8], [41.4, 2.8]].map(([at, len], i) => ({ out: `karugamo-${i + 1}`, src: 'karugamo', at, len, af: 'highpass=f=450', peak: -4, fade: 0.3 })),
+  ...[[2.7, 3.9], [10.3, 5.4], [21.3, 3.0]].map(([at, len], i) => ({ out: `mejiro-${i + 1}`, src: 'mejiro', at, len, af: 'highpass=f=2000', peak: -6, fade: 0.4 })),
+  { out: 'plop-1', src: 'plop', at: 0, len: 0.38, af: 'highpass=f=150', peak: -3, fade: 0.1 },
 ];
 
 // Footsteps: geta (wooden clogs) recorded on a street in Kyoto give the stone set as they are, and their wooden knock,

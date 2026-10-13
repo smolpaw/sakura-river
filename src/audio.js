@@ -3,7 +3,8 @@
 // paddies at night, wind in the bamboo groves) play from decoded buffers, loaded when first heard and dropped after a
 // minute unheard; thunder follows each lightning strike after the sound's travel time; bush warblers sing in short
 // bouts by day; the temple's bell tolls as the lanterns come on at dusk; the fisherman hums or whistles his tune to
-// himself, heard only close to him; the walker's geta sound on the ground under them. Music streams through a media
+// himself, heard only close to him; the walker's geta sound on the ground under them; the animals' calls (call())
+// come from where each animal is, as it calls. Music streams through a media
 // element. Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or created until sound is turned on.
 import { clamp, lerp, smoothstep } from './noise.js';
 
@@ -24,6 +25,10 @@ const TUNE = {
   whistle: [[0.08, 9.52], [10.46, 20.43], [20.83, 29.42], [29.75, 39.75]],
 };
 const SPEED_OF_SOUND = 343;
+// the animals' calls (tools/audio.mjs): variants, gain close by, and the distance (m) at which a call is heard at half
+// that; the sika's alarm whistle, the heron's croak, the kingfisher's call, the wagtail's flight call, the duck's
+// quack, the white-eye's song, the plop of something going into the water
+const CALLS = { sika: [2, 1.0, 35], heron: [3, 1.1, 35], kawasemi: [3, 0.6, 16], sekirei: [3, 0.5, 12], karugamo: [3, 0.7, 20], mejiro: [3, 0.45, 14], plop: [1, 0.6, 9] };
 const TICK = 0.1; // mix update interval, s
 
 // world: river, temple, village and farmland (src/world.js); bridge: the bridge's centre (a Vector3)
@@ -36,7 +41,7 @@ export function createSound(world, bridge) {
   const vol = { music: 0.75, nature: 0.4 };
   let order = [], ti = 0, nextTimer = 0;
   const beds = {};
-  const shots = { thunder: null, songs: null, bell: null, steps: null, tune: null };
+  const shots = { thunder: null, songs: null, bell: null, steps: null, tune: null, calls: null };
   let walked = -Infinity; // when the walk last stepped or moved (performance.now() ms): keeps the footsteps loaded
   let lights = -1, toll = 0; // the lanterns' level at the last mix; a bell toll waiting for its file (s left)
   let since = TICK, bout = null, songWait = 4;
@@ -156,6 +161,7 @@ export function createSound(world, bridge) {
     shots.songs = shotSet([...Array(SONGS)].map((_, i) => `uguisu-${i + 1}`));
     shots.bell = shotSet(['bell']);
     shots.tune = shotSet(['fisher-hum', 'fisher-whistle']);
+    shots.calls = Object.fromEntries(Object.entries(CALLS).map(([k, [n]]) => [k, shotSet([...Array(n)].map((_, i) => `${k}-${i + 1}`))]));
 
     el = new Audio();
     el.preload = 'auto';
@@ -252,6 +258,7 @@ export function createSound(world, bridge) {
   }
 
   function mix(st) {
+    for (const s of Object.values(shots.calls)) keepShots(s, true); // (all small: kept while sound is on)
     const wind = st.wind, rain = st.rain, h = st.hour;
     const gale = smoothstep(0.55, 1, wind);
     const r = riverPlace(st.camera);
@@ -399,6 +406,21 @@ export function createSound(world, bridge) {
     walking(speed) {
       if (speed > 0) walked = performance.now();
     },
+    // An animal's call (CALLS: 'sika', 'heron', 'kawasemi', 'sekirei', 'karugamo', 'mejiro', 'plop') from world x, y, z:
+    // quieter and duller with distance, panned towards it, after the sound's travel time; a variant at random, never
+    // the same twice running. Nothing until its set has loaded.
+    call(kind, x, y, z, camera) {
+      const set = this.active && shots.calls && shots.calls[kind];
+      if (!set || set.state !== 'ready') return;
+      const [, gain, half] = CALLS[kind], p = camera.position, d = Math.hypot(x - p.x, y - p.y, z - p.z);
+      const g = gain / (1 + (d / half) ** 2);
+      if (g < 0.01) return;
+      const n = set.bufs.length;
+      let k = Math.floor(Math.random() * (n > 1 && set.last >= 0 ? n - 1 : n));
+      if (n > 1 && set.last >= 0 && k >= set.last) k++;
+      set.last = k;
+      play(set.bufs[k], { gain: g, pan: panTo(camera, x, z) * 0.8, rate: 0.96 + Math.random() * 0.08, lowpass: lerp(16000, 2500, smoothstep(10, 140, d)), delay: d / SPEED_OF_SOUND });
+    },
     // a lightning strike at world x, z, `dist` metres away; a visible bolt or only a flash in the clouds
     thunder(x, z, dist, bolt, camera) {
       if (!this.active || shots.thunder.state !== 'ready') return;
@@ -415,7 +437,7 @@ export function createSound(world, bridge) {
     // debug: the context's state and each loop's load state and level
     // sound is on but the browser holds it back until the page gets a click or key press
     get waiting() { return on && !document.hidden && (!ctx || ctx.state !== 'running' || (vol.music > 0 && el.paused && !nextTimer)); },
-    info() { return { state: ctx ? ctx.state : 'none', on, waiting: this.waiting, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state, bell: shots.bell && shots.bell.state, tune: shots.tune && shots.tune.state, voice: voice.src ? voice.kind : null, steps: shots.steps && Object.fromEntries(Object.entries(shots.steps).map(([k, v]) => [k, v.state])), lights }; },
+    info() { return { state: ctx ? ctx.state : 'none', on, waiting: this.waiting, beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, `${b.state} ${b.target.toFixed(2)}`])), thunder: shots.thunder && shots.thunder.state, songs: shots.songs && shots.songs.state, bell: shots.bell && shots.bell.state, tune: shots.tune && shots.tune.state, calls: shots.calls && Object.fromEntries(Object.entries(shots.calls).map(([k, v]) => [k, v.state])), voice: voice.src ? voice.kind : null, steps: shots.steps && Object.fromEntries(Object.entries(shots.steps).map(([k, v]) => [k, v.state])), lights }; },
     dispose() { on = false; removeUnlock(); clearTimeout(nextTimer); document.removeEventListener('visibilitychange', apply); if (el) el.pause(); if (ctx) ctx.close(); ctx = null; },
   };
 }
