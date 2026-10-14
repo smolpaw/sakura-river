@@ -3,7 +3,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, min, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
-  cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
+  cameraPosition, cameraViewMatrix, positionWorld, positionView, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray, uniform, log2, fwidth, color,
 } from 'three/tsl';
 import { U, vnoise, vnoiseLoop, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight, loopDrift } from './tsl.js';
@@ -874,6 +874,27 @@ export function shrubMaterial() {
     const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
     return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(skyGlow())).mul(bloom).mul(0.6));
+  })());
+}
+
+// the spring flowers (tools/nanohana.py: rapeseed, dandelions, horsetail): their colours in the vertex colours, how far
+// the wind moves each vertex in their alpha. The leaves and flowers are single cards: lit on the face turned to the
+// camera, the normal bent well up (thin leaves take the light from above whichever way they face). The rape's yellow glows a little with the sun
+// behind it; the lamps light them at the grass's strength.
+export function nanohanaMaterial() {
+  const col = attribute('color', 'vec4');
+  const normalNode = Fn(() => {
+    const n = transformNormalToView(normalLocal).normalize().toVar();
+    n.assign(select(dot(n, positionView).greaterThan(0.0), n.negate(), n));
+    return normalize(n.add(cameraViewMatrix.mul(vec4(0.0, 1.2, 0.0, 0.0)).xyz));
+  })();
+  return new LitMaterial({
+    roughness: 0.8, side: THREE.DoubleSide, colorNode: col.rgb, normalNode,
+    positionNode: windPosition(col.a.mul(0.45)), receivedShadowPositionNode: windShadowPosition(),
+  }, (out) => Fn(() => {
+    const yellow = sstep(0.2, 0.5, diffuseColor.r.sub(diffuseColor.b));
+    const back = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
+    return out.add(diffuseColor.rgb.mul(U.uSunColor.mul(U.uSunVis).mul(sunShadow).mul(back.mul(0.8).add(0.05)).mul(yellow).add(lanternLight(wp).mul(0.5))));
   })());
 }
 

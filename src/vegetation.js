@@ -558,6 +558,86 @@ export function shrubData(world, trees, clear = []) {
   return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
 }
 
+// ---------- spring flowers: rapeseed drifts, dandelions and horsetail by the lanes ----------
+// Blender models (tools/nanohana.py, drawn by lods.js): rapeseed (nanohana) in clumps about a metre across, a metre
+// tall, three kinds; a dandelion (tanpopo) and a tuft of horsetail shoots (tsukushi).
+// The rapeseed in drifts over the open meadow west of the lane to the cherry tree, thinning out at their ragged edges,
+// and in a line along the east bank, outside the lantern line, where the cherries stand by the river; the dandelions
+// and horsetail in ones and twos along the lanes' verges. None on the lanes, the farmland, the building pads, the
+// deer's grazing ground, in the small cherries' clearings (world.js CLEAR) or near the cherry tree; clear of the
+// boulders (`rocks`: [{ x, z, r }]) and the wayside's stones (`clear`). `turf(x, z)`: the grazing ground's turf
+// density (gen/layout.js); `density`: the tier's share of the clumps.
+// (three kinds of rapeseed keep each under 1,024 instances: lods.js)
+export const SPRING_KINDS = ['nanohana0', 'nanohana1', 'nanohana2', 'tanpopo', 'tsukushi'];
+const RAPE = 3, TANPOPO = 3, TSUKUSHI = 4;
+// meadow: the box searched; drift: the drifts' noise frequency; spacing: between clumps (m); grow: [x, z, r] where a
+// drift is sure to be (the meadow's open foreground on the cinematic flight's last stretch)
+const NANO = { meadow: [-125, -62, -24, 44], drift: 0.022, spacing: 1.05, grow: [[-40, -9, 15]] };
+// the east bank's stretches (z ranges) and bands out from the water (t: times the river's half width; the lantern
+// line and its bonbori stand at 1.33 .. 1.58) with how full each is
+const BANKS = { z: [[-12, 18], [-58, -49]], t: [[1.12, 1.32, 0.8], [1.6, 2.1, 1], [2.1, 2.8, 0.45]] };
+export function nanohanaData(world, { tree, small, turf, rocks = [], clear = [], density = 1 }) {
+  const rng = mulberry32(919), nz = makeNoise(97);
+  const lists = SPRING_KINDS.map(() => []);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), up = new V(0, 1, 0);
+  const flat = (x, z, e = 1) => {
+    const gx = (world.height(x + e, z) - world.height(x - e, z)) / (2 * e), gz = (world.height(x, z + e) - world.height(x, z - e)) / (2 * e);
+    return 1 / Math.hypot(gx, gz, 1);
+  };
+  // whether a plant r across may stand at (x, z)
+  const free = (x, z, r, lane = 3) => {
+    if (world.laneDist(x, z) < lane + r || world.zoneAt(x, z) || world.padAt(x, z) || world.grove(x, z) > 0.02) return false;
+    if (Math.hypot(x - tree[0], z - tree[1]) < 17 || turf(x, z) > 0.005) return false;
+    if (world.CLEAR.some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 10 + r)) return false;
+    if (small.some((t) => Math.hypot(x - t.x, z - t.z) < 3 + r)) return false;
+    return !rocks.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + r) && !clear.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + r);
+  };
+  const put = (k, x, z, h, w, sink = 0.03) => {
+    p.set(x, world.height(x, z) - sink, z);
+    q.setFromAxisAngle(up, rng() * Math.PI * 2);
+    s.set(w * (0.9 + rng() * 0.2), h, w * (0.9 + rng() * 0.2));
+    const g = 0.88 + rng() * 0.22, c = [g, g * (0.97 + rng() * 0.06), g * (0.92 + rng() * 0.1)];
+    lists[k].push({ m: m.compose(p, q, s).toArray(), c });
+  };
+  // the meadow's drifts: clumps on a jittered grid where the drift noise is high, fewer towards its edges
+  const [x0, z0, x1, z1] = NANO.meadow, step = NANO.spacing / Math.sqrt(density);
+  for (let z = z0; z < z1; z += step) for (let x = x0; x < x1; x += step) {
+    const xx = x + (rng() - 0.5) * step * 0.9, zz = z + (rng() - 0.5) * step * 0.9;
+    const grow = NANO.grow.reduce((g, [gx, gz, r]) => Math.max(g, smoothstep(r, r * 0.4, Math.hypot(xx - gx, zz - gz))), 0);
+    const fine = 0.12 * nz.noise2(xx * 0.3, zz * 0.3);
+    const d = Math.max(smoothstep(0.06, 0.26, nz.fbm2(xx * NANO.drift + 5, zz * NANO.drift - 3, 3) + fine), smoothstep(0.1, 0.6, grow + fine));
+    if (rng() > d * d) continue;
+    if (world.height(xx, zz) < 0.5 || world.riverInfo(xx, zz).t < 1.8 || !free(xx, zz, 0.5) || flat(xx, zz) < 0.85) continue;
+    put(Math.floor(rng() * RAPE), xx, zz, (1.0 + rng() * 0.25) * lerp(0.85, 1, d), 0.9 + rng() * 0.3);
+  }
+  // the east bank: a ragged band of clumps either side of the lanterns, thinning away from the water
+  for (const [za, zb] of BANKS.z) for (let z = za; z < zb; z += step * 0.5) {
+    if (nz.noise2(z * 0.35, 7.5) < -0.4) continue; // a gap now and then
+    for (const [ta, tb, share] of BANKS.t) {
+      if (rng() > share) continue;
+      const t = lerp(ta, tb, rng()), zz = z + (rng() - 0.5) * step * 0.5, x = world.riverX(zz) + world.riverHW(zz) * t;
+      if (world.height(x, zz) < 0.25 || !free(x, zz, 0.4) || flat(x, zz) < 0.7) continue;
+      put(Math.floor(rng() * RAPE), x, zz, 1.0 + rng() * 0.25, 0.85 + rng() * 0.3);
+    }
+  }
+  // the lanes' verges: dandelions and horsetail, in ones and twos, more where the verge is open
+  for (const L of world.LANES) for (let k = 1; k < L.length; k++) {
+    const [ax, az] = L[k - 1], [bx, bz] = L[k], len = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / len, nzz = (bx - ax) / len;
+    for (let t = rng() * 4; t < len; t += 2 + rng() * 6 / density) {
+      const side = rng() < 0.5 ? -1 : 1, off = 1.1 + rng() * 0.6;
+      const x = ax + (bx - ax) * t / len + nx * side * off, z = az + (bz - az) * t / len + nzz * side * off;
+      if (world.zoneAt(x, z) || world.padAt(x, z) || world.height(x, z) < 0.3 || world.riverInfo(x, z).t < 1.4 || flat(x, z) < 0.8) continue;
+      if (rocks.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.3) || clear.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.3)) continue;
+      const k2 = rng() < 0.6 ? TANPOPO : TSUKUSHI;
+      // (at the scene's flower scale: the cherry's flowers are drawn about four times their size too)
+      const sc = 1.3 + rng() * 0.5;
+      put(k2, x, z, sc, sc, 0.005);
+      if (rng() < 0.4) put(k2, x + (rng() - 0.5) * 0.6, z + (rng() - 0.5) * 0.6, sc * 0.85, sc * 0.85, 0.005);
+    }
+  }
+  return lists.map((list) => ({ matrix: new Float32Array(list.flatMap((c) => c.m)), color: new Float32Array(list.flatMap((c) => c.c)), n: list.length }));
+}
+
 // ---------- woods on the hills ----------
 // A Japanese hillside in spring: dark stands of sugi (cedar) and hinoki (cypress), broadleaf woods in fresh green and
 // evergreen oak with wild cherries (yamazakura) flowering pale pink among them, all in groves with meadow between.

@@ -167,6 +167,8 @@ export const ultraUrl = (name) => new URL(`models/${name}-ultra.glb`, document.b
 // The group's userData.lod(view) (a makeView, once a frame) re-sorts the instances when the view has changed;
 // userData.counts() gives what the view's camera draws: { drawn, of, tris } (instances and impostor cards in view, of
 // those it would draw unculled, and their triangles).
+// A kind's list stays under 1,024 instances: beyond that three's WebGL path moves the matrices from a uniform buffer
+// into an instanced attribute that these re-sorts don't keep up to date (instances left at the origin, others stale).
 export async function makeLods(url, kinds, lists, mat, ranges, { leavesMat = null, impostor = null, castLayer = 3, nearUrl = null, nearRange = 30, lodScale = 1 } = {}) {
   const [gltf, near] = await Promise.all([
     loadModel(url),

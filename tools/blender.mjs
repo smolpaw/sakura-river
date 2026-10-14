@@ -14,7 +14,7 @@ import { prune, dedup, resample, meshopt } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const MODELS = ['forest', 'cliffs', 'bamboo', 'rocks', 'cherry', 'village', 'shrubs', 'lamps', 'boat', 'wayside', 'heron', 'deer', 'duck', 'human', 'figures'];
+const MODELS = ['forest', 'cliffs', 'bamboo', 'rocks', 'cherry', 'village', 'shrubs', 'nanohana', 'lamps', 'boat', 'wayside', 'heron', 'deer', 'duck', 'human', 'figures'];
 const PUBLIC = ['human', 'figures'];
 // where a model's meshes go: [file, which meshes (by node name)]; a file no mesh goes to is not written
 const targets = (name) => [

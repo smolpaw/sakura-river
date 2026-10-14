@@ -10,7 +10,7 @@ import { U, sceneFog, pcfSoftShadowFilter, setLightMap, LOOP, RUN_LOOP, FLOW_LOO
 import { makeFarShadow, FAR_LAYER, CLOUDS, CLOUD_LOOP } from './sunshadow.js';
 import { lightMap, lightMapAdd, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE, FLOWER_ATTRS, trunkBendAttributes } from './tree.js';
-import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
+import { makeTurf, makeFlowers, SHRUB_KINDS, SPRING_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods, makeMerged, makeView, loadModel, ultraUrl, shareInstancedPipelines, modelVertices } from './lods.js';
 import { makeGrass } from './grass.js';
 import { bakeImpostors, makeImpostors } from './impostors.js';
@@ -22,6 +22,7 @@ import rocksUrl from './models/rocks.glb?url&inline';
 import cherryUrl from './models/cherry.glb?url&inline';
 import villageUrl from './models/village.glb?url&inline';
 import shrubsUrl from './models/shrubs.glb?url&inline';
+import nanohanaUrl from './models/nanohana.glb?url&inline';
 import lampsUrl from './models/lamps.glb?url&inline';
 import boatUrl from './models/boat.glb?url&inline';
 import { makeBoats } from './boat.js';
@@ -207,6 +208,7 @@ export async function create(canvas, opts = {}) {
     ...Object.fromEntries(fieldJobs.map((zones, k) => [`fields${k}`, { name: 'fields', args: { zones } }])),
     village: { name: 'village' },
     shrubs: { name: 'shrubs' },
+    spring: { name: 'spring', args: { tier: tierName } },
     heightCache: { name: 'heightCache' },
     depth: { name: 'depth', args: { tier: tierName } },
     river: { name: 'river' },
@@ -519,6 +521,11 @@ export async function create(canvas, opts = {}) {
   const shrubs = await makeLods(shrubsUrl, SHRUB_KINDS, G.shrubs, M.shrubMaterial(), [35, 110], { lodScale, ...nearOf('shrubs') });
   shrubs.name = 'shrubs';
   scene.add(shrubs);
+  // rapeseed in drifts on the meadow and along the east bank, dandelions and horsetail by the lanes
+  const spring = await makeLods(nanohanaUrl, SPRING_KINDS, G.spring, M.nanohanaMaterial(), [22, 70], { lodScale });
+  spring.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.layers.set(1); } });
+  spring.name = 'spring';
+  scene.add(spring);
   const villageMat = M.villageMaterial();
   const village = await makeLods(villageUrl, VILLAGE_KINDS, G.village.lists, villageMat, [90], { lodScale, ...nearOf('village') });
   village.name = 'village';
@@ -591,7 +598,7 @@ export async function create(canvas, opts = {}) {
   // (lods.js makeView; the shadow maps still draw them)
   const view = makeView(camera, reflector ? reflector.target : null);
   if (reflector) view.cameras.add(reflector.getVirtualCamera(camera));
-  const lodGroups = [forest, cliffs, rocks, pebbles, bamboo, village, lamps, shrubs];
+  const lodGroups = [forest, cliffs, rocks, pebbles, bamboo, village, lamps, shrubs, spring];
   // the wayside's stones by the lanes (wayside.js): Jizō, signposts, roadside shrines; casting shadows as the lamps do,
   // and the roku-jizō's roof into the valley's map too (layer 3 only), so it shades its statues where the sharp map
   // does not reach

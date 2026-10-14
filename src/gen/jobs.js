@@ -2,7 +2,7 @@
 // data: typed arrays, packed geometries and small JSON. Every job owns its seeds, so jobs run in any order.
 import { createWorld } from '../world.js';
 import { paintFlowerAtlas, paintBark, treeData, MAIN_TREE, SMALL_TREE } from '../tree.js';
-import { turfData, grassMask, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData, shrubData, paintLeafAtlas } from '../vegetation.js';
+import { turfData, grassMask, flowersData, rocksData, rockPlan, cliffData, forestData, bambooData, shrubData, nanohanaData, paintLeafAtlas } from '../vegetation.js';
 import { fujiGeometry, bridgeData, bridgeRopeAnchors, BRIDGE_Z } from '../props.js';
 import { templeData } from '../temple.js';
 import { fallenData, raftData } from '../petals.js';
@@ -69,6 +69,12 @@ export const JOBS = {
   bamboo: () => bambooData(world()),
   // clear of the cherries (the main tree's lawn and crown, the small trees' clearings) and the wayside's stones
   shrubs: () => { const l = L(); return shrubData(world(), [{ x: l.TX, z: l.TZ, r: 22 }, ...l.small.map((sp) => ({ x: sp.x, z: sp.z, r: 8 }))], waysideClearings(world())); },
+  // the rapeseed's drifts, the dandelions and horsetail by the lanes (fewer on the lower tiers)
+  spring: ({ tier }) => {
+    const l = L();
+    const rocks = rockPlan(world(), tier, xz(l.tree)).placements.filter((r) => r.sc > 0.3).map((r) => ({ x: r.x, z: r.z, r: r.sc * 0.95 }));
+    return nanohanaData(world(), { tree: [l.TX, l.TZ], small: l.small, turf: turf(l, 0).density, rocks, clear: waysideClearings(world()), density: { medium: 0.75, low: 0.5 }[tier] ?? 1 });
+  },
   lanterns: ({ tier }) => {
     const l = L();
     const trees = [l.tree, ...l.small.map((sp) => [sp.x, 0, sp.z])].map(([x, , z]) => ({ x, z, r: 1 }));
@@ -86,4 +92,4 @@ export const JOBS = {
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, groundAO: 60, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 90, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 70, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, groundAO: 60, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 90, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, spring: 90, fallen: 70, rafts: 8, river: 3 };
