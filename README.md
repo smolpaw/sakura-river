@@ -74,7 +74,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 
 The recordings come from the sources below, used under their licences. `tools/audio.mjs` lists the exact files and cuts. The files in `public/audio/` are edited from them: trimmed, looped, filtered and levelled. Files made from a share-alike (SA) source stay under that source's licence.
 
-Music, by PeriTune (https://peritune.com), CC BY 4.0, unchanged apart from their tags:
+Music, by PeriTune (https://peritune.com), CC BY 4.0, re-encoded at a lower bitrate (MP3, VBR, about 140 kbps) without their tags:
 - "Sakuya3": https://peritune.com/blog/2016/10/18/sakuya3/
 - "Oboro": https://peritune.com/blog/2019/04/08/oboro/
 - "Shizima4": https://peritune.com/blog/2021/06/06/shizima4/

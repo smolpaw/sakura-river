@@ -12,7 +12,8 @@
 //   the page.
 // - Footsteps (geta on four surfaces) are cut at each step's onset, layered with a geta's wooden knock where the
 //   recording is not of geta, and levelled to one loudness; mono.
-// - Music tracks are copied without their tags; their loudness is printed for the gains in src/audio.js.
+// - Music tracks are re-encoded at LAME VBR -V 5 (about 140 kbps against the sources' 192) without their tags; their
+//   loudness and seams (the dips at phrase ends, where a change of track may crossfade) are printed for src/audio.js.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -256,9 +257,27 @@ for (const set of STEPS) {
   });
 }
 
+// a track's seams: where its level dips at least 3.5 dB (0.5 s against the 4 s before) at the end of a phrase, the
+// bottom of each dip, at least 6 s apart
+function seams(file) {
+  const R = 11025, F = Math.round(0.25 * R);
+  const b = run('ffmpeg', ['-v', 'error', '-i', file, '-ac', '1', '-ar', String(R), '-f', 'f32le', 'pipe:1']).stdout;
+  const x = new Float32Array(b.buffer, b.byteOffset, b.length / 4), env = [];
+  for (let i = 0; i + F <= x.length; i += F) { let q = 0; for (let j = i; j < i + F; j++) q += x[j] * x[j]; env.push(q / F); }
+  const mean = (a, z) => { let s = 0; for (let i = a; i < z; i++) s += env[i]; return 10 * Math.log10(s / (z - a) + 1e-12); };
+  const out = [];
+  for (let i = 16; i < env.length - 8; i++) {
+    if (mean(i, i + 2) - mean(i - 16, i) > -3.5) continue;
+    let k = i;
+    while (k + 1 < env.length && env[k + 1] < env[k]) k++;
+    if (!out.length || k * 0.25 - out[out.length - 1] >= 6) out.push(k * 0.25);
+    i = k + 8;
+  }
+  return out;
+}
 for (const [name, url] of MUSIC.filter(([name]) => wanted(name))) {
-  const file = fetchSource(url);
-  run('ffmpeg', ['-v', 'error', '-y', '-i', file, '-map', '0:a', '-c', 'copy', '-map_metadata', '-1', '-id3v2_version', '0', '-write_xing', '1', path.join(OUT, name + '.mp3')]);
-  const r = run('ffmpeg', ['-v', 'info', '-nostats', '-i', file, '-af', 'ebur128', '-f', 'null', '-']);
-  console.log(`${name}: ${/I:\s+(-?[\d.]+) LUFS/.exec(r.stderr.toString().split('Summary:').pop())[1]} LUFS`);
+  const file = fetchSource(url), out = path.join(OUT, name + '.mp3');
+  run('ffmpeg', ['-v', 'error', '-y', '-i', file, '-map', '0:a', '-c:a', 'libmp3lame', '-q:a', '5', '-map_metadata', '-1', '-id3v2_version', '0', '-write_xing', '1', out]);
+  const r = run('ffmpeg', ['-v', 'info', '-nostats', '-i', out, '-af', 'ebur128', '-f', 'null', '-']);
+  console.log(`${name}: ${/I:\s+(-?[\d.]+) LUFS/.exec(r.stderr.toString().split('Summary:').pop())[1]} LUFS, seams [${seams(out).join(', ')}]`);
 }
