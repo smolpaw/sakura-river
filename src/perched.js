@@ -40,7 +40,7 @@ const KF_FLUSH = 6; // the kingfisher leaves when the walker comes this close (t
 // ---------- the two shapes ----------
 // Both in metres, built in a body frame (z forward along the body's axis, y up), then tilted nose-up by `tilt` and set
 // on the feet (the origin, on the perch). rings: [z, centre y, half-width, half-height] from the beak's base back to
-// the rump, eight vertices round each; beak: the upper and the lower tip [z, y]; tail: root and tip [z, half-width,
+// the rump (shape() rounds them out); beak: the upper and the lower tip [z, y]; tail: root and tip [z, half-width,
 // y] when sitting and in flight; wing: three stations (shoulder, wrist, tip), each [leading edge, trailing edge] as
 // [x, y, z], folded along the flank and spread; leg: [half-gap, length, z].
 const SHAPES = {
@@ -73,6 +73,7 @@ const ELBOW = { sparrow: 0.055, crow: 0.22 }; // where the spread wing's hand st
 const HZ = { sparrow: 15, crow: 4.2 }; // wing beats per second
 
 // parts (aInfo.x): 0 body, 1 wing, 2 tail, 3 leg, 4 upper beak tip, 5 lower beak tip (opens)
+const RING = 16; // vertices round each of the body's rings
 function shape(S) {
   const sit = [], fly = [], info = [], I = [];
   const ct = Math.cos(S.tilt), st = Math.sin(S.tilt);
@@ -85,24 +86,31 @@ function shape(S) {
   const toFly = (p) => [p[0] - footLevel[0], p[1] - footLevel[1], p[2] - footLevel[2]];
   const vert = (pSit, pFly, part, u = 0, v = 0, head = 0) => { sit.push(...pSit); fly.push(...pFly); info.push(part, u, v, head); return sit.length / 3 - 1; };
   const body = (p, part, head, u = 0, v = 0) => vert(toSit(p), toFly(p), part, u, v, head);
-  // body: rings of eight from the top round by the right
-  const HEAD = [1, 1, 1, 0.6, 0, 0, 0];
-  const rings = S.rings.map(([z, cy, rx, ry], i) => Array.from({ length: 8 }, (_, j) => {
-    const a = (j / 8) * TAU;
-    return body([rx * Math.sin(a), cy + ry * Math.cos(a), z], 0, HEAD[i]);
+  // body: rings of RING from the top round by the right, S.rings with one more between each pair (Catmull-Rom), so
+  // it is round from close by; how much each ring turns with the head
+  const HEAD = [1, 1, 1, 0.6, 0, 0, 0], R = S.rings, n = R.length;
+  const at = R.flatMap((r, i) => {
+    if (i + 1 === n) return [[r, HEAD[i]]];
+    const p0 = R[Math.max(0, i - 1)], p3 = R[Math.min(n - 1, i + 2)];
+    return [[r, HEAD[i]], [r.map((v, k) => (-p0[k] + 9 * v + 9 * R[i + 1][k] - p3[k]) / 16), (HEAD[i] + HEAD[i + 1]) / 2]];
+  });
+  const rings = at.map(([[z, cy, rx, ry], head]) => Array.from({ length: RING }, (_, j) => {
+    const a = (j / RING) * TAU;
+    return body([rx * Math.sin(a), cy + ry * Math.cos(a), z], 0, head);
   }));
-  for (let i = 0; i + 1 < rings.length; i++) for (let j = 0; j < 8; j++) {
-    const a = rings[i][j], b = rings[i][(j + 1) % 8], c = rings[i + 1][j], d = rings[i + 1][(j + 1) % 8];
+  for (let i = 0; i + 1 < rings.length; i++) for (let j = 0; j < RING; j++) {
+    const a = rings[i][j], b = rings[i][(j + 1) % RING], c = rings[i + 1][j], d = rings[i + 1][(j + 1) % RING];
     I.push(a, b, c, b, d, c);
   }
   // the beak: the upper half of its base to the upper tip, the lower half to the lower tip, the gape's sides between
   const r0 = rings[0], U0 = body([0, S.beak[0][1], S.beak[0][0]], 4, 1), L0 = body([0, S.beak[1][1], S.beak[1][0]], 5, 1);
-  for (const j of [6, 7, 0, 1]) I.push(r0[j], U0, r0[(j + 1) % 8]);
-  for (const j of [2, 3, 4, 5]) I.push(r0[j], L0, r0[j + 1]);
-  I.push(r0[2], U0, L0, r0[6], L0, U0);
+  const q = RING / 4;
+  for (let j = 3 * q; j < 5 * q; j++) I.push(r0[j % RING], U0, r0[(j + 1) % RING]);
+  for (let j = q; j < 3 * q; j++) I.push(r0[j], L0, r0[j + 1]);
+  I.push(r0[q], U0, L0, r0[3 * q], L0, U0);
   // the rump closed to a point
-  const r6 = rings[6], T0 = body([0, S.rump[1], S.rump[0]], 0, 0);
-  for (let j = 0; j < 8; j++) I.push(r6[j], r6[(j + 1) % 8], T0);
+  const rl = rings[rings.length - 1], T0 = body([0, S.rump[1], S.rump[0]], 0, 0);
+  for (let j = 0; j < RING; j++) I.push(rl[j], rl[(j + 1) % RING], T0);
   // tail: one flat fan, its top up
   const tv = (k, m) => {
     const [z, w, y] = S.tail.sit[k], [zf, wf, yf] = S.tail.fly[k];
@@ -333,7 +341,7 @@ function perchedMaterial(sc, uAmount) {
     w = mix(w, vec3(0.26, 0.18, 0.11), sstep(0.45, 0.6, wu));
     const bar = (u0) => sstep(0.035, 0.015, abs(wu.sub(u0))).mul(sstep(0.15, 0.25, wv));
     w = mix(w, vec3(0.86, 0.84, 0.78), max(bar(0.17), bar(0.3)).mul(mix(float(1.0), float(0.5), far)));
-    const tail = mix(vec3(0.3, 0.2, 0.12), vec3(0.42, 0.32, 0.22), sstep(0.35, 0.5, abs(wv.sub(0.5))));
+    const tail = mix(vec3(0.2, 0.13, 0.08), vec3(0.3, 0.22, 0.14), sstep(0.44, 0.5, abs(wv.sub(0.5)))); // plain brown, the edges paler
     const legs = vec3(0.52, 0.4, 0.33);
     const spc = select(pt.equal(1.0), w, select(pt.equal(2.0), tail, select(pt.equal(3.0), legs, select(pt.greaterThan(3.5), vec3(0.13, 0.12, 0.11), c))));
     const eyeD = length(vec3(ax.sub(0.0128), by.sub(0.0158), bz.sub(0.0455)));
