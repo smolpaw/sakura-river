@@ -23,6 +23,8 @@ Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender model
 
 Drag to look round, scroll or pinch to zoom, right-drag to pan. Buttons: Cinematic (a flight round the valley), Orbit, Walk and Reset view. In walk mode, W A S D or the arrow keys walk, the mouse looks (click to lock the pointer, Esc to release it), and Shift hurries. On touch screens, the left thumb walks and the right one looks.
 
+The address keeps the time, the weather and the view (or the walker's place): `#t=<hour>&w=<weather>&v=<x,y,z,tx,ty,tz>`, or `&walk=<x,z,yaw,pitch>` (metres, degrees), with no hash at the opening view at night in clear weather. A page opened from it starts there, flying in briefly. The link button copies it.
+
 Quality: Auto picks a tier and lowers the resolution under load; a tier picked by hand stays fixed. Frame rate: Auto runs at 60 fps and drops to 30 on slow devices; 60 and 30 hold that rate.
 
 ## Layout
@@ -46,10 +48,11 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 ## Engine API
 
     import { create } from './src/main.js';   // also window.SakuraRiver.create
-    const scene = await create(canvas, { quality, fixedQuality, frameRate, backend, hour, onProgress, onReady, onStats, onLost, onCinematicChange, onWalkChange });
+    const scene = await create(canvas, { quality, fixedQuality, frameRate, backend, hour, view, introDuration, onProgress, onReady, onStats, onLost, onCinematicChange, onWalkChange });
     scene.setWeather(id, seconds);              // a preset from WEATHERS in src/weather.js
     scene.setTimeOfDay(hour, animate, forward); // 0..24, optionally as a time-lapse
     scene.timeOfDay();
+    scene.view();                               // { pos, target, flying, home } or, walking, { walk: [x, z, yaw, pitch], flying }
     scene.set('wind' | 'petals' | 'river' | 'time' | 'fog' | 'bloom' | 'clouds' | 'rain' | 'lightning', value0to1);
     scene.setCinematic(on); scene.setAutoOrbit(on); scene.setWalk(on); scene.walking();
     scene.setSound(on); scene.setVolume('music' | 'nature', v); scene.soundWaiting();
@@ -58,6 +61,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
     scene.resetCamera();
     scene.dispose();
 
+- `view` opens on a view, flown into briefly: `{ pos: [x, y, z], target: [x, y, z] }`, or `{ walk: [x, z, yaw, pitch] }` (radians) to open walking there; anything else is ignored. `introDuration`: the opening flight's seconds (6.5 to the default view, 1.6 into `view`; 0 for none).
 - `quality` is `'ultra' | 'high' | 'medium' | 'low'`. When it is omitted, the engine picks a tier for the device, never Ultra. `fixedQuality` turns off the adaptive resolution. `backend: 'webgl'` forces WebGL2.
 - `create` rejects with `code` `'unsupported'` (no WebGPU or WebGL2), `'stalled'` (shader preparation hung) or `'lost'` (device lost during start-up).
 - The callbacks: `onProgress({ stage, f, quality, backend })` during loading, `onStats({ fps, quality, level, scale, floor })` about once a second, `onLost({ api, message, reason })` on a lost device.

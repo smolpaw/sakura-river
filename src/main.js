@@ -104,6 +104,15 @@ function detectTier(renderer) {
 
 const IMPOSTOR_FROM = 140; // the woods' full models (and leaf cards) to here, impostors beyond (times the tier's lodScale)
 const NEAR_RANGE = 30; // the Ultra tier's near models (lods.js) to here (nearer for the pebbles and the bamboo: nearOf)
+// a view to open on (create's opts.view): { pos: [x, y, z], target: [x, y, z] } or { walk: [x, z, yaw, pitch] }
+// (radians); anything else is ignored
+function openingView(v) {
+  const ok = (a, n) => Array.isArray(a) && a.length >= n && a.slice(0, n).every((x) => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) < 1e4);
+  if (!v || typeof v !== 'object') return null;
+  if (ok(v.pos, 3) && ok(v.target, 3)) return { pos: new THREE.Vector3(...v.pos), target: new THREE.Vector3(...v.target) };
+  if (ok(v.walk, 2)) return { walk: [v.walk[0], v.walk[1], ok(v.walk, 3) ? v.walk[2] : 0, ok(v.walk, 4) ? v.walk[3] : 0] };
+  return null;
+}
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export async function create(canvas, opts = {}) {
@@ -745,7 +754,12 @@ export async function create(canvas, opts = {}) {
   camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); clampCamera();
   DEFAULT.pos.copy(camera.position); DEFAULT.target.copy(controls.target);
   camera.position.copy(introPos); controls.target.copy(introTarget); controls.update();
-  startTween(DEFAULT.pos, DEFAULT.target, opts.introDuration ?? 6.5);
+  // the opening: a flight in to the default view over introDuration s (6.5 by default; 0: none, the camera there at
+  // once), or, given a view to open on (opts.view, a shared link), a short one into it once the scene shows (below)
+  const linked = openingView(opts.view);
+  const introDur = opts.introDuration ?? (linked ? 1.6 : 6.5);
+  if (linked) { /* placed below, with the walk */ } else if (introDur > 0) startTween(DEFAULT.pos, DEFAULT.target, introDur);
+  else { camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); }
 
   canvas.addEventListener('pointerdown', () => {
     if (walking) return; // (walk.js: a click locks the pointer)
@@ -821,13 +835,23 @@ export async function create(canvas, opts = {}) {
     } else {
       controls.enabled = true;
       tween = null;
-      if (fly) {
-        const s = walk.state, target = new THREE.Vector3(s.x, s.y + 1.1, s.z);
-        startTween(target.clone().add(new THREE.Vector3(-Math.sin(s.yaw) * 6, 1.8, -Math.cos(s.yaw) * 6)), target, 1.8);
-      }
+      if (fly) startTween(...behindFigure(), 1.8);
     }
     opts.onWalkChange && opts.onWalkChange(on);
     return on ? loadWalkerOnce() : Promise.resolve(walker);
+  }
+
+  // an orbit view a few metres behind the walker's figure: [position, target]
+  function behindFigure() {
+    const s = walk.state, target = new THREE.Vector3(s.x, s.y + 1.1, s.z);
+    return [target.clone().add(new THREE.Vector3(-Math.sin(s.yaw) * 6, 1.8, -Math.cos(s.yaw) * 6)), target];
+  }
+  // a linked view: the camera there for the warm-up (a walk's: behind the figure standing there), flown into after it
+  if (linked && linked.pos) { camera.position.copy(linked.pos); controls.target.copy(linked.target); controls.update(); clampCamera(); }
+  else if (linked) {
+    walk.moveTo(linked.walk[0], linked.walk[1], linked.walk[2]); walk.input({ pitch: linked.walk[3] });
+    const [p, t] = behindFigure();
+    camera.position.copy(p); controls.target.copy(t); controls.update(); clampCamera();
   }
 
   // ---------- params ----------
@@ -1319,6 +1343,13 @@ export async function create(canvas, opts = {}) {
     warming = revealing = false;
     mark('warm');
   }
+  // into the linked view: the walk's eye, or the view from a little further out and higher
+  if (linked && linked.walk) { setWalk(true); if (introDur <= 0) tween = null; }
+  else if (linked && introDur > 0) {
+    const to = camera.position.clone(), at = controls.target.clone();
+    camera.position.sub(at).multiplyScalar(1.35).add(at); camera.position.y += 1.5;
+    startTween(to, at, introDur);
+  }
   if (!opts.manual) requestAnimationFrame(loop);
   opts.onReady && opts.onReady({ quality: tierName });
 
@@ -1360,6 +1391,14 @@ export async function create(canvas, opts = {}) {
       if (!timeTween) clockH = ((hour % 24) + 24) % 24;
     },
     timeOfDay() { return clockH; },
+    // where the camera is: { pos, target } orbiting, { walk: [x, z, yaw, pitch] } (radians) walking; flying: on its way
+    // between views (the opening, a reset, into or out of the walk); home: resting at the default view
+    view() {
+      const flying = !!tween;
+      if (walking) { const s = walk.state; return { walk: [s.x, s.z, s.yaw, s.pitch], flying }; }
+      const home = !flying && !cinematic && camera.position.distanceTo(DEFAULT.pos) < 0.05 && controls.target.distanceTo(DEFAULT.target) < 0.05;
+      return { pos: camera.position.toArray(), target: controls.target.toArray(), flying, home };
+    },
     resetCamera() {
       if (walking) { setWalk(false); return; } // out of walk mode, behind the figure
       cinematic = false; controls.enabled = true;

@@ -9,8 +9,59 @@ import { WEATHERS, TIMES } from './weather.js';
   function save(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
   function setPressed(btn, on) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
 
+  // ---------- the link: the time, the weather and the view in the URL's hash ----------
+  // #t=<hour>&w=<weather>&v=<x,y,z,tx,ty,tz> (the camera and what it looks at, m), or &walk=<x,z,yaw,pitch> (m, degrees)
+  // in walk mode. A page opened from one starts there; anything not understood is left out.
+  var NIGHT = TIMES.find(function (t) { return t.id === 'night'; }).hour;
+  function nums(v, n, max) {
+    var a = (v || '').split(',').map(Number);
+    return a.length === n && a.every(function (x) { return isFinite(x) && Math.abs(x) <= max; }) && String(v).trim() !== '' ? a : null;
+  }
+  var link = (function () {
+    var q = {};
+    location.hash.replace(/^#/, '').split('&').forEach(function (kv) {
+      var i = kv.indexOf('=');
+      if (i > 0) { try { q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); } catch (e) { /* malformed */ } }
+    });
+    var out = {}, t = q.t === undefined || q.t === '' ? NaN : +q.t, v = nums(q.v, 6, 5000), wk = nums(q.walk, 4, 5000);
+    if (isFinite(t) && t >= 0 && t <= 24) out.hour = t % 24;
+    if (WEATHERS.some(function (x) { return x.id === q.w; })) out.weather = q.w;
+    if (v) out.view = { pos: v.slice(0, 3), target: v.slice(3) };
+    else if (wk) out.view = { walk: [wk[0], wk[1], wk[2] * Math.PI / 180, wk[3] * Math.PI / 180] };
+    return out;
+  })();
+  var r1 = function (x) { return Math.round(x * 10) / 10; };
+  // the scene's state as a hash; '' at the default (night, clear, the opening view)
+  function hashNow() {
+    var h = Math.round(engine.timeOfDay() * 100) / 100 % 24, v = engine.view(), w = WEATHERS[wi].id;
+    if (h === NIGHT && w === 'clear' && v.home) return '';
+    var out = '#t=' + h + '&w=' + w;
+    if (v.walk) out += '&walk=' + [r1(v.walk[0]), r1(v.walk[1]), Math.round(v.walk[2] * 180 / Math.PI), Math.round(v.walk[3] * 180 / Math.PI)].join(',');
+    else out += '&v=' + v.pos.concat(v.target).map(r1).join(',');
+    return out;
+  }
+  function urlWith(hash) { return location.href.replace(/#.*$/, '') + hash; }
+  // written as the scene changes, replacing the address (no history entries): once things have been still for 0.6 s,
+  // and at least every 2 s while they keep moving (a time-lapse, the cinematic flight, auto-orbit); not during a
+  // flight between views, which ends at one
+  var written = location.hash, linkDue = 0, linkFirst = 0;
+  function writeLink(hash) {
+    written = hash;
+    try { history.replaceState(history.state, '', urlWith(hash)); } catch (e) { /* e.g. a sandboxed frame */ }
+  }
+  function watchLink() {
+    if (!engine || engine.view().flying) return;
+    var hash = hashNow(), now = performance.now();
+    if (hash === written) { linkDue = linkFirst = 0; return; }
+    if (!linkFirst) linkFirst = now;
+    if (linkDue && now < linkDue && now - linkFirst < 2000) return;
+    if (!linkDue) { linkDue = now + 600; return; }
+    linkDue = linkFirst = 0;
+    writeLink(hash);
+  }
+
   // ---------- weather ----------
-  var wi = WEATHERS.findIndex(function (w) { return w.id === 'clear'; }); // opens in clear weather
+  var wi = WEATHERS.findIndex(function (w) { return w.id === (link.weather || 'clear'); }); // opens in clear weather, or the link's
   var wBtns = WEATHERS.map(function (w, i) {
     var b = document.createElement('button');
     b.type = 'button'; b.title = w.name; b.setAttribute('aria-label', w.name);
@@ -187,6 +238,37 @@ import { WEATHERS, TIMES } from './weather.js';
     window.addEventListener(t, wake, { capture: true, passive: true });
   });
 
+  // a link pasted over this page's own address changes only the hash: open it
+  window.addEventListener('hashchange', function () { if (location.hash !== written) location.reload(); });
+
+  // ---------- copy link ----------
+  var toastTimer = 0;
+  function toast(text) {
+    var t = $('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+  $('btn-link').addEventListener('click', function () {
+    if (!engine) return;
+    var hash = hashNow();
+    linkDue = linkFirst = 0;
+    if (hash !== written) writeLink(hash);
+    var url = urlWith(hash);
+    function fallback() {
+      // (no clipboard API: an insecure context, or permission refused)
+      var ta = document.createElement('textarea'), ok = false;
+      ta.value = url; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch (e) { /* unsupported */ }
+      ta.remove();
+      toast(ok ? 'Link copied' : 'Copy the address bar to share this view');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { toast('Link copied'); }, fallback);
+    else fallback();
+  });
+
   // ---------- loading, failure and how it runs ----------
   // the WebGL2 renderer when the page offers it after WebGPU failed here; for this tab's session only
   var backend = null;
@@ -268,7 +350,8 @@ import { WEATHERS, TIMES } from './weather.js';
       fixedQuality: fixed,
       backend: backend === 'webgl' ? 'webgl' : undefined,
       frameRate: rate,
-      hour: TIMES.find(function (t) { return t.id === 'night'; }).hour, // open at night
+      hour: link.hour !== undefined ? link.hour : NIGHT, // open at night, or at the link's time
+      view: link.view, // the link's view, flown into briefly
       onProgress: function (p) {
         tier = p.quality; using = p.backend;
         if (p.stage !== stage) { stage = p.stage; stageAt = performance.now(); }
@@ -298,7 +381,7 @@ import { WEATHERS, TIMES } from './weather.js';
       engine.setVolume('nature', vols.nature);
       engine.setSound(soundOn);
       showTime();
-      setInterval(showTime, 250);
+      setInterval(function () { showTime(); watchLink(); }, 250);
       $('veil').classList.add('done');
       wake();
     }).catch(function (err) {
