@@ -8,6 +8,8 @@ import { WEATHERS, TIMES } from './weather.js';
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function save(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
   function setPressed(btn, on) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  // reduced motion: no opening flight, the time cut to rather than run as a time-lapse, weather blended in quickly
+  var still = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
   // ---------- the link: the time, the weather and the view in the URL's hash ----------
   // #t=<hour>&w=<weather>&v=<x,y,z,tx,ty,tz> (the camera and what it looks at, m), or &walk=<x,z,yaw,pitch> (m, degrees)
@@ -77,18 +79,19 @@ import { WEATHERS, TIMES } from './weather.js';
   function pickWeather(i) {
     wi = i;
     showWeather();
-    if (engine) engine.setWeather(WEATHERS[wi].id, 6);
+    if (engine) engine.setWeather(WEATHERS[wi].id, still.matches ? 1 : 6);
   }
   showWeather();
   $('w-random').addEventListener('click', function () { pickWeather((wi + 1 + Math.floor(Math.random() * (WEATHERS.length - 1))) % WEATHERS.length); });
 
   // ---------- time of day: fixed (no ticking clock); a preset moves there as a time-lapse, the slider follows ----------
   var day = $('t-day'), dragged = null; // the slider's hour while it is being moved, shown instead of the scene's
+  function lapseTo(h) { engine.setTimeOfDay(h, !still.matches); day.value = h; showTime(); }
   var tBtns = TIMES.map(function (t) {
     var b = document.createElement('button');
     b.type = 'button'; b.setAttribute('aria-label', t.name);
     b.innerHTML = '<b lang="ja"></b><span></span>'; b.firstChild.textContent = t.kanji; b.lastChild.textContent = t.name;
-    b.addEventListener('click', function () { if (engine) { engine.setTimeOfDay(t.hour); day.value = t.hour; showTime(); } });
+    b.addEventListener('click', function () { if (engine) lapseTo(t.hour); });
     $('times').appendChild(b);
     return b;
   });
@@ -97,7 +100,7 @@ import { WEATHERS, TIMES } from './weather.js';
     if (!engine) return;
     var now = engine.timeOfDay(), h;
     do { h = Math.floor(Math.random() * 48) / 2; } while (Math.abs(((h - now + 36) % 24) - 12) < 2);
-    engine.setTimeOfDay(h); day.value = h; showTime();
+    lapseTo(h);
   });
   // the scene follows the slider as it moves (straight there, back if it is earlier; presets go forward through the
   // night): a time change costs about what a time-lapse's frames do
@@ -395,6 +398,7 @@ import { WEATHERS, TIMES } from './weather.js';
       frameRate: rate,
       hour: link.hour !== undefined ? link.hour : NIGHT, // open at night, or at the link's time
       view: link.view, // the link's view, flown into briefly
+      introDuration: still.matches ? 0 : undefined,
       onProgress: function (p) {
         tier = p.quality; using = p.backend;
         if (p.stage !== stage) { stage = p.stage; stageAt = performance.now(); }

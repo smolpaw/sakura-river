@@ -23,7 +23,7 @@ Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender model
 
 Drag to look round, scroll or pinch to zoom, right-drag to pan. Buttons: Cinematic (a flight round the valley), Orbit, Walk and Reset view. In walk mode, W A S D or the arrow keys walk, the mouse looks (click to lock the pointer, Esc to release it), and Shift hurries. On touch screens, the left thumb walks and the right one looks.
 
-The time slider moves the scene as it is dragged; its arrow keys step by half hours.
+The time slider moves the scene as it is dragged; its arrow keys step by half hours. With the system's reduced-motion setting on, the page opens without its flight in, a new time is cut to rather than run as a time-lapse and the weather changes within a second; the cinematic flight still runs when started.
 
 The address keeps the time, the weather and the view (or the walker's place): `#t=<hour>&w=<weather>&v=<x,y,z,tx,ty,tz>`, or `&walk=<x,z,yaw,pitch>` (metres, degrees), with no hash at the opening view at night in clear weather. A page opened from it starts there, flying in briefly. The link button copies it. The photo button or H hides every control and the title; H, Esc (outside walk mode) or the button that shows in the corner after a touch or a mouse movement brings them back.
 
