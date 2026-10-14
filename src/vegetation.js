@@ -108,9 +108,22 @@ export function grassMask(blockers, trunks, S = 0.2) {
   return { data, W, H, bounds: [x0, z0, 1 / (W * S), 1 / (H * S)] };
 }
 
-// ---------- wildflowers (tiny heads riding above the grass) ----------
+// ---------- wildflowers (small heads among the grass) ----------
+// The meadow's spring flowers round the cherry tree, each kind in its own patches and at its own size and height:
+// dandelions (tanpopo), white clover heads (shirotsumekusa) where the grass is short, shepherd's purse (nazuna), tiny
+// and white on taller stems, violets (sumire) and speedwell (oinu-no-fuguri) low down, purple dead-nettle
+// (hime-odorikoso). The low ones show where the grass is short and hide in the long grass.
+// [colour, head size (times the disc), height above the ground (m): [min, spread], share, short grass only]
+const FLOWER_KINDS = [
+  [[0.95, 0.72, 0.08], [0.7, 0.35], [0.1, 0.22], 0.27, false], // dandelion
+  [[0.86, 0.85, 0.77], [0.38, 0.14], [0.07, 0.12], 0.17, true], // white clover
+  [[0.9, 0.9, 0.85], [0.22, 0.1], [0.22, 0.25], 0.12, false], // shepherd's purse
+  [[0.4, 0.27, 0.7], [0.45, 0.15], [0.05, 0.1], 0.15, true], // violet
+  [[0.42, 0.55, 0.95], [0.28, 0.08], [0.04, 0.06], 0.11, true], // speedwell
+  [[0.72, 0.36, 0.58], [0.5, 0.2], [0.12, 0.14], 0.18, false], // purple dead-nettle
+];
 export function flowersData(world, count, opts) {
-  const rng = mulberry32(9);
+  const rng = mulberry32(9), nk = makeNoise(19);
   const shape = new THREE.Shape();
   for (let k = 0; k <= 30; k++) {
     const a = (k / 30) * Math.PI * 2;
@@ -122,8 +135,15 @@ export function flowersData(world, count, opts) {
   const flex = new Float32Array(geo.attributes.position.count).fill(0.32);
   geo.setAttribute('aFlex', new THREE.BufferAttribute(flex, 1));
   const mesh = new THREE.InstancedMesh(geo, undefined, count);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new V(), p = new V();
-  const palette = [new THREE.Color(1, 1, 0.97), new THREE.Color(1, 0.93, 0.55), new THREE.Color(0.8, 0.72, 1.0), new THREE.Color(1, 0.8, 0.88), new THREE.Color(1, 1, 1)];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new V(), p = new V(), c = new THREE.Color();
+  // the kind at (x, z): mostly the patch's own (broad noise over the shares), now and then another
+  const total = FLOWER_KINDS.reduce((t, k) => t + k[3], 0);
+  const kindAt = (x, z) => {
+    let u = rng() < 0.75 ? clamp(0.5 + 0.9 * nk.fbm2(x * 0.06, z * 0.06, 2), 0, 0.999) : rng(), k = 0;
+    u *= total;
+    while (u > FLOWER_KINDS[k][3]) u -= FLOWER_KINDS[k++][3];
+    return FLOWER_KINDS[k];
+  };
   let n = 0, tries = 0;
   while (n < count && tries < count * 30) {
     tries++;
@@ -134,15 +154,17 @@ export function flowersData(world, count, opts) {
     if (opts.avoid && opts.avoid(x, z)) continue;
     // clumped
     if (world.N.noise2(x * 0.09 + 3, z * 0.09) < 0.05) continue;
-    if (opts.lawn && opts.lawn(x, z) < 0.5) continue;
-    p.set(x, y + 0.28 + rng() * 0.25, z);
+    const [col, size, h, , short] = kindAt(x, z), lw = opts.lawn ? opts.lawn(x, z) : 1;
+    if (lw < 0.3 || (short && lw > 0.6 && world.laneDist(x, z) > 3 && rng() < 0.7)) continue;
+    p.set(x, y + h[0] + rng() * h[1], z);
     e.set((rng() - 0.5) * 0.6, rng() * 6.28, (rng() - 0.5) * 0.6);
     q.setFromEuler(e);
-    const sc = 0.8 + rng() * 0.7;
+    const sc = size[0] + rng() * size[1];
     s.set(sc, sc, sc);
     m.compose(p, q, s);
     mesh.setMatrixAt(n, m);
-    mesh.setColorAt(n, palette[Math.floor(rng() * palette.length)]);
+    const v = 0.88 + rng() * 0.12;
+    mesh.setColorAt(n, c.setRGB(col[0] * v, col[1] * v, col[2] * v));
     n++;
   }
   return { geo, matrix: mesh.instanceMatrix.array, color: mesh.instanceColor.array, count, n };

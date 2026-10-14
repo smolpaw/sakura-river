@@ -249,7 +249,7 @@ export function makeGrass({ grid, segX, segZ, mask, fields = [] }, tier) {
       });
       If(flower, () => {
         const kind = vnoise(root.mul(0.05).add(41.0)).add(h.x.mul(0.25));
-        const head = select(kind.lessThan(0.42), vec3(0.85, 0.62, 0.04), select(kind.lessThan(0.6), vec3(0.82, 0.82, 0.74), select(kind.lessThan(0.78), vec3(0.32, 0.2, 0.62), vec3(0.78, 0.3, 0.55))));
+        const head = select(kind.lessThan(0.42), vec3(0.85, 0.62, 0.04), select(kind.lessThan(0.5), vec3(0.82, 0.82, 0.74), select(kind.lessThan(0.78), vec3(0.32, 0.2, 0.62), vec3(0.78, 0.3, 0.55))));
         vColor.assign(mix(vColor, head, sstep(0.78, 0.88, t)));
       });
       out.assign(p);
