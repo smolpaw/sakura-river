@@ -297,10 +297,11 @@ export async function create(canvas, opts = {}) {
   const flowerGeo = ST ? tessellate(buildFlowerGeometry(), ST.triMul) : buildFlowerGeometry();
 
   // the trunks and main branches and the flower drawn near the camera, modelled in Blender (tools/cherry.py),
-  // unpacked from the quantized glTF to plain floats in the tree's frame
+  // unpacked from the quantized glTF to plain floats in the tree's frame; with `uvScale`, the texture coordinates too,
+  // times it
   const cherry = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(cherryUrl);
   cherry.scene.updateMatrixWorld(true);
-  function unpacked(src) {
+  function unpacked(src, uvScale = 0) {
     const g = src.geometry, n = g.attributes.position.count, t = new THREE.BufferGeometry();
     const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3);
     const v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(src.matrixWorld);
@@ -313,17 +314,19 @@ export async function create(canvas, opts = {}) {
     t.setAttribute('position', new THREE.BufferAttribute(P, 3));
     t.setAttribute('normal', new THREE.BufferAttribute(N, 3));
     t.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    if (uvScale) {
+      const { uv } = g.attributes, UV = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) { UV[i * 2] = uv.getX(i) * uvScale; UV[i * 2 + 1] = uv.getY(i) * uvScale; }
+      t.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
+    }
     t.setIndex(Array.from(g.index.array));
     return t;
   }
   // a trunk merged with its tree's twigs, in their layout: texture coordinates times cherry.py's UV_SCALE, the
   // wind's bend from the branches it was built round
   function withTrunk(d, k) {
-    const src = cherry.scene.getObjectByName(`trunk${k}`), t = unpacked(src), { uv } = src.geometry.attributes, n = uv.count;
+    const src = cherry.scene.getObjectByName(`trunk${k}`), t = unpacked(src, 16);
     if (src.userData.sig !== d.sig) console.warn(`src/models/cherry.glb was built for other branches (tree ${k}): run node tools/blender.mjs cherry`);
-    const UV = new Float32Array(n * 2);
-    for (let i = 0; i < n; i++) { UV[i * 2] = uv.getX(i) * 16; UV[i * 2 + 1] = uv.getY(i) * 16; }
-    t.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
     const { BX, BZ, BB } = trunkBendAttributes(t.attributes.position.array, d.trunkBend);
     t.setAttribute('aBendX', new THREE.BufferAttribute(BX, 4));
     t.setAttribute('aBendZ', new THREE.BufferAttribute(BZ, 4));
@@ -346,7 +349,8 @@ export async function create(canvas, opts = {}) {
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(d.matrix, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(d.color, 3);
     flowerAttributes(geo, new THREE.InstancedInterleavedBuffer(d.attrs, FLOWER_ATTRS));
-    mesh.receiveShadow = castShadow;
+    // (not the sun's sharp shadow map: its specks of light and shade over the flowers read as noise; the crown's own
+    // light, tree.js crownLight, shades them instead, and the valley's shadow map shadows them)
     mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 2.5;
     group.add(mesh);
     let pre = null;
@@ -377,7 +381,7 @@ export async function create(canvas, opts = {}) {
   const main = buildTreeObject(G.treeMain[0], treePos, true);
   main.group.name = 'tree';
   scene.add(main.group);
-  const nearFlowers = Q.near ? nearBlossoms(main, unpacked(cherry.scene.getObjectByName('flower')), M.blossomModelMaterial(), Q.near) : null;
+  const nearFlowers = Q.near ? nearBlossoms(main, unpacked(cherry.scene.getObjectByName('flower'), 1), M.blossomModelMaterial(a2c), Q.near) : null;
   const smallTrees = [];
   const smallData = [...G.treesA, ...G.treesB];
   Lay.small.forEach((sp, k) => {

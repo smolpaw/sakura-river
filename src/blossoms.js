@@ -1,4 +1,4 @@
-// The main tree's flowers near the camera drawn as a modelled flower (tools/cherry.py `flower`, 90 triangles) in place
+// The main tree's flowers near the camera drawn as a modelled flower (tools/cherry.py `flower`, 120 triangles) in place
 // of the painted card (8): the flowers are grouped into cells CELL metres across, and the cells within `near` metres of
 // the camera go to the model's draw while the rest stay cards (the cards' draw and their depth prepass shrink to
 // them; their shadow proxy keeps every flower). Re-sorted when the camera has moved STEP metres; the buffers are only
@@ -9,13 +9,14 @@ import { FLOWER_ATTRS } from './tree.js';
 const CELL = 1.5, HYST = 1, STEP = 0.5;
 
 // a flower geometry's per-flower attributes from one instanced buffer of treeData's attrs (FLOWER_ATTRS floats each):
-// one interleaved buffer, as WebGPU guarantees only 8 vertex buffers; `canopy`: with the crown's normal (not for shadows)
-export function flowerAttributes(geo, ib, canopy = true) {
+// one interleaved buffer, as WebGPU guarantees only 8 vertex buffers; `crown`: with the light in the crown (tree.js
+// crownLight; not for shadows)
+export function flowerAttributes(geo, ib, crown = true) {
   geo.setAttribute('aBendX', new THREE.InterleavedBufferAttribute(ib, 4, 0));
   geo.setAttribute('aBendZ', new THREE.InterleavedBufferAttribute(ib, 4, 4));
   geo.setAttribute('aBob', new THREE.InterleavedBufferAttribute(ib, 3, 8));
   geo.setAttribute('aAtlas', new THREE.InterleavedBufferAttribute(ib, 2, 11));
-  if (canopy) geo.setAttribute('aCanopyN', new THREE.InterleavedBufferAttribute(ib, 3, 13));
+  if (crown) geo.setAttribute('aCrown', new THREE.InterleavedBufferAttribute(ib, 4, 13));
 }
 
 // tree: buildTreeObject's result for the main tree; geo: the flower model's geometry
@@ -51,7 +52,7 @@ export function nearBlossoms(tree, geo, mat, near) {
   flowerAttributes(geo, ib);
   mesh.count = 0;
   mesh.boundingSphere = cards.boundingSphere;
-  mesh.castShadow = false; mesh.receiveShadow = cards.receiveShadow;
+  mesh.castShadow = false;
   group.add(mesh);
 
   const cardAttrs = cards.geometry.getAttribute('aBendX').data;

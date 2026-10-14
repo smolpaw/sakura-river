@@ -15,6 +15,8 @@ export const MAIN_TREE = {
   umbels: [0, 0, 0, 3, 5, 10], // blossom umbels per branch, by depth
   fill: [0, 0, 2, 6, 6, 3], // more umbels along the branches (full bloom), from their own rng: same tree
   spray: [0, 0, 0, 0, 2, 0], // more flowering twigs off the branches of each depth, from their own rng: same tree
+  tip: [0, 0, 0, 0, 1, 3], // more umbels crowded at the branches' far ends, from their own rng: same tree
+  droop: [0, 0, 0, 0, 1, 1], // umbels hanging below the branches' outer halves (see treeData), from the tips' rng
   flowerSize: 1,
   minY: 2.2,
   roots: 6,
@@ -27,6 +29,9 @@ export const SMALL_TREE = {
   limbs: [4, 5],
   maxDepth: 4,
   umbels: [0, 0, 2, 5, 9],
+  fill: [0, 0, 2, 4, 2],
+  tip: [0, 0, 0, 1, 3],
+  droop: [0, 0, 0, 1, 1],
   flowerSize: 1.7, // seen from afar: fewer, larger flowers
   minY: 1.8,
   roots: 0,
@@ -41,7 +46,7 @@ function anyPerp(d) {
 }
 
 export function growTree(seed, cfg, groundAt = () => 0) {
-  const main = mulberry32(seed), rngFill = mulberry32(seed + 3), rngSpray = mulberry32(seed + 5);
+  const main = mulberry32(seed), rngFill = mulberry32(seed + 3), rngSpray = mulberry32(seed + 5), rngTip = mulberry32(seed + 7);
   const nz = makeNoise(seed + 99);
   const k = cfg.scale, D = cfg.maxDepth;
   const branches = [];
@@ -98,6 +103,15 @@ export function growTree(seed, cfg, groundAt = () => 0) {
     for (let u = 0; u < ((cfg.fill && cfg.fill[depth]) || 0); u++) {
       const s = at(0.25 + 0.75 * rngFill());
       anchors.push({ p: s.p, d: s.d, f: s.f, depth, br, i: s.i });
+    }
+    for (let u = 0; u < ((cfg.tip && cfg.tip[depth]) || 0); u++) {
+      const s = at(1 - 0.3 * rngTip() * rngTip());
+      anchors.push({ p: s.p, d: s.d, f: s.f, depth, br, i: s.i });
+    }
+    // drooping clusters: hung below the branch on longer stalks, so the crown's masses round off underneath
+    for (let u = 0; u < ((cfg.droop && cfg.droop[depth]) || 0); u++) {
+      const s = at(0.5 + 0.5 * rngTip());
+      anchors.push({ p: s.p, d: s.d, f: s.f, depth, br, i: s.i, droop: (0.12 + 0.16 * rngTip()) * k });
     }
     if (depth === D) return;
 
@@ -157,7 +171,8 @@ export function growTree(seed, cfg, groundAt = () => 0) {
   }
   branches.push(...roots);
 
-  // canopy centre + extents for blossom normals / AO
+  // the crown's centre and extents: its outward normal for the flowers where crownLight finds no way out, and the
+  // shade the Blender trunk darkens towards
   const c = new V();
   for (const b of anchors) c.add(b.p);
   c.multiplyScalar(1 / Math.max(1, anchors.length));
@@ -324,49 +339,77 @@ export function buildFlowerGeometry() {
   return g;
 }
 
-// single-flower atlas (2x2 variants) painted procedurally
+// single-flower atlas (2x2 variants) painted procedurally: Somei Yoshino flowers, five broad rounded petals each with
+// the small notch at its tip, blush pink at the base fading to near white, the petals' cup shaded softly (each casts
+// a faint shadow on the one under it) and fine veins; a small red-pink eye with its stamens
 export function paintFlowerAtlas(seed = 5, size = 1024) {
   const rng = mulberry32(seed);
   const cv = new OffscreenCanvas(size, size);
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   const cell = size / 2;
+  // obovate: narrow at the claw, broadest past the middle, a rounded tip with a shallow notch in it
   const petalPath = (ctx, len, wid) => {
+    const nw = wid * 0.16, nd = len * 0.07;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(wid * 0.9, len * 0.25, wid * 1.05, len * 0.8, wid * 0.32, len);
-    ctx.quadraticCurveTo(0, len * 0.86, -wid * 0.32, len);
-    ctx.bezierCurveTo(-wid * 1.05, len * 0.8, -wid * 0.9, len * 0.25, 0, 0);
+    ctx.bezierCurveTo(wid * 0.55, len * 0.12, wid * 1.08, len * 0.5, wid * 0.98, len * 0.78);
+    ctx.bezierCurveTo(wid * 0.9, len * 0.96, wid * 0.45, len * 1.02, nw, len * 0.99);
+    ctx.quadraticCurveTo(nw * 0.3, len * 0.99 - nd * 0.4, 0, len - nd);
+    ctx.quadraticCurveTo(-nw * 0.3, len * 0.99 - nd * 0.4, -nw, len * 0.99);
+    ctx.bezierCurveTo(-wid * 0.45, len * 1.02, -wid * 0.9, len * 0.96, -wid * 0.98, len * 0.78);
+    ctx.bezierCurveTo(-wid * 1.08, len * 0.5, -wid * 0.55, len * 0.12, 0, 0);
     ctx.closePath();
   };
   const flower = (x, y, r, rot, tone, open) => {
     ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+    // tip, middle, base
     const pal = [
       ['#ffe6ee', '#f8bfd1', '#e0708f'],
-      ['#ffd9e5', '#f2a3bd', '#d45a80'],
-      ['#fff0f4', '#fbd0dd', '#e98aa6'],
-      ['#ffd2e0', '#ee94b2', '#c84874'],
+      ['#ffdde8', '#f4b0c6', '#d8648a'],
+      ['#ffecf2', '#fac9d8', '#e5809f'],
+      ['#ffd9e5', '#f0a2bc', '#cf5a80'],
     ][tone];
     for (let k = 0; k < 5; k++) {
       ctx.save();
-      ctx.rotate((k / 5) * Math.PI * 2 + (rng() - 0.5) * 0.25);
-      const len = r * (0.9 + rng() * 0.2) * open, wid = r * 0.55 * (0.9 + rng() * 0.2);
+      ctx.rotate((k / 5) * Math.PI * 2 + (rng() - 0.5) * 0.2);
+      const len = r * (0.94 + rng() * 0.1) * open, wid = r * 0.43 * (0.92 + rng() * 0.16);
       const gr = ctx.createLinearGradient(0, 0, 0, len);
-      gr.addColorStop(0, pal[2]); gr.addColorStop(0.35, pal[1]); gr.addColorStop(1, pal[0]);
+      gr.addColorStop(0, pal[2]); gr.addColorStop(0.4, pal[1]); gr.addColorStop(1, pal[0]);
       ctx.fillStyle = gr;
       petalPath(ctx, len, wid);
+      // the shadow it casts on the petals under it (the cup's overlap, soft), on them only
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.shadowColor = 'rgba(160,60,100,0.3)'; ctx.shadowBlur = r * 0.05; ctx.shadowOffsetY = -r * 0.01;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(200,90,120,0.18)'; ctx.lineWidth = Math.max(0.5, r * 0.02); ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over'; ctx.shadowColor = 'transparent';
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      // the cup: the petal's sides curl up and catch more light than its middle
+      const side = ctx.createLinearGradient(-wid, 0, wid, 0);
+      side.addColorStop(0, 'rgba(255,255,255,0.3)'); side.addColorStop(0.3, 'rgba(255,255,255,0)');
+      side.addColorStop(0.7, 'rgba(255,255,255,0)'); side.addColorStop(1, 'rgba(255,255,255,0.3)');
+      ctx.fillStyle = side; ctx.fillRect(-wid * 1.2, 0, wid * 2.4, len * 1.1);
+      // veins fanning from the claw
+      ctx.strokeStyle = 'rgba(214,110,148,0.09)'; ctx.lineWidth = Math.max(0.5, r * 0.008);
+      for (let v = -3; v <= 3; v++) {
+        ctx.beginPath(); ctx.moveTo(0, len * 0.04);
+        ctx.quadraticCurveTo(v * wid * 0.16, len * 0.45, v * wid * 0.24, len * 0.95); ctx.stroke();
+      }
+      ctx.restore();
       ctx.restore();
     }
-    // stamens
-    ctx.fillStyle = '#b8325c';
-    ctx.beginPath(); ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2); ctx.fill();
-    for (let k = 0; k < 14; k++) {
-      const a = rng() * Math.PI * 2, l = r * (0.25 + rng() * 0.2);
-      ctx.strokeStyle = 'rgba(250,235,240,0.9)'; ctx.lineWidth = Math.max(0.5, r * 0.025);
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * l, Math.sin(a) * l); ctx.stroke();
-      ctx.fillStyle = '#f2c14e';
-      ctx.beginPath(); ctx.arc(Math.cos(a) * l, Math.sin(a) * l, Math.max(0.8, r * 0.04), 0, Math.PI * 2); ctx.fill();
+    // the eye: a small red cup, the stamens round it
+    const eye = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.14);
+    eye.addColorStop(0, '#c23a62'); eye.addColorStop(0.6, 'rgba(214,92,130,0.8)'); eye.addColorStop(1, 'rgba(236,150,178,0)');
+    ctx.fillStyle = eye;
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.14, 0, Math.PI * 2); ctx.fill();
+    for (let k = 0; k < 22; k++) {
+      const a = (k / 22) * Math.PI * 2 + rng() * 0.3, l = r * (0.24 + rng() * 0.14);
+      ctx.strokeStyle = 'rgba(252,236,242,0.85)'; ctx.lineWidth = Math.max(0.5, r * 0.012);
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.05, Math.sin(a) * r * 0.05); ctx.lineTo(Math.cos(a) * l, Math.sin(a) * l); ctx.stroke();
+      ctx.fillStyle = k % 3 ? '#f0c65a' : '#e3a94a';
+      ctx.beginPath(); ctx.arc(Math.cos(a) * l, Math.sin(a) * l, Math.max(0.8, r * 0.026), 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
   };
@@ -463,8 +506,79 @@ export function barkTextures({ size, map, bump }) {
 // flowers per umbel by quality tier
 const UMBEL = { high: [3, 5], medium: [2, 5], low: [2, 3] };
 // floats per flower in treeData's attrs: aBendX (bend for a push along x, flex), aBendZ (along z, limb phase), aBob,
-// aAtlas.xy, aCanopyN.xyz
-export const FLOWER_ATTRS = 16;
+// aAtlas.xy, aCrown (crownLight's light: its direction part xyz, its mean w)
+export const FLOWER_ATTRS = 17;
+// how far the flowers turn to face out of their masses (0: as they grow on their umbels)
+const FACE_OUT = 0.7;
+
+// The light inside the crown. The flowers' petal area is splatted onto a grid of CELL m cells and blurred a little,
+// and from every cell holding flowers the light that gets in is marched along DIRS directions: the transmittance
+// exp(-EXT × the petal area passed per m²) over MARCH m. Per flower, from the cells round it, it is kept as a first-
+// order spherical harmonic, T(dir) ≈ w + xyz·dir: w the cell's mean openness to the sky and xyz the way out of its
+// mass (towards the light), so the shader can ask how much of the sun, the sky or the ground gets to it.
+// pos: the flowers' positions (n × 3), area: their cards' area; returns n × 4 floats.
+const CELL = 0.5, MARCH = 4.5, EXT = 0.4, DIRS = 24;
+const dirs = Array.from({ length: DIRS }, (_, i) => {
+  const y = 1 - (2 * (i + 0.5)) / DIRS, r = Math.sqrt(1 - y * y), a = i * Math.PI * (3 - Math.sqrt(5));
+  return [r * Math.cos(a), y, r * Math.sin(a)];
+});
+export function crownLight(pos, area, n) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], pos[i * 3 + c]); hi[c] = Math.max(hi[c], pos[i * 3 + c]); }
+  const pad = 2, o = lo.map((v) => v - pad * CELL), N = [0, 1, 2].map((c) => Math.ceil((hi[c] - lo[c]) / CELL) + 2 * pad + 1);
+  const [nx, ny, nz] = N, idx = (x, y, z) => (z * ny + y) * nx + x;
+  let d = new Float32Array(nx * ny * nz);
+  // the cards' area per cell volume (each card's area is about 0.55 × its square's, the flower's outline)
+  const g = (i, c) => (pos[i * 3 + c] - o[c]) / CELL - 0.5;
+  for (let i = 0; i < n; i++) {
+    const fx = g(i, 0), fy = g(i, 1), fz = g(i, 2), x = Math.floor(fx), y = Math.floor(fy), z = Math.floor(fz), u = fx - x, v = fy - y, w = fz - z;
+    const a = (area[i] * 0.55) / (CELL * CELL * CELL);
+    for (let k = 0; k < 8; k++) {
+      const dx = k & 1, dy = (k >> 1) & 1, dz = k >> 2;
+      d[idx(x + dx, y + dy, z + dz)] += a * (dx ? u : 1 - u) * (dy ? v : 1 - v) * (dz ? w : 1 - w);
+    }
+  }
+  // a [1 2 1] blur along each axis
+  for (let c = 0; c < 3; c++) {
+    const s = c === 0 ? 1 : c === 1 ? nx : nx * ny, len = N[c], b = new Float32Array(d.length);
+    for (let i = 0; i < d.length; i++) {
+      const p = Math.floor(i / s) % len;
+      b[i] = 0.5 * d[i] + 0.25 * (p > 0 ? d[i - s] : 0) + 0.25 * (p < len - 1 ? d[i + s] : 0);
+    }
+    d = b;
+  }
+  // the cells the flowers interpolate from, lit on demand
+  const lit = new Float32Array(nx * ny * nz * 4), done = new Uint8Array(nx * ny * nz), steps = Math.round(MARCH / CELL);
+  const cellLight = (x, y, z) => {
+    const j = idx(x, y, z);
+    if (done[j]) return j * 4;
+    done[j] = 1;
+    let mean = 0, bx = 0, by = 0, bz = 0;
+    for (const [ux, uy, uz] of dirs) {
+      let tau = 0;
+      for (let s = 1; s <= steps; s++) {
+        const px = Math.round(x + ux * s), py = Math.round(y + uy * s), pz = Math.round(z + uz * s);
+        if (px < 0 || py < 0 || pz < 0 || px >= nx || py >= ny || pz >= nz) break;
+        tau += d[idx(px, py, pz)];
+      }
+      // (the cell's own half step too: a flower deep in a clump is dimmer than one at its edge)
+      const T = Math.exp(-EXT * CELL * (tau + 0.5 * d[j]));
+      mean += T; bx += T * ux; by += T * uy; bz += T * uz;
+    }
+    lit[j * 4] = (3 * bx) / DIRS; lit[j * 4 + 1] = (3 * by) / DIRS; lit[j * 4 + 2] = (3 * bz) / DIRS; lit[j * 4 + 3] = mean / DIRS;
+    return j * 4;
+  };
+  const out = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const fx = g(i, 0), fy = g(i, 1), fz = g(i, 2), x = Math.floor(fx), y = Math.floor(fy), z = Math.floor(fz), u = fx - x, v = fy - y, w = fz - z;
+    for (let k = 0; k < 8; k++) {
+      const dx = k & 1, dy = (k >> 1) & 1, dz = k >> 2, wt = (dx ? u : 1 - u) * (dy ? v : 1 - v) * (dz ? w : 1 - w);
+      const j = cellLight(x + dx, y + dy, z + dz);
+      for (let c = 0; c < 4; c++) out[i * 4 + c] += lit[j + c] * wt;
+    }
+  }
+  return out;
+}
 
 // one tree: bark geometry and flower instance data
 export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
@@ -484,37 +598,49 @@ export function treeData(world, seed, cfg, pos, tier = 'high', triMul = 1) {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), sv = new V(), col = new THREE.Color();
   const Z = new V(0, 0, 1), UP = new V(0, 1, 0);
   const { center, ext } = t.canopy;
-  let n = 0;
+  // the flowers first (where, which way, how big), then the light in the crown round them (crownLight), which turns
+  // them out of their masses and darkens them inside
+  const fl = [], fpos = new Float32Array(max * 3), area = new Float32Array(max);
   for (const [ai, an] of t.anchors.entries()) {
     // every fifth flowering point: a place on its twig for a bird (perched.js), along the twig
-    if (ai % 5 === 0) perches.push(an.p.x, an.p.y, an.p.z, an.d.x, an.d.y, an.d.z);
+    if (ai % 5 === 0 && !an.droop) perches.push(an.p.x, an.p.y, an.p.z, an.d.x, an.d.y, an.d.z);
     const perp = anyPerp(an.d).applyAxisAngle(an.d, rng() * TAU);
-    const mid = an.p.clone().addScaledVector(perp, rr(0.03, 0.12) * k).addScaledVector(UP, 0.03 * k);
+    const mid = an.p.clone().addScaledVector(perp, rr(0.03, 0.12) * k).addScaledVector(UP, 0.03 * k - (an.droop || 0));
     const nF = per[0] + Math.floor(rng() * (per[1] - per[0] + 1));
-    const flex = flexOf(an.f), bend = bendAt(an.br, an.i, an.p), phase = an.br.sys ? an.br.sys.phase : 0;
+    const flex = flexOf(an.f) * (an.droop ? 1.3 : 1), bend = bendAt(an.br, an.i, an.p), phase = an.br.sys ? an.br.sys.phase : 0;
+    // a hanging cluster is longer than it is wide
+    const spread = new V(1, an.droop ? 1.5 : 1, 1).multiplyScalar(0.12 * k * Math.sqrt(cfg.flowerSize));
     for (let f = 0; f < nF; f++) {
-      const p = mid.clone().add(new V(rr(-1, 1), rr(-1, 1), rr(-1, 1)).multiplyScalar(0.12 * k * Math.sqrt(cfg.flowerSize)));
+      const p = mid.clone().add(new V(rr(-1, 1), rr(-1, 1), rr(-1, 1)).multiply(spread));
       const nrm = p.clone().sub(an.p).normalize().add(new V(rr(-0.6, 0.6), rr(-0.3, 0.7), rr(-0.6, 0.6))).normalize();
-      q.setFromUnitVectors(Z, nrm).multiply(q2.setFromAxisAngle(Z, rng() * TAU));
-      const sz = rr(0.14, 0.21) * k * cfg.flowerSize;
-      m.compose(p, q, sv.set(sz, sz, sz));
-      m.toArray(matrix, n * 16);
-      const cn = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y * 0.8, (p.z - center.z) / ext.z);
-      const r = cn.length();
-      cn.normalize();
-      const o = n * FLOWER_ATTRS;
-      // the flower moves with the point of the branch it grows from
-      attrs.set([bend.x.x, bend.x.y, bend.x.z, flex, bend.z.x, bend.z.y, bend.z.z, phase, bend.b.x, bend.b.y, bend.b.z], o);
-      attrs[o + 11] = rng() < 0.5 ? 0 : 0.5; attrs[o + 12] = rng() < 0.5 ? 0 : 0.5;
-      attrs[o + 13] = cn.x; attrs[o + 14] = cn.y; attrs[o + 15] = cn.z;
-      // inner flowers darker (canopy AO), white to blush
-      const ao = lerp(0.45, 1.0, smoothstep(0.3, 1.05, r)) * (0.8 + 0.2 * clamp(cn.y + 0.5, 0, 1));
-      const blush = Math.pow(rng(), 1.5);
-      col.setRGB(ao, ao * lerp(1, 0.86, blush), ao * lerp(1, 0.9, blush));
-      col.toArray(color, n * 3);
+      const spin = rng() * TAU, sz = rr(0.14, 0.21) * k * cfg.flowerSize;
+      const atlas = [rng() < 0.5 ? 0 : 0.5, rng() < 0.5 ? 0 : 0.5], blush = Math.pow(rng(), 1.5);
       if (rng() < 0.3) spawn.push(p.x, p.y, p.z);
-      n++;
+      p.toArray(fpos, fl.length * 3);
+      area[fl.length] = sz * sz;
+      fl.push({ p, nrm, spin, sz, atlas, blush, flex, bend, phase });
     }
+  }
+  const n = fl.length, light = crownLight(fpos, area, n);
+  for (let i = 0; i < n; i++) {
+    const { p, nrm, spin, sz, atlas, blush, flex, bend, phase } = fl[i];
+    const o = i * FLOWER_ATTRS, L = light.subarray(i * 4, i * 4 + 4);
+    // the way out of the crown (where the light comes from), or the crown's own outward normal where no way is clear
+    const out = new V(L[0], L[1], L[2]);
+    const cn = new V((p.x - center.x) / ext.x, (p.y - center.y) / ext.y * 0.8, (p.z - center.z) / ext.z).normalize();
+    out.addScaledVector(cn, 0.05);
+    // flowers turn to the light: facing out of their mass, they show their faces to whoever looks at it
+    nrm.addScaledVector(out.clone().normalize(), FACE_OUT).normalize();
+    q.setFromUnitVectors(Z, nrm).multiply(q2.setFromAxisAngle(Z, spin));
+    m.compose(p, q, sv.set(sz, sz, sz));
+    m.toArray(matrix, i * 16);
+    // the flower moves with the point of the branch it grows from
+    attrs.set([bend.x.x, bend.x.y, bend.x.z, flex, bend.z.x, bend.z.y, bend.z.z, phase, bend.b.x, bend.b.y, bend.b.z], o);
+    attrs[o + 11] = atlas[0]; attrs[o + 12] = atlas[1];
+    attrs[o + 13] = out.x; attrs[o + 14] = out.y; attrs[o + 15] = out.z; attrs[o + 16] = L[3];
+    // white to blush
+    col.setRGB(1, lerp(1, 0.86, blush), lerp(1, 0.9, blush));
+    col.toArray(color, i * 3);
   }
   return {
     bark, sig: skeletonSig(t, cfg), n, matrix: matrix.slice(0, n * 16), color: color.slice(0, n * 3), attrs: attrs.slice(0, n * FLOWER_ATTRS),

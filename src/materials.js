@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, mix, max, min, pow, dot, normalize, clamp, reflect, texture, uv, attribute, varyingProperty, floor, fract, select,
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
-  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray, uniform,
+  transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray, uniform, log2, fwidth, color,
 } from 'three/tsl';
 import { U, vnoise, vnoiseLoop, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight, loopDrift } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
@@ -484,40 +484,104 @@ export function barkMaterial(map, bumpMap, normalMap = null) {
 }
 
 const flowerUV = () => uv().mul(0.5).add(attribute('aAtlas', 'vec2'));
+// the atlas's colour. Its mips average the petals' edges into the gaps round them, so a card cut out at a fixed alpha
+// shrinks to its middle with distance and the crown falls apart into specks: the alpha grows with the mip level (by a
+// quarter per level) to keep the flower's outline. The cards, their depth prepass and their shadow all cut by it.
+const flowerColor = (atlas) => {
+  const c = texture(atlas, flowerUV()), t = flowerUV().mul(atlas.image.width);
+  const lod = max(log2(max(dot(dFdx(t), dFdx(t)), dot(dFdy(t), dFdy(t)))).mul(0.5), 0.0);
+  return vec4(c.rgb, c.a.mul(lod.mul(0.25).add(1.0)));
+};
 
-// a flower's light: the sun through the petals, and the lanterns below lighting them from underneath (and through)
-const blossomLight = (out) => Fn(() => {
+// The light in the crown at a flower (tree.js crownLight): how much of it gets there from direction d is about
+// w + xyz·d, in the tree's frame (turned as the world's).
+const crownAt = () => attribute('aCrown', 'vec4');
+// the sky and the ground seen from a flower facing n (that light's cosine-weighted mean over n's hemisphere), as 1 on a
+// mass's open side
+const crownOpen = (n) => sstep(0.0, 0.7, crownAt().w.add(dot(crownAt().xyz, n).mul(2 / 3)));
+// the sun that gets in to it through the crown's masses (1 on their sunny side): the sharp shadow map alone scatters
+// specks of light and shade over the flowers, which read as noise rather than as the shade inside a mass
+const crownSun = () => sstep(0.0, 0.8, crownAt().w.add(dot(crownAt().xyz, U.uSunDir)));
+// the shade's pink against the sunlit petals': cooler, with less green (the blue sky light alone on white is lilac grey)
+const SHADE_TINT = vec3(1.0, 0.9, 0.93);
+
+// a flower's light: the sun through the petals, the light scattered inside the crown, and the lanterns below lighting
+// them from underneath (and through). sunT: the sun that gets into the crown to it, open: its openness to the sky.
+const blossomLight = (sunT, open) => (out) => Fn(() => {
   const vdirB = normalize(wp.sub(cameraPosition));
   const backB = pow(max(dot(vdirB, U.uSunDir), 0.0), 2.5);
   const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-  // petals are thin: the sun on their far side shines through them, warm and a little more saturated
-  const sunV = normalize(cameraViewMatrix.mul(vec4(U.uSunDir, 0.0)).xyz);
-  const through = max(dot(normalView, sunV).negate(), 0.0).mul(1.0);
-  const o = out.add(diffuseColor.rgb.mul(sunB).mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1).add(through))).toVar();
-  // light scattered inside the crown keeps the shade pink: the blue sky light alone turns it lilac grey
+  const sun = U.uSunVis.mul(sunShadow).mul(sunT).toVar();
   const lum = (c) => dot(c, vec3(0.2126, 0.7152, 0.0722));
-  o.assign(mix(o, diffuseColor.rgb.mul(lum(o).div(max(lum(diffuseColor.rgb), 1e-3))), 0.7));
-  return o.add(diffuseColor.rgb.mul(vec3(0.16).add(U.uSkyAmb.mul(0.1)))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(1.6));
+  // petals are thin: the sun on their far side shines through them, warm and pinker for the petal it passed through
+  const sunV = normalize(cameraViewMatrix.mul(vec4(U.uSunDir, 0.0)).xyz);
+  const through = max(dot(normalView, sunV).negate(), 0.0);
+  const pink = diffuseColor.rgb.mul(diffuseColor.rgb).div(max(lum(diffuseColor.rgb), 1e-3));
+  const o = out.add(diffuseColor.rgb.mul(sunB).mul(sun).mul(backB.mul(1.2).add(0.1))).add(pink.mul(sunB).mul(sun).mul(through).mul(1.3)).toVar();
+  // light scattered inside the crown keeps the shade pink (the blue sky light alone turns it lilac grey), and cooler
+  // than the sunlit petals
+  const lit = sstep(0.0, 0.5, sun.mul(max(dot(normalWorld, U.uSunDir), 0.0)));
+  const tint = diffuseColor.rgb.mul(mix(SHADE_TINT, vec3(1.0), lit));
+  o.assign(mix(o, tint.mul(lum(o).div(max(lum(tint), 1e-3))), 0.85));
+  // (that scattered light's glow, dimmer deep in the crown's masses; by day mostly the sun's, bounced between the
+  // petals and so pinker for each)
+  const glow = vec3(0.16).add(U.uSkyAmb.mul(0.1)).mul(diffuseColor.rgb).add(mix(diffuseColor.rgb, pink, 0.5).mul(sunB).mul(U.uSunVis).mul(0.16));
+  return o.add(glow.mul(open.mul(0.7).add(0.3))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(1.6));
 })();
 
-// lit as the crown: the flower's own normal bent towards the crown's outward one (aCanopyN) by `bend`
+// lit as the crown: the flower's own normal bent by `bend` towards the way out of its mass (crownAt's xyz), so the
+// masses light as rounded clouds; their sky light dimmed by how deep in them the flower is, the sun by how much of it
+// gets there
 const blossomLit = (bend, params) => {
-  const canopyNormal = normalize(mix(normalize(normalLocal), attribute('aCanopyN', 'vec3'), bend));
-  return new LitMaterial({
+  const canopyNormal = normalize(mix(normalize(normalLocal), normalize(crownAt().xyz), bend));
+  const open = crownOpen(canopyNormal), sunT = crownSun();
+  const m = new LitMaterial({
     side: THREE.DoubleSide, roughness: 0.72, metalness: 0, ...params,
     positionNode: treeWindPosition(true, canopyNormal), receivedShadowPositionNode: windShadowPosition(),
     // back faces flip like any double-sided normal (the old 'noFlip' patch never matched the unexpanded chunk)
     normalNode: transformNormalToView(canopyNormal).toVarying('vCanopyNormal').normalize().mul(faceDirection),
-  }, blossomLight);
+    aoNode: open.mul(0.55).add(0.45),
+  }, blossomLight(sunT, open));
+  m.sunShadowNode = sunShadow.mul(sunT.mul(0.6).add(0.4));
+  return m;
 };
 
 export function blossomMaterial(atlas, alphaToCoverage) {
-  return blossomLit(0.6, { colorNode: texture(atlas, flowerUV()), alphaTest: 0.4, alphaToCoverage });
+  return blossomLit(0.75, { colorNode: flowerColor(atlas), alphaTest: 0.4, alphaToCoverage });
 }
 
-// the modelled flower drawn near the camera (src/blossoms.js): its own vertex colours, its shape in the light
-export function blossomModelMaterial() {
-  return blossomLit(0.4, { vertexColors: true });
+// the atlas's tones (tree.js paintFlowerAtlas): tip, middle and base of the petals, by the cell aAtlas picks
+const PETAL_TONES = [
+  ['#ffecf2', '#fac9d8', '#e5809f'], // cell (0, 0)
+  ['#ffe6ee', '#f8bfd1', '#e0708f'], // (1, 0)
+  ['#ffdde8', '#f4b0c6', '#d8648a'], // (0, 1)
+  ['#ffd9e5', '#f0a2bc', '#cf5a80'], // (1, 1)
+];
+// The modelled flower drawn near the camera (src/blossoms.js; tools/cherry.py `flower`). Its petals are coarse grids:
+// each pixel cuts the outline from the petal's own coordinates (in uv: along it, and across in its broadest half-
+// widths), broadest past the middle, rounded at the tip with the small notch in it; and paints it as the card it stands
+// in for: its atlas cell's tones from the claw to the tip, the curled-up sides paler. The cup and the stamens keep their
+// vertex colours.
+export function blossomModelMaterial(alphaToCoverage) {
+  const t = uv(), petal = step(0.25, t.x);
+  const u = t.x.mul(2.0).sub(1.0), v = abs(t.y.sub(0.5).div(0.45));
+  // the half-width along the petal, narrow at the claw, and the tip with its notch (both as fractions of the petal's
+  // length and broadest width, about 0.36 and 2 × 0.16 of the card)
+  const body = sin(min(u.div(0.7), 1.0).mul(Math.PI / 2)).mul(0.78).add(0.22);
+  const k = clamp(u.sub(0.7).div(0.3), 0.0, 1.0);
+  const w = body.mul(pow(max(float(1.0).sub(pow(k, 2.5)), 0.0), 0.4));
+  const tip = float(0.985).sub(pow(max(float(1.0).sub(v.div(0.2)), 0.0), 2.0).mul(0.075));
+  const d = min(w.sub(v).mul(0.16), tip.sub(u).mul(0.36));
+  const alpha = mix(1.0, clamp(d.div(max(fwidth(d), 1e-6)).mul(0.5).add(0.5), 0.0, 1.0), petal);
+  // the tones of the cell the card would show (aAtlas: 0 or 0.5 each way)
+  const cell = attribute('aAtlas', 'vec2').mul(2.0);
+  const tone = (i) => mix(mix(color(PETAL_TONES[0][i]), color(PETAL_TONES[1][i]), cell.x), mix(color(PETAL_TONES[2][i]), color(PETAL_TONES[3][i]), cell.x), cell.y);
+  const along = clamp(u, 0.0, 1.0);
+  const c = mix(mix(tone(2), tone(1), sstep(0.0, 0.4, along)), tone(0), sstep(0.4, 1.0, along));
+  const paint = mix(c, vec3(1.0), sstep(0.55, 1.0, v.div(max(w, 0.05))).mul(0.25));
+  return blossomLit(0.4, {
+    vertexColors: true, colorNode: vec4(mix(vec3(1.0), paint, petal), alpha), alphaTest: 0.5, alphaToCoverage,
+  });
 }
 
 // depth prepass for the flowers: the canopy has heavy overdraw, so its depth goes down first with only the
@@ -526,7 +590,7 @@ export function blossomModelMaterial() {
 // against it if the two vertex shaders round differently; with no offset the result is pixel-identical here.
 export function blossomDepthMaterial(atlas, alphaToCoverage) {
   return new THREE.MeshBasicNodeMaterial({
-    colorNode: texture(atlas, flowerUV()),
+    colorNode: flowerColor(atlas),
     alphaTest: 0.4, side: THREE.DoubleSide, alphaToCoverage, fog: false, colorWrite: false,
     polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: 4,
     positionNode: treeWindPosition(true),
@@ -536,7 +600,7 @@ export function blossomDepthMaterial(atlas, alphaToCoverage) {
 // shadow-only stand-in for the flowers (layer 2, see main.js)
 export function blossomShadowMaterial(atlas) {
   return new THREE.MeshBasicNodeMaterial({
-    colorNode: texture(atlas, flowerUV()), alphaTest: 0.4, side: THREE.DoubleSide, fog: false,
+    colorNode: flowerColor(atlas), alphaTest: 0.4, side: THREE.DoubleSide, fog: false,
     positionNode: treeWindPosition(true),
   });
 }
