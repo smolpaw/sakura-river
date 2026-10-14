@@ -16,9 +16,10 @@
 // seed (hops and turns on a jittered step clock, the loops summed sines); the flights from one perch to another, or away
 // and back, are set from the CPU per bird (when it left, when it comes back, where to), the vertex stage flying the path.
 // By day only: they go to roost over dusk (by rank, like the butterflies), fewer in rain, none in a gale; hidden when
-// none are out. Lit like the birds in flight, with the sunlit ground's bounce; no shadows, not in the reflection.
+// none are out. Lit like the birds in flight, with the sunlit ground's bounce, the crow glossy with a blue sheen going
+// violet at its edges; no shadows, not in the reflection.
 import * as THREE from 'three/webgpu';
-import { Fn, vec2, vec3, float, sin, cos, abs, sign, min, max, mix, clamp, select, floor, fract, length, atan, attribute, uniform, positionGeometry, normalGeometry, positionWorld, cameraPosition, transformNormalToView, faceDirection } from 'three/tsl';
+import { Fn, vec2, vec3, float, sin, cos, abs, sign, min, max, mix, clamp, select, floor, fract, length, atan, dot, pow, reflect, attribute, uniform, positionGeometry, normalGeometry, positionWorld, cameraPosition, transformNormalToView, faceDirection } from 'three/tsl';
 import { LitMaterial, U, sstep, hash12, SHADOW_NORMAL_BIAS } from './tsl.js';
 import { bridgeFrame, BRIDGE_Z, RAIL_OFF } from './props.js';
 import { TORII } from './village.js';
@@ -374,23 +375,36 @@ function perchedMaterial(sc, uAmount) {
     const kw = mix(vec3(0.0, 0.22, 0.32), vec3(0.02, 0.32, 0.42), feather.mul(0.5));
     const kfc = select(pt.equal(1.0), kw, select(pt.equal(2.0), vec3(0.0, 0.25, 0.42), select(pt.equal(3.0), vec3(0.6, 0.08, 0.04), select(pt.greaterThan(3.5), vec3(0.02), kb))));
     const small = select(species.equal(2.0), mej, select(species.equal(3.0), wgt, select(species.equal(4.0), kfc, spc)));
-    // the crow: black all over, the eye and the bill a shade apart
-    const crow = mix(vec3(0.045, 0.045, 0.055), vec3(0.06, 0.055, 0.055), pt.greaterThan(3.5).select(1.0, 0.0));
-    return mix(small, crow, kind);
+    // the crow: black all over, the wings and the tail a shade bluer, the eye and the bill a shade apart
+    let cr = mix(vec3(0.045, 0.045, 0.055), vec3(0.04, 0.045, 0.065), pt.equal(1.0).or(pt.equal(2.0)).select(1.0, 0.0));
+    cr = mix(cr, vec3(0.06, 0.055, 0.055), pt.greaterThan(3.5).select(1.0, 0.0));
+    return mix(small, cr, kind);
   });
+  // the crow's feathers: scale rows over the body, the flight feathers' lines on the wings and the tail; they break up
+  // its gloss
+  const scale = abs(fract(bz.mul(260.0).add(abs(bp.x).mul(60.0))).sub(0.5)).mul(2.0);
+  const isTail = part.equal(2.0).select(1.0, 0.0);
+  const quill = abs(fract(mix(wv.mul(3.0).add(wu.mul(7.0)), wv.mul(6.0), isTail)).sub(0.5)).mul(2.0);
+  const plume = sstep(0.55, 0.95, mix(scale, quill, part.greaterThan(0.5).select(1.0, 0.0))).mul(far.oneMinus());
 
   const col = paint();
   // the sunlit ground's bounce from below, and in shade the sky's blue pulled towards its grey, or a brown sparrow
   // under the cherry comes out slate
   const mat = new LitMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide }, (o) => {
     const grey = vec3(U.uSkyAmb.dot(vec3(0.3, 0.6, 0.1))).sub(U.uSkyAmb).mul(sstep(0.0, 0.35, U.uSunDir.y).mul(0.25));
-    return o.add(col.mul(groundBounce().mul(0.6).add(grey)));
+    // the crow's sheen: blue going violet at grazing angles, from the sky and from the sun's highlight
+    const V = cameraPosition.sub(positionWorld).normalize(), N = n.mul(sign(dot(n, V)).add(0.001)).normalize();
+    const fres = pow(float(1.0).sub(max(dot(N, V), 0.0)), 2.0);
+    const lobe = pow(max(dot(reflect(V.negate(), N), U.uSunDir), 0.0), 12.0).mul(U.uSunVis);
+    const hue = mix(vec3(0.12, 0.2, 0.6), vec3(0.4, 0.15, 0.55), fres);
+    const sheen = hue.mul(U.uSkyAmb.mul(fres.mul(0.07)).add(U.uSunColor.mul(lobe.mul(0.1)))).mul(kind).mul(plume.mul(0.3).oneMinus());
+    return o.add(col.mul(groundBounce().mul(0.6).add(grey))).add(sheen);
   });
   mat.positionNode = pos;
   mat.receivedShadowPositionNode = pos.add(n.mul(SHADOW_NORMAL_BIAS)); // (tsl.js receiverShadowPosition reads the undisplaced geometry)
   mat.normalNode = transformNormalToView(n).normalize().mul(faceDirection);
   mat.colorNode = col;
-  mat.roughnessNode = mix(float(0.85), float(0.42), kind); // the crow's plumage glossy
+  mat.roughnessNode = mix(float(0.85), float(0.38).add(plume.mul(0.12)), kind); // the crow's plumage glossy between its feathers' edges
   return mat;
 }
 
