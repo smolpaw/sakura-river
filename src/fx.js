@@ -5,7 +5,7 @@ import {
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
-import { U, sstep, vnoise, vnoiseLoop, applyFog, LitMaterial, lanternLight, LOOP, loopW, loopPeriod, loopIdx, loopDrift } from './tsl.js';
+import { U, sstep, vnoise, vnoiseLoop, applyFog, LitMaterial, lanternLight, LOOP, loopW, loopPeriod, loopIdx, loopDrift, SHADOW_NORMAL_BIAS } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
 import { mulberry32 } from './noise.js';
 import { INK } from './lanterns.js';
@@ -18,11 +18,19 @@ const rotYXZ = (r, v) => {
   return vec3(cy.mul(x.x).add(sy.mul(x.z)), x.y, sy.mul(x.x).negate().add(cy.mul(x.z)));
 };
 
-// instanced petal: attributes iPos (vec3), iRot (yaw, pitch, roll, scale), iTint; or those as nodes (`src`: pos, rot,
-// tint), e.g. read from the GPU simulation's buffers (petalsgpu.js)
+// a petal's colour at t (0 its base .. 1 its tip), by its tint (0..1)
+const petalAlbedo = (tint, t) => mix(mix(vec3(0.88, 0.38, 0.54), vec3(0.95, 0.55, 0.68), tint), mix(vec3(0.98, 0.72, 0.8), vec3(1.0, 0.84, 0.89), tint), sstep(0.0, 0.7, t));
+// lying on the ground: dimmer and pinker (thin, the grass shows through), a fifth of them browning at the tip
+const lyingAlbedo = (alb, tint, t) => mix(alb.mul(vec3(0.75, 0.5, 0.42)), vec3(0.5, 0.4, 0.32), sstep(0.8, 1.0, tint).mul(sstep(0.3, 1.0, t)).mul(0.5));
+
+// instanced petal: attributes iPos (vec3), iRot (yaw, pitch, roll, scale), iTint, iLie; or those as nodes (`src`: pos,
+// rot, tint, lie), e.g. read from the GPU simulation's buffers (petalsgpu.js). A petal in the air is lit as the
+// blossom it left; one that has landed (iLie 1) as lyingPetalMaterial lights the fallen ones, without the canopy's
+// glow, so the petals on the ground don't shine at night.
 export function petalMaterial(src = null) {
   const iPos = src ? src.pos : attribute('iPos', 'vec3'), iRot = src ? src.rot : attribute('iRot', 'vec4');
   const vTint = (src ? src.tint : attribute('iTint', 'float')).toVarying('vPetalTint');
+  const vLie = (src ? src.lie : attribute('iLie', 'float')).toVarying('vPetalLie');
   const camD = length(iPos.sub(cameraPosition));
   const position = rotYXZ(iRot, positionGeometry.mul(iRot.w).mul(sstep(0.9, 2.2, camD))).add(iPos);
   const vN = rotYXZ(iRot, normalGeometry).toVarying('vPetalN');
@@ -32,21 +40,49 @@ export function petalMaterial(src = null) {
     const V = normalize(cameraPosition.sub(positionWorld));
     N.assign(select(dot(N, V).lessThan(0.0), N.negate(), N));
     const t = clamp(vP.y.add(0.5), 0.0, 1.0);
-    const tip = mix(vec3(0.98, 0.72, 0.8), vec3(1.0, 0.84, 0.89), vTint);
-    const base = mix(vec3(0.88, 0.38, 0.54), vec3(0.95, 0.55, 0.68), vTint);
-    const alb = mix(base, tip, sstep(0.0, 0.7, t));
+    const alb = petalAlbedo(vTint, t);
     const ndl = dot(N, U.uSunDir);
     const diff = max(ndl, 0.0).mul(0.7).add(ndl.mul(0.5).add(0.5).mul(0.3));
     const trans = pow(max(dot(V.negate(), U.uSunDir), 0.0), 3.0).mul(1.3).add(0.12);
+    const sun = U.uSunColor.mul(U.uSunVis).mul(sunShadow);
+    const lamps = lanternLight(positionWorld);
     // the canopy's own glow (blossomMaterial's floor) so a falling petal matches the flowers it left: without it
     // petals away from the lanterns turn into dark blue flecks at night
-    const col = alb.mul(U.uSkyAmb.mul(0.9).add(U.uSunColor.mul(U.uSunVis).mul(sunShadow).mul(diff.add(trans)).mul(0.9)).add(lanternLight(positionWorld).mul(1.4)).add(vec3(0.16).add(U.uSkyAmb.mul(0.1))));
-    return vec4(applyFog(col, positionWorld), 1.0);
+    const air = alb.mul(U.uSkyAmb.mul(0.9).add(sun.mul(diff.add(trans)).mul(0.9)).add(lamps.mul(1.4)).add(vec3(0.16).add(U.uSkyAmb.mul(0.1))));
+    // landed: the sky's and the sun's light as the lit materials take them (matched by eye to lyingPetalMaterial)
+    const ground = lyingAlbedo(alb, vTint, t).mul(U.uSkyAmb.mul(LIE_SKY).add(sun.mul(max(ndl, 0.0)).mul(LIE_SUN)).add(lamps.mul(0.5)));
+    return vec4(applyFog(mix(air, ground, vLie), positionWorld), 1.0);
   });
   const m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, fog: false });
   m.positionNode = position;
   m.colorNode = color();
   return m;
+}
+const LIE_SKY = 0.9, LIE_SUN = 1.6;
+
+// the petals lying on the ground and on the water (petals.js makeFallenPetals: attributes as petalMaterial's), lit as
+// the ground round them is: the scene's lit material, with the lamps at the grass's strength
+export function lyingPetalMaterial() {
+  const iPos = attribute('iPos', 'vec3'), iRot = attribute('iRot', 'vec4');
+  const vTint = attribute('iTint', 'float').toVarying('vPetalTint');
+  const camD = length(iPos.sub(cameraPosition));
+  const position = rotYXZ(iRot, positionGeometry.mul(iRot.w).mul(sstep(0.9, 2.2, camD))).add(iPos);
+  const vN = rotYXZ(iRot, normalGeometry).toVarying('vPetalN');
+  const vP = positionGeometry.xy.div(0.1).toVarying('vPetalP');
+  const albedo = Fn(() => {
+    const t = clamp(vP.y.add(0.5), 0.0, 1.0);
+    return lyingAlbedo(petalAlbedo(vTint, t), vTint, t);
+  })();
+  // its face turned to the camera, and bent up: a thin petal on the ground takes the light from above, whichever way up
+  const normal = Fn(() => {
+    const N = normalize(vN).toVar();
+    N.assign(select(dot(N, cameraPosition.sub(positionWorld)).lessThan(0.0), N.negate(), N));
+    return transformNormalToView(normalize(N.add(vec3(0.0, 1.5, 0.0)))).normalize();
+  })();
+  return new LitMaterial({
+    side: THREE.DoubleSide, roughness: 0.75, metalness: 0, positionNode: position, colorNode: albedo, normalNode: normal,
+    receivedShadowPositionNode: position.add(vec3(0.0, SHADOW_NORMAL_BIAS, 0.0)).toVarying('vPetalShadowPos'),
+  }, (out) => out.add(albedo.mul(lanternLight(positionWorld)).mul(0.5)));
 }
 
 // pollen / dust motes glowing in the light shafts: one instanced sprite per mote

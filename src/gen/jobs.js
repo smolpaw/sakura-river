@@ -77,9 +77,13 @@ export const JOBS = {
     // and the nobori by the torii, up the approach and at the bridge's landings (clear of the lamps)
     return { ...d, lantern: lanternGeometry(), ink: paintLanternInk(), banners: { ...bannerData(world(), d), ink: paintBannerInk() } };
   },
-  fallen: ({ count }) => fallenData(world(), xz(L().tree), count, trunkAvoid(L()), underTree(L())),
+  // in drifts against the root flare, the lane's verges, the water's edge, the hollows and the stones round the roots
+  fallen: ({ count, tier }) => {
+    const l = L(), stones = rockPlan(world(), tier, xz(l.tree)).placements.map((r) => ({ x: r.x, z: r.z, r: r.sc * 0.9 }));
+    return fallenData(world(), xz(l.tree), count, { avoid: trunkAvoid(l), lawn: lawn(l), stones });
+  },
   rafts: ({ count, tier }) => raftData(world(), count, rockPlan(world(), tier, xz(L().tree)).rocksInWater),
 };
 
 // rough single-thread cost (ms, high tier on a desktop CPU) for longest-first scheduling
-export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, groundAO: 60, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 90, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 7, rafts: 8, river: 3 };
+export const COST = { terrain: 800, depth: 220, grassMask: 70, fields: 400, village: 70, turf: 10, atlas: 60, leafAtlas: 60, bark: 120, heightCache: 90, groundAO: 60, trees: 150, fuji: 40, props: 200, rocks: 80, lanterns: 90, forest: 11, cliffs: 1, bamboo: 5, shrubs: 120, flowers: 10, fallen: 70, rafts: 8, river: 3 };

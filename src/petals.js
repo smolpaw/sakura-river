@@ -1,6 +1,10 @@
-// Drifting petals (CPU-simulated, GPU instanced) and the fallen petal carpet; materials come from fx.js
+// Drifting petals (CPU-simulated, GPU instanced), the fallen petals under the tree and the rafts on the water; the
+// material comes from fx.js
 import * as THREE from 'three';
-import { mulberry32, clamp, lerp } from './noise.js';
+import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
+
+// A petal lying flat: its pitch (rot.y) a quarter turn, face up or face down (the petal is drawn in its xy plane).
+export const FLAT = Math.PI / 2;
 
 export function petalGeometry() {
   // cherry petal: rounded with a notch, gently cupped
@@ -21,6 +25,9 @@ export function petalGeometry() {
   return g;
 }
 
+// the nearest pitch at which a petal lies flat, face up or down, to a petal's pitch p
+const toFlat = (p) => FLAT + Math.round((p - FLAT) / Math.PI) * Math.PI;
+
 export class PetalSystem {
   constructor(world, spawnPoints, max, material, windDir) {
     this.isPetalSystem = true;
@@ -31,9 +38,11 @@ export class PetalSystem {
     const ig = new THREE.InstancedBufferGeometry();
     ig.index = g.index; ig.attributes.position = g.attributes.position; ig.attributes.normal = g.attributes.normal;
     this.pos = new Float32Array(max * 3); this.rot = new Float32Array(max * 4); this.tint = new Float32Array(max);
+    this.lie = new Float32Array(max); // 1 lying on the grass or the water (fx.js petalMaterial lights it as the ground)
     this.aPos = new THREE.InstancedBufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
     this.aRot = new THREE.InstancedBufferAttribute(this.rot, 4).setUsage(THREE.DynamicDrawUsage);
-    ig.setAttribute('iPos', this.aPos); ig.setAttribute('iRot', this.aRot);
+    this.aLie = new THREE.InstancedBufferAttribute(this.lie, 1).setUsage(THREE.DynamicDrawUsage);
+    ig.setAttribute('iPos', this.aPos); ig.setAttribute('iRot', this.aRot); ig.setAttribute('iLie', this.aLie);
     ig.setAttribute('iTint', new THREE.InstancedBufferAttribute(this.tint, 1));
     ig.instanceCount = 0;
     this.geo = ig;
@@ -64,7 +73,7 @@ export class PetalSystem {
     }
     this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
     this.vel[i * 3] = 0; this.vel[i * 3 + 1] = -0.2; this.vel[i * 3 + 2] = 0;
-    this.age[i] = 0; this.life[i] = 14 + r() * 16; this.mode[i] = 0;
+    this.age[i] = 0; this.life[i] = 14 + r() * 16; this.mode[i] = 0; this.lie[i] = 0;
     this.rot[i * 4] = r() * 6.28; this.rot[i * 4 + 1] = r() * 6.28; this.rot[i * 4 + 2] = r() * 6.28;
     this.spin[i * 3] = (r() - 0.5) * 3; this.spin[i * 3 + 1] = (r() - 0.5) * 6; this.spin[i * 3 + 2] = (r() - 0.5) * 5;
     this.scale[i] = 0.75 + r() * 0.5;
@@ -101,7 +110,7 @@ export class PetalSystem {
         const g = world.heightFast(x, z);
         if (y <= Math.max(g, 0) + 0.02) {
           if (g < 0) { this.mode[i] = 1; y = 0.012; this.age[i] = 0; this.life[i] = 25 + this.rng() * 15; }
-          else { this.mode[i] = 2; y = g + 0.03; this.age[i] = 0; this.life[i] = 4 + this.rng() * 6; }
+          else { this.mode[i] = 2; y = g + 0.012; this.age[i] = 0; this.life[i] = 4 + this.rng() * 6; }
         }
       } else if (mode === 1) {
         // floating downstream
@@ -113,11 +122,13 @@ export class PetalSystem {
         // drift back toward centre if stranded
         if (ri.t > 0.8) x -= Math.sign(ri.d) * 0.3 * dt;
         y = 0.012 + Math.sin(time * 2 + x * 1.3 + z) * 0.008;
-        this.rot[i4 + 1] *= 1 - k; this.rot[i4 + 2] *= 1 - k;
+        this.rot[i4 + 1] += (toFlat(this.rot[i4 + 1]) - this.rot[i4 + 1]) * k;
+        this.lie[i] = Math.min(1, a / 0.6);
         this.rot[i4] += Math.sin(time * 0.5 + i) * dt * 0.3;
         if (z > 70 || z < -760) this.age[i] = life;
       } else {
-        this.rot[i4 + 1] *= 1 - k; this.rot[i4 + 2] *= 1 - k;
+        this.rot[i4 + 1] += (toFlat(this.rot[i4 + 1]) - this.rot[i4 + 1]) * k;
+        this.lie[i] = Math.min(1, a / 0.6);
       }
       // scale in/out
       const fadeIn = clamp(this.age[i] / 0.6, 0, 1);
@@ -127,29 +138,71 @@ export class PetalSystem {
       if (this.age[i] >= this.life[i] || y < -5 || Math.abs(x) > 400) this.respawn(i);
     }
     this.geo.instanceCount = this.active;
-    this.aPos.needsUpdate = true; this.aRot.needsUpdate = true;
+    this.aPos.needsUpdate = true; this.aRot.needsUpdate = true; this.aLie.needsUpdate = true;
     this.aPos.clearUpdateRanges(); this.aPos.addUpdateRange(0, this.active * 3);
     this.aRot.clearUpdateRanges(); this.aRot.addUpdateRange(0, this.active * 4);
+    this.aLie.clearUpdateRanges(); this.aLie.addUpdateRange(0, this.active);
   }
 }
 
-// static carpet of fallen petals under the tree
-export function fallenData(world, center, count, avoid, lawn) {
-  const rng = mulberry32(88);
+// The petals lying under the tree: in drifts where wind and obstacles leave them, and a thin scatter between. Piled
+// against the root flare (most on its lee side), along the lane's verges with a few on its bare earth, at the
+// water's edge, in the lee of the stones round the roots and in the ground's hollows; the scatter under the crown and
+// downwind of it. They lie on the ground, flat or propped on a blade at an angle, so the grass hides all but those on
+// the short lawn, the lane and the bank; a few are caught up in the blades. Sizes vary (the small ones curled or half
+// hidden). center: the trunk; avoid(x, z): no petals (the trunk itself); lawn(x, z): 0 short grass .. 1 tall;
+// stones: [{ x, z, r }]; wind: [x, z] the prevailing wind (towards).
+const DRIFTS = { root: 0.3, lane: 0.16, bank: 0.12, stones: 0.08, hollows: 0.08, scatter: 0.26 }; // shares of the petals
+export function fallenData(world, center, count, { avoid, lawn, stones = [], wind = [0.62, 0.78] }) {
+  const rng = mulberry32(88), nz = makeNoise(89);
+  const wl = Math.hypot(wind[0], wind[1]), wx = wind[0] / wl, wz = wind[1] / wl;
   const pos = new Float32Array(count * 3), rot = new Float32Array(count * 4), tint = new Float32Array(count);
-  let n = 0, tries = 0;
-  while (n < count && tries < count * 10) {
-    tries++;
-    const r = Math.pow(rng(), 0.65) * 13, a = rng() * 6.28;
-    const x = center.x + Math.cos(a) * r * 1.1 + 2, z = center.z + Math.sin(a) * r;
-    const y = world.height(x, z);
-    if (y < 0.05) continue;
-    if (avoid && avoid(x, z)) continue;
-    const top = lawn ? lerp(0.25, 1, lawn(x, z)) : 1; // on top of the grass: lower on the short lawn
-    pos[n * 3] = x; pos[n * 3 + 1] = y + (0.04 + rng() * 0.12) * top; pos[n * 3 + 2] = z;
-    rot[n * 4] = rng() * 6.28; rot[n * 4 + 1] = (rng() - 0.5) * 0.8; rot[n * 4 + 2] = (rng() - 0.5) * 0.8; rot[n * 4 + 3] = 0.8 + rng() * 0.5;
-    tint[n] = rng();
-    n++;
+  const near = stones.filter((s) => Math.hypot(s.x - center.x, s.z - center.z) < 16);
+  // as far as the wind carries them along the ground, downwind of the crown (1 .. 0)
+  const reach = (x, z) => smoothstep(18, 9, Math.hypot(x - center.x - wx * 2, z - center.z - wz * 2));
+  // drifts in patches with gaps between (0.15 .. 1)
+  const patchy = (x, z) => clamp(0.55 + 0.9 * nz.noise2(x * 0.55, z * 0.55), 0.15, 1);
+  const curv = (x, z, y) => (world.height(x + 0.8, z) + world.height(x - 0.8, z) + world.height(x, z + 0.8) + world.height(x, z - 0.8) - 4 * y) / 0.64;
+  // a point under or downwind of the crown
+  const under = (R) => { const r = Math.sqrt(rng()) * R, a = rng() * 6.28; return [center.x + wx * 2 + Math.cos(a) * r, center.z + wz * 2 + Math.sin(a) * r]; };
+  // each kind of place: a candidate point and how likely a petal is to lie there (0..1)
+  const sites = {
+    root: () => {
+      const a = rng() * 6.28, r = Math.max(1.15, 1.7 + (rng() + rng() + rng() - 1.5) * 0.6), x = center.x + Math.cos(a) * r, z = center.z + Math.sin(a) * r;
+      return [x, z, (0.55 + 0.45 * (Math.cos(a) * wx + Math.sin(a) * wz)) * patchy(x, z)];
+    },
+    lane: () => {
+      const [x, z] = under(17), ld = world.laneDist(x, z);
+      return [x, z, ld > 3 ? 0 : reach(x, z) * (ld < 1.1 ? 0.06 : Math.exp(-(((ld - 1.5) / 0.3) ** 2))) * patchy(x, z)];
+    },
+    bank: () => { const [x, z] = under(17); return [x, z, reach(x, z) * Math.exp(-(((world.riverInfo(x, z).t - 1.06) / 0.06) ** 2)) * patchy(x, z)]; },
+    stones: () => {
+      if (!near.length) return [0, 0, 0];
+      const s = near[Math.floor(rng() * near.length)], a = rng() * 6.28, r = s.r + 0.1 + rng() * 0.6, x = s.x + Math.cos(a) * r, z = s.z + Math.sin(a) * r;
+      return [x, z, reach(x, z) * Math.max(0, Math.cos(a) * wx + Math.sin(a) * wz)];
+    },
+    hollows: () => { const [x, z] = under(12); return [x, z, smoothstep(0.15, 0.45, curv(x, z, world.height(x, z))) * patchy(x, z)]; },
+    scatter: () => { const [x, z] = under(14); return [x, z, smoothstep(14, 5, Math.hypot(x - center.x - wx * 2.5, z - center.z - wz * 2.5))]; },
+  };
+  let n = 0;
+  for (const [kind, share] of Object.entries(DRIFTS)) {
+    const end = Math.min(count, n + Math.round(count * share)), site = sites[kind];
+    for (let tries = 0; n < end && tries < count * 40; tries++) {
+      const [x, z, w] = site();
+      if (rng() > w) continue;
+      const y = world.height(x, z);
+      if (y < 0.03 || (avoid && avoid(x, z))) continue;
+      // in a deep drift they lie on each other; some caught up in the grass, where it is long
+      const pile = kind === 'root' || kind === 'lane' ? rng() * rng() * 0.03 : 0;
+      const caught = lawn && kind === 'scatter' && rng() < 0.15 ? rng() * 0.22 * lerp(0.2, 1, lawn(x, z)) : 0;
+      pos[n * 3] = x; pos[n * 3 + 1] = y + 0.012 + pile + caught; pos[n * 3 + 2] = z;
+      // flat, face up or (a third) face down, or propped at an angle on a blade or a neighbour
+      const prop = rng() < 0.25 ? (rng() - 0.5) * 1.6 : (rng() - 0.5) * 0.5;
+      rot[n * 4] = rng() * 6.28; rot[n * 4 + 1] = (rng() < 0.33 ? FLAT : -FLAT) + prop; rot[n * 4 + 2] = rng() * 6.28;
+      rot[n * 4 + 3] = 0.45 + Math.pow(rng(), 0.7) * 0.75;
+      tint[n] = rng();
+      n++;
+    }
   }
   return { pos, rot, tint, n };
 }
@@ -191,7 +244,7 @@ export function raftData(world, count, rocksInWater) {
   const pos = new Float32Array(n * 3), rot = new Float32Array(n * 4), tint = new Float32Array(n);
   pts.forEach(([x, z], i) => {
     pos[i * 3] = x; pos[i * 3 + 1] = 0.012 + rng() * 0.006; pos[i * 3 + 2] = z;
-    rot[i * 4] = rng() * 6.28; rot[i * 4 + 1] = (rng() - 0.5) * 0.3; rot[i * 4 + 2] = (rng() - 0.5) * 0.3; rot[i * 4 + 3] = 0.75 + rng() * 0.45;
+    rot[i * 4] = rng() * 6.28; rot[i * 4 + 1] = (rng() < 0.2 ? FLAT : -FLAT) + (rng() - 0.5) * 0.3; rot[i * 4 + 2] = rng() * 6.28; rot[i * 4 + 3] = 0.75 + rng() * 0.45;
     tint[i] = rng();
   });
   return { pos, rot, tint, n };

@@ -32,7 +32,7 @@ import { makeSky, skyState, moonState, uStarPx } from './sky.js';
 import { makeWater, makeMist } from './water.js';
 import { PetalSystem, makeFallenPetals } from './petals.js';
 import { makeGpuPetals } from './petalsgpu.js';
-import { petalMaterial, makeMotes, makeLanterns, makeGlows, makeFires, makeSmoke, makeSparks } from './fx.js';
+import { petalMaterial, lyingPetalMaterial, makeMotes, makeLanterns, makeGlows, makeFires, makeSmoke, makeSparks } from './fx.js';
 import { fireflyData, makeFireflies } from './fireflies.js';
 import { WEATHERS, WEATHER_KEYS, hourToT, tToHour, overcast, makeRain, makeLightning } from './weather.js';
 import { buildPipeline, discardMultisampleStores } from './post.js';
@@ -77,9 +77,9 @@ const TIERS = {
   medium: { pr: 1.5, ss: 1, terrain: [300, 320], turf: 2000, flowers: 1500, petals: 2200, fallen: 2400, motes: 300, fireflies: 400, shadow: 2048, far: 2048, impostorCell: 96, refl: 0.4, msaa: 2, rays: 36, forest: 1850, bloomRes: 0.75, koi: 10, rain: 14000, near: 4, atlas: 512, lodScale: 1, nearModels: false },
   low: { pr: 1.25, ss: 1, terrain: [210, 230], turf: 800, flowers: 700, petals: 1100, fallen: 1300, motes: 150, fireflies: 200, shadow: 1024, far: 1024, impostorCell: 64, refl: 0, msaa: 0, rays: 24, forest: 1100, bloomRes: 0.5, koi: 6, rain: 7000, near: 0, atlas: 512, lodScale: 1, nearModels: false },
 };
-// the main tree's falling petals and the carpet under it, as a share of the tier's `petals` and `fallen` (the rafts
-// on the water keep the full `fallen`)
-const MAIN_SHED = 0.75;
+// the main tree's falling petals and the petals lying under it, as a share of the tier's `petals` and `fallen` (the
+// rafts on the water keep the full `fallen`); of the main tree's share, LYING lie on the ground, in drifts
+const MAIN_SHED = 0.75, LYING = 0.85;
 
 // Starting tier from what the browser reveals about the GPU (WebGPU adapter info or the WebGL renderer string);
 // the runtime controller corrects from measured frame cost, so this only has to be roughly right. Integrated and
@@ -226,7 +226,7 @@ export async function create(canvas, opts = {}) {
     forest: { name: 'forest', args: { count: Q.forest } },
     cliffs: { name: 'cliffs' },
     bamboo: { name: 'bamboo' },
-    fallen: { name: 'fallen', args: { count: Math.round(Q.fallen * MAIN_SHED) } },
+    fallen: { name: 'fallen', args: { count: Math.round(Q.fallen * MAIN_SHED * LYING), tier: tierName } },
     rafts: { name: 'rafts', args: { count: Math.round(Q.fallen * 1.2), tier: tierName } },
   }, { mainThread: opts.workers === false, onJob: (done, total) => progress('generate', done / total) });
   world.setHeightCache(G.heightCache);
@@ -619,10 +619,11 @@ export async function create(canvas, opts = {}) {
     : new PetalSystem(world, spawnPts, Math.round(Q.petals * MAIN_SHED), petalMat, U.uWindDir.value);
   petals.mesh.name = 'petals';
   scene.add(petals.mesh);
-  const fallen = makeFallenPetals(G.fallen, petalMat);
+  const lyingMat = lyingPetalMaterial();
+  const fallen = makeFallenPetals(G.fallen, lyingMat);
   fallen.name = 'fallenPetals';
   scene.add(fallen);
-  const rafts = makeFallenPetals(G.rafts, petalMat); // hanaikada: petal mats on the slack water
+  const rafts = makeFallenPetals(G.rafts, lyingMat); // hanaikada: petal mats on the slack water
   rafts.name = 'petalRafts';
   scene.add(rafts);
   const motes = makeMotes(new THREE.Vector3(...Lay.motes), Q.motes);

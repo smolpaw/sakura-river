@@ -1,14 +1,17 @@
 // Falling petals simulated on the GPU (WebGPU compute), from every cherry: the same flight as petals.js's CPU system
 // (wind with gusts and flutter, landing on the grass to wither or on the river to float downstream), so many more of
 // them cost the CPU nothing. Each petal's state lives in storage buffers the compute pass updates and the petal
-// material reads. The WebGL fallback keeps the CPU system.
+// material reads. Landed, they turn to lie flat. The WebGL fallback keeps the CPU system.
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, float, vec2, vec3, vec4, uniform, instancedArray, instanceIndex, sin, cos, abs, max, clamp, floor, sign, exp, select,
 } from 'three/tsl';
 import { U, hash12 } from './tsl.js';
 import { mulberry32 } from './noise.js';
-import { petalGeometry } from './petals.js';
+import { petalGeometry, FLAT } from './petals.js';
+
+// the nearest pitch at which a petal lies flat (petals.js FLAT), face up or down, to pitch p
+const toFlat = (p) => floor(p.sub(FLAT).div(Math.PI).add(0.5)).mul(Math.PI).add(FLAT);
 
 // the river (world.js riverX, riverHW), as a node of z
 const sstepN = (a, b, x) => { const t = clamp(x.sub(a).div(b - a), 0.0, 1.0); return t.mul(t).mul(float(3.0).sub(t.mul(2.0))); };
@@ -69,7 +72,7 @@ export function makeGpuPetals(trees, groundAt, count, material) {
       If(p.y.lessThanEqual(max(g, 0.0).add(0.02)), () => {
         const h = hash12(vec2(fi, t.mul(7.3)));
         If(g.lessThan(0.0), () => { p.w.assign(1.0); p.y.assign(0.012); v.w.assign(0.0); s.w.assign(h.mul(15.0).add(25.0)); })
-          .Else(() => { p.w.assign(2.0); p.y.assign(g.add(0.03)); v.w.assign(0.0); s.w.assign(h.mul(6.0).add(4.0)); });
+          .Else(() => { p.w.assign(2.0); p.y.assign(g.add(0.012)); v.w.assign(0.0); s.w.assign(h.mul(6.0).add(4.0)); });
       });
     }).ElseIf(p.w.lessThan(1.5), () => {
       // on the river: carried downstream, fastest mid-stream, nudged off the banks
@@ -82,11 +85,11 @@ export function makeGpuPetals(trees, groundAt, count, material) {
       p.z.addAssign(fl.y.mul(sp).mul(dt));
       If(tt.greaterThan(0.8), () => { p.x.subAssign(sign(p.x.sub(rx)).mul(0.3).mul(dt)); });
       p.y.assign(sin(t.mul(2.0).add(p.x.mul(1.3)).add(p.z)).mul(0.008).add(0.012));
-      r.y.mulAssign(float(1.0).sub(kk)); r.z.mulAssign(float(1.0).sub(kk));
+      r.y.addAssign(toFlat(r.y).sub(r.y).mul(kk));
       r.x.addAssign(sin(t.mul(0.5).add(fi)).mul(dt).mul(0.3));
       If(p.z.greaterThan(70.0).or(p.z.lessThan(-760.0)), () => { v.w.assign(s.w); });
     }).Else(() => {
-      r.y.mulAssign(float(1.0).sub(kk)); r.z.mulAssign(float(1.0).sub(kk));
+      r.y.addAssign(toFlat(r.y).sub(r.y).mul(kk));
     });
     // grown in after leaving the tree, shrunk away at the end of its life
     const fadeIn = clamp(v.w.div(0.6), 0.0, 1.0), fadeOut = clamp(s.w.sub(v.w).div(1.5), 0.0, 1.0);
@@ -108,7 +111,9 @@ export function makeGpuPetals(trees, groundAt, count, material) {
   const g = petalGeometry();
   geo.index = g.index; geo.attributes.position = g.attributes.position; geo.attributes.normal = g.attributes.normal;
   geo.instanceCount = 0;
-  const mesh = new THREE.Mesh(geo, material({ pos: P.element(instanceIndex).xyz, rot: R.element(instanceIndex), tint: K.element(instanceIndex).y }));
+  // (lying on the grass or the water, faded in over the first moments there: fx.js petalMaterial)
+  const lie = select(P.element(instanceIndex).w.greaterThan(0.5), clamp(V.element(instanceIndex).w.div(0.6), 0.0, 1.0), float(0.0));
+  const mesh = new THREE.Mesh(geo, material({ pos: P.element(instanceIndex).xyz, rot: R.element(instanceIndex), tint: K.element(instanceIndex).y, lie }));
   mesh.frustumCulled = false;
   mesh.renderOrder = 3;
   mesh.layers.set(1);
