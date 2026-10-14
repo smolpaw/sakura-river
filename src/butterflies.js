@@ -8,7 +8,7 @@
 // in rain, fewer under heavy cloud and in strong wind; hidden altogether when none are out.
 import * as THREE from 'three/webgpu';
 import { Fn, vec2, vec3, float, sin, cos, fract, floor, abs, sign, min, max, mix, clamp, select, length, atan, attribute, uv, positionGeometry, positionWorld, cameraPosition, transformNormalToView, faceDirection, uniform } from 'three/tsl';
-import { LitMaterial, U, sstep } from './tsl.js';
+import { LitMaterial, U, sstep, LOOP, loopW, loopRate } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
 import { mulberry32, smoothstep } from './noise.js';
 
@@ -160,31 +160,34 @@ function butterflyMaterial(uAmount) {
   const t = U.uTime.add(seed.mul(997.0));
   // the cycle: flying, then slowing onto a flower (over D s) and sitting there S s; tau, the path's own time, stands
   // still while it sits, so it takes off from where it landed
-  const T = C.z, S = seed.mul(7.13).fract().mul(1.6).add(1.2), D = 0.8;
+  // (every rate fits the clock's loop, tsl.js: the cycle's period whole cycles of it, the wings' rates whole turns, and
+  // the path's rates whole turns of tau's gain over a loop, Q)
+  const N = floor(float(LOOP).div(C.z).add(0.5)).max(1.0), T = float(LOOP).div(N), S = seed.mul(7.13).fract().mul(1.6).add(1.2), D = 0.8;
   const F = T.sub(S), n = floor(t.div(T)), u = t.sub(n.mul(T));
   const e = clamp(u.sub(F.sub(D)), 0.0, D);
   const tau = n.mul(F.sub(D * 0.5)).add(min(u, F.sub(D))).add(e).sub(e.mul(e).div(2 * D));
+  const Q = N.mul(F.sub(D * 0.5)), qw = (r) => floor(float(r).mul(Q).div(TAU).add(0.5)).mul(TAU).div(Q);
   const sit = max(sstep(F.sub(D * 0.7), F, u), float(1).sub(sstep(0.0, 0.3, u)));
   // the path: two loops of summed sines round the anchor at about `speed` m/s, and a quick zigzag on top
   const h = (k) => fract(seed.mul(13.7 + k * 7.9).add(k * 0.37));
   const w = K.w.mul(0.9).div(R), ph = (k) => h(k).mul(TAU);
-  const w1 = w.mul(h(1).mul(0.4).add(0.8)), w2 = w.mul(h(2).mul(0.8).add(2.1)), w3 = w.mul(h(3).mul(0.4).add(0.8)), w4 = w.mul(h(4).mul(0.8).add(1.9));
-  const zz = 0.09;
-  const px = R.mul(sin(w1.mul(tau).add(ph(1))).mul(0.65).add(sin(w2.mul(tau).add(ph(2))).mul(0.35))).add(sin(tau.mul(5.3).add(ph(5))).mul(zz));
-  const pz = R.mul(cos(w3.mul(tau).add(ph(3))).mul(0.65).add(sin(w4.mul(tau).add(ph(4))).mul(0.35))).add(sin(tau.mul(4.1).add(ph(6))).mul(zz));
-  const vx = R.mul(cos(w1.mul(tau).add(ph(1))).mul(w1).mul(0.65).add(cos(w2.mul(tau).add(ph(2))).mul(w2).mul(0.35))).add(cos(tau.mul(5.3).add(ph(5))).mul(zz * 5.3));
-  const vz = R.mul(sin(w3.mul(tau).add(ph(3))).mul(w3).mul(-0.65).add(cos(w4.mul(tau).add(ph(4))).mul(w4).mul(0.35))).add(cos(tau.mul(4.1).add(ph(6))).mul(zz * 4.1));
+  const w1 = qw(w.mul(h(1).mul(0.4).add(0.8))), w2 = qw(w.mul(h(2).mul(0.8).add(2.1))), w3 = qw(w.mul(h(3).mul(0.4).add(0.8))), w4 = qw(w.mul(h(4).mul(0.8).add(1.9)));
+  const zz = 0.09, z1 = qw(5.3), z2 = qw(4.1);
+  const px = R.mul(sin(w1.mul(tau).add(ph(1))).mul(0.65).add(sin(w2.mul(tau).add(ph(2))).mul(0.35))).add(sin(tau.mul(z1).add(ph(5))).mul(zz));
+  const pz = R.mul(cos(w3.mul(tau).add(ph(3))).mul(0.65).add(sin(w4.mul(tau).add(ph(4))).mul(0.35))).add(sin(tau.mul(z2).add(ph(6))).mul(zz));
+  const vx = R.mul(cos(w1.mul(tau).add(ph(1))).mul(w1).mul(0.65).add(cos(w2.mul(tau).add(ph(2))).mul(w2).mul(0.35))).add(cos(tau.mul(z1).add(ph(5))).mul(z1.mul(zz)));
+  const vz = R.mul(sin(w3.mul(tau).add(ph(3))).mul(w3).mul(-0.65).add(cos(w4.mul(tau).add(ph(4))).mul(w4).mul(0.35))).add(cos(tau.mul(z2).add(ph(6))).mul(z2.mul(zz)));
   // the wings: a beat quick down (35% of it) and slower up, glides now and then, closed upward while it sits (opened
   // slowly now and then, basking)
-  const phase = fract(t.mul(K.y));
+  const phase = fract(t.mul(loopRate(K.y)));
   const f = select(phase.lessThan(0.35), phase.div(0.35), float(1).sub(phase.sub(0.35).div(0.65)));
-  const glide = sstep(0.45, 0.9, sin(t.mul(h(8).mul(0.5).add(0.7)).add(ph(8)))).mul(K.z);
+  const glide = sstep(0.45, 0.9, sin(t.mul(loopW(h(8).mul(0.5).add(0.7))).add(ph(8)))).mul(K.z);
   const beat = mix(float(1.15), float(-0.5), f.mul(f).mul(float(3).sub(f.mul(2))));
   const bask = sstep(0.6, 0.95, sin(t.mul(0.9).add(ph(9))));
   const th = mix(mix(beat, float(0.15), glide), float(1.42).sub(bask.mul(1.1)), sit);
   // up and down: a flight height between 0.3 and 1.5 m over the ground's slope, lifted a little by each down stroke
   const yg = A.y.add(B.z.mul(px)).add(B.w.mul(pz));
-  const fly = clamp(C.w.add(sin(tau.mul(w.mul(1.3)).add(ph(10))).mul(0.3)).add(sin(tau.mul(w.mul(3.4)).add(ph(11))).mul(0.1)), 0.3, 1.5)
+  const fly = clamp(C.w.add(sin(tau.mul(qw(w.mul(1.3))).add(ph(10))).mul(0.3)).add(sin(tau.mul(qw(w.mul(3.4))).add(ph(11))).mul(0.1)), 0.3, 1.5)
     .add(sin(phase.mul(TAU)).mul(0.02).mul(float(1).sub(glide)));
   const pos = vec3(A.x.add(px), yg.add(mix(fly, C.x, sit)), A.z.add(pz));
   // never smaller than a fleck of ~17 px at 1080p (an angle: 1.2% of the distance), up to six times its size; none out

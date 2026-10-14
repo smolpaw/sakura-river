@@ -6,10 +6,13 @@ import {
   cameraPosition, cameraViewMatrix, positionWorld, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray, uniform,
 } from 'three/tsl';
-import { U, vnoise, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight } from './tsl.js';
+import { U, vnoise, vnoiseLoop, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight, loopDrift } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
 import { sunShadow } from './sunshadow.js';
 import { KIND } from './kinds.js';
+
+// the river bed's caustics' drift with the clock (cells per second of their two lattices, x and z each: tsl.js)
+const CAUSTIC = [loopDrift(0.55), loopDrift(0.55 * 0.7), loopDrift(-0.55 * 0.8), loopDrift(0.55 * 0.5)];
 
 const wp = positionWorld;
 
@@ -362,9 +365,10 @@ export function terrainMaterial({ sky, paddies = false, lanes = null, ao = null 
     const y = wp.y;
     const o = out.toVar();
     If(y.lessThan(0.03), () => {
-      const cp = wp.xz.mul(0.8), ct = U.uTime.mul(0.55);
-      const c1 = vnoise(cp.add(vec2(ct, ct.mul(0.7))));
-      const c2 = vnoise(cp.mul(1.37).sub(vec2(ct.mul(0.8), ct.mul(-0.5))).add(5.0));
+      // (drifting with the clock, the lattices wrapped where its loop ends: tsl.js)
+      const cp = wp.xz.mul(0.8);
+      const c1 = vnoiseLoop(cp.add(U.uTime.mul(vec2(CAUSTIC[0][0], CAUSTIC[1][0]))), vec2(CAUSTIC[0][1], CAUSTIC[1][1]));
+      const c2 = vnoiseLoop(cp.mul(1.37).add(U.uTime.mul(vec2(CAUSTIC[2][0], CAUSTIC[3][0]))).add(5.0), vec2(CAUSTIC[2][1], CAUSTIC[3][1]));
       const cc = pow(float(1.0).sub(c1.sub(c2).abs()), 10.0);
       const cw = sstep(0.03, -0.3, y).mul(sstep(-2.6, -0.6, y));
       o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(cc).mul(cw).mul(2.2));
@@ -430,10 +434,14 @@ const riverBed = (xz, under) => {
 const paddyWater = (sky) => Fn(() => {
   const { uZenith, uHorizon } = sky.uniforms;
   const t = U.uTime, p = wp.xz;
-  const drift = U.uWindDir.mul(t.mul(0.35));
+  // ripples drifting downwind (the wind's direction is fixed: the drifts are worked out from it here, each nudged to
+  // whole cells of its lattice, wrapped there, over the clock's loop: tsl.js)
+  const wd = U.uWindDir.value, [ax, anx] = loopDrift(-0.35 * wd.x), [az, anz] = loopDrift(-0.35 * wd.y);
+  const [bx, bnx] = loopDrift(0.595 * wd.x), [bz, bnz] = loopDrift(0.595 * wd.y);
+  const dA = t.mul(vec2(ax, az)), nA = vec2(anx, anz), dB = t.mul(vec2(bx, bz)), nB = vec2(bnx, bnz);
   const amp = U.uWind.mul(0.1).add(0.015).add(U.uRain.mul(0.08));
-  const nx = vnoise(p.mul(2.1).sub(drift)).add(vnoise(p.mul(5.3).add(drift.mul(1.7))).mul(0.5)).sub(0.75);
-  const nz = vnoise(p.mul(2.1).add(13.0).sub(drift)).add(vnoise(p.mul(5.3).add(7.0).add(drift.mul(1.7))).mul(0.5)).sub(0.75);
+  const nx = vnoiseLoop(p.mul(2.1).add(dA), nA).add(vnoiseLoop(p.mul(5.3).add(dB), nB).mul(0.5)).sub(0.75);
+  const nz = vnoiseLoop(p.mul(2.1).add(13.0).add(dA), nA).add(vnoiseLoop(p.mul(5.3).add(7.0).add(dB), nB).mul(0.5)).sub(0.75);
   const dist = wp.sub(cameraPosition).length();
   const N = normalize(vec3(nx.mul(amp).mul(sstep(120.0, 20.0, dist)), 1.0, nz.mul(amp).mul(sstep(120.0, 20.0, dist))));
   const V = normalize(cameraPosition.sub(wp));

@@ -1,7 +1,7 @@
 // Sky dome with sun, a crescent moon, stars, shooting stars, glow and drifting procedural clouds + time-of-day palette
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If } from 'three/tsl';
-import { U, vnoise, hashSin, hash12, sstep } from './tsl.js';
+import { U, vnoise, hashSin, hash12, sstep, loopW } from './tsl.js';
 import { clamp as clampJS, lerp, smoothstep, mulberry32 } from './noise.js';
 
 const cfbm = Fn(([p0]) => {
@@ -10,6 +10,14 @@ const cfbm = Fn(([p0]) => {
   for (let i = 0; i < 5; i++) { s.addAssign(a.mul(vnoise(p))); p.assign(vec2(p.x.mul(1.6).sub(p.y.mul(1.2)), p.x.mul(1.2).add(p.y.mul(1.6))).add(3.1)); a.mulAssign(0.5); }
   return s;
 });
+
+// the clouds at cloud-plane coordinates cuv, thresholded by the cover's shift sh: (density, thickness)
+const cloudShape = Fn(([cuv, sh]) => {
+  const w = vec2(cfbm(cuv.mul(0.35).add(7.0)), cfbm(cuv.mul(0.35).sub(4.0))).toVar();
+  const n = cfbm(cuv.mul(0.55).add(w.mul(1.4))).toVar();
+  const streak = cfbm(vec2(cuv.x.mul(0.25), cuv.y.mul(1.1)).add(w));
+  return vec2(sstep(float(0.56).sub(sh), float(0.8).sub(sh), n.mul(0.75).add(streak.mul(0.35))), sstep(float(0.55).sub(sh), float(0.95).sub(sh), n));
+}).setLayout({ name: 'cloudShape', type: 'vec2', inputs: [{ name: 'cuv', type: 'vec2' }, { name: 'sh', type: 'float' }] });
 
 const MOON_R = Math.tan(THREE.MathUtils.degToRad(1.15)); // drawn about 4x its real size
 const CUT_R = 1.35, CUT_K = 0.9; // the circle that cuts the crescent, in moon radii
@@ -40,7 +48,7 @@ const starField = Fn(([s]) => {
   // many faint stars, a few bright ones, all below the bloom's threshold (2.2, post.js) at their twinkle's peak, so
   // none blooms
   const b = pow(hash12(c.add(9.7)), 14.0).mul(3.2).min(2.0).add(0.004);
-  const twinkle = sin(U.uTime.mul(k.mul(5.0).add(2.0)).add(k.mul(60.0))).mul(0.22).add(0.85);
+  const twinkle = sin(U.uTime.mul(loopW(k.mul(5.0).add(2.0))).add(k.mul(60.0))).mul(0.22).add(0.85);
   const tint = mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.68), hash12(c.add(3.3)));
   return tint.mul(b.mul(twinkle).mul(exp(r.mul(r).mul(-1.0))).mul(step(k, STAR_P)));
 });
@@ -67,7 +75,9 @@ export function makeSky() {
   const uniforms = {
     uZenith: uniform(new THREE.Color()),
     uHorizon: uniform(new THREE.Color()),
-    uCloud: uniform(new THREE.Vector2()),
+    uCloud: uniform(new THREE.Vector2()), // the clouds' drift
+    uCloudOld: uniform(new THREE.Vector2()), // the drift before it started again (main.js), crossfaded out
+    uCloudFade: uniform(0), // how much of uCloudOld's clouds the sky shows (0: none)
     uCloudLit: uniform(new THREE.Color()),
     uCloudShade: uniform(new THREE.Color()),
     uCover: uniform(0.35), // cloud cover 0..1 (0.35: the original sky)
@@ -81,7 +91,7 @@ export function makeSky() {
     uMeteorAxis: uniform(new THREE.Vector3(1, 0, 0)), // it moves along the great circle about this axis
     uMeteorLen: uniform(0), // trail length, radians
   };
-  const { uZenith, uHorizon, uCloud, uCloudLit, uCloudShade, uCover, uBoltDir, uMoonDir, uMoonVis, uStarVis, uStarRot, uMeteor, uMeteorHead, uMeteorAxis, uMeteorLen } = uniforms;
+  const { uZenith, uHorizon, uCloud, uCloudOld, uCloudFade, uCloudLit, uCloudShade, uCover, uBoltDir, uMoonDir, uMoonVis, uStarVis, uStarRot, uMeteor, uMeteorHead, uMeteorAxis, uMeteorLen } = uniforms;
   const skyColor = Fn(() => {
     const d = normalize(positionWorld.sub(cameraPosition)).toVar();
     const h = d.y, mu = dot(d, U.uSunDir).toVar();
@@ -158,13 +168,12 @@ export function makeSky() {
     const sh = uCover.sub(0.35).mul(0.5);
     const dens = float(0).toVar();
     If(h.greaterThan(-0.02), () => {
-      const cuv = d.xz.div(h.add(0.12)).mul(1.3).add(uCloud).toVar();
-      const w = vec2(cfbm(cuv.mul(0.35).add(7.0)), cfbm(cuv.mul(0.35).sub(4.0))).toVar();
-      const n = cfbm(cuv.mul(0.55).add(w.mul(1.4))).toVar();
-      const streak = cfbm(vec2(cuv.x.mul(0.25), cuv.y.mul(1.1)).add(w));
-      dens.assign(sstep(float(0.56).sub(sh), float(0.8).sub(sh), n.mul(0.75).add(streak.mul(0.35))));
+      const plane = d.xz.div(h.add(0.12)).mul(1.3).toVar();
+      const shape = cloudShape(plane.add(uCloud), sh).toVar();
+      If(uCloudFade.greaterThan(0.0), () => { shape.assign(mix(shape, cloudShape(plane.add(uCloudOld), sh), uCloudFade)); });
+      dens.assign(shape.x);
       dens.mulAssign(sstep(-0.02, 0.18, h).mul(float(1.0).sub(sstep(0.55, 0.95, h).mul(float(0.6).mul(float(1.0).sub(sstep(0.5, 1.0, uCover)))))));
-      const thick = sstep(float(0.55).sub(sh), float(0.95).sub(sh), n);
+      const thick = shape.y;
       const cl = mix(uCloudLit, uCloudShade, sstep(0.3, 1.0, thick).mul(0.85).add(float(1.0).sub(sunSide).mul(0.25))).toVar();
       // silver lining toward the sun
       cl.addAssign(U.uSunColor.mul(pow(g, 14.0)).mul(float(1.0).sub(thick)).mul(1.2).mul(U.uSunVis));

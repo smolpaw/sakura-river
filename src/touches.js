@@ -12,10 +12,10 @@
 //   boat's hull as it rocks; a koi rising under the surface now and then (koi.js).
 // The sources keep `wakes` (where each stands, refreshed in their update) and push `splashes` as they happen; update()
 // copies the wakes into their slots and gives each splash the next ring slot with the time it happened (the shader
-// takes the ring's age from U.uTime). Nothing else on the CPU.
+// takes the ring's age from U.uTime, and the CPU ends it after its life). Nothing else on the CPU.
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, dot, abs, sin, sign, length, clamp, max, uniformArray, If, Loop } from 'three/tsl';
-import { U, vnoise, sstep } from './tsl.js';
+import { Fn, float, vec2, dot, abs, sin, sign, length, clamp, max, mod, uniformArray, If, Loop } from 'three/tsl';
+import { U, vnoise, vnoiseLoop, sstep, LOOP, loopDrift, flowDrift } from './tsl.js';
 
 const N = 12; // points in all
 const WAKES = 5; // the first slots: standing wakes (the heron's two legs, the boat's bow and stern, the float)
@@ -23,6 +23,7 @@ const LIFE = 3.0, SPEED = 0.42, R0 = 0.03; // a ring's life (s), how fast its fr
 const DRIFT = 0.4; // how much of the water's pattern speed (water.js uFlow) the rings drift with
 const TAN = 0.42, COS = 1 / Math.hypot(1, TAN), SIN = TAN / Math.hypot(1, TAN); // the wake's arms against the flow
 const TAU = Math.PI * 2;
+const FLICK = [loopDrift(0.9), loopDrift(0.4)], STRIP = flowDrift(0.8 * 9); // (tsl.js: the clocks' loops)
 
 // a: x, z and (a ring) the capsule's half axis, (a wake) its ripples' wavelength;
 // b: radius, (a ring) the time it began or (a wake) its length, strength, kind (0 off, 1 ring, 2 wake)
@@ -57,18 +58,18 @@ export function makeTouches() {
           const env = sstep(0.015, -0.01, s).mul(inside);
           const along = sstep(0.0, 0.2, u).mul(sstep(b.y, b.y.mul(0.3), u)).div(max(u, 0.0).mul(3.0).add(1.0).sqrt());
           // flickering along each arm, as the current is never quite steady
-          const flick = vnoise(vec2(u.mul(7.0).sub(U.uTime.mul(0.9)), sign(c).mul(3.0).add(U.uTime.mul(0.4)))).mul(1.1).add(0.2);
+          const flick = vnoiseLoop(vec2(u.mul(7.0).sub(U.uTime.mul(FLICK[0][0])), sign(c).mul(3.0).add(U.uTime.mul(FLICK[1][0]))), vec2(FLICK[0][1], FLICK[1][1])).mul(1.1).add(0.2);
           const wave = sin(s.mul(TAU).div(a.z).add(sin(U.uTime.mul(2.3).add(u.mul(5.0))).mul(0.5)));
           const gs = ac.mul(sign(c).mul(COS)).sub(fl.mul(SIN));
           g.addAssign(gs.mul(wave.mul(env).mul(along).mul(flick).mul(b.z).mul(run).mul(0.3)));
           // broken water straight behind it, carried off by the current
           const strip = sstep(b.x.add(u.mul(0.1)).add(0.03), b.x.mul(0.5), ca).mul(sstep(0.0, 0.05, u)).mul(sstep(b.y.mul(0.6), 0.0, u));
-          const q = vec2(c.mul(30.0).div(b.x.mul(4.0).add(1.0)), u.sub(U.uFlow.mul(0.8)).mul(9.0));
-          const jit = vec2(vnoise(q), vnoise(q.add(vec2(5.3, 2.1)))).sub(0.5);
+          const q = vec2(c.mul(30.0).div(b.x.mul(4.0).add(1.0)), u.mul(9.0).sub(U.uFlow.mul(STRIP[0])));
+          const jit = vec2(vnoiseLoop(q, vec2(0, STRIP[1])), vnoiseLoop(q.add(vec2(5.3, 2.1)), vec2(0, STRIP[1]))).sub(0.5);
           g.addAssign(jit.mul(strip.mul(b.z).mul(run).mul(0.6)));
         });
       }).ElseIf(b.w.greaterThan(0.5), () => {
-        const age = U.uTime.sub(b.y);
+        const age = mod(U.uTime.sub(b.y), LOOP); // (across a wrap of uTime too)
         If(age.greaterThan(0.0).and(age.lessThan(LIFE)), () => {
           const rel = xz.sub(a.xy.add(fl.mul(speed.mul(1.3 * DRIFT).mul(age))));
           const h = a.zw;
@@ -100,6 +101,8 @@ export function makeTouches() {
     update(t, sources) {
       let k = 0;
       now = t;
+      // rings over (before uTime wraps round to their time again)
+      for (let i = WAKES; i < N; i++) if (B[i].w === 1 && (((t - B[i].y) % LOOP) + LOOP) % LOOP > LIFE) B[i].w = 0;
       for (const s of sources) {
         for (const w of s.wakes || []) {
           if (k >= WAKES) break;

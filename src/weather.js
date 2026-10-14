@@ -1,7 +1,7 @@
 // Weather: presets, the time-of-day clock, the sky under cloud cover, rain streaks and lightning
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec3, vec4, uniform, attribute, normalize, cross, mod, length, positionGeometry, positionWorld, cameraPosition } from 'three/tsl';
-import { U, sstep, applyFog, fogAmount, lanternLight } from './tsl.js';
+import { U, sstep, applyFog, fogAmount, lanternLight, loopRate } from './tsl.js';
 import { mulberry32, lerp, smoothstep } from './noise.js';
 
 // Weather presets, independent of the time of day. Values are the engine's 0..1 settings (see set() in main.js);
@@ -54,21 +54,23 @@ export function makeRain(count) {
   for (let i = 0; i < count * 4; i++) seed[i] = rng();
   geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 4));
   geo.instanceCount = count;
-  const mesh = new THREE.Mesh(geo, rainMaterial());
+  const drift = uniform(new THREE.Vector2());
+  const mesh = new THREE.Mesh(geo, rainMaterial(drift));
+  mesh.userData.drift = drift; // the wind's carry (m, x and z), within the box (main.js)
   mesh.frustumCulled = false;
   mesh.renderOrder = 4;
   mesh.layers.set(1);
   return mesh;
 }
 
-function rainMaterial() {
+function rainMaterial(drift) {
   const seed = attribute('aSeed', 'vec4');
   const BOX = vec3(60.0, 30.0, 60.0);
   const pos = Fn(() => {
     const p = seed.xyz.mul(BOX).toVar();
-    p.y.subAssign(U.uTime.mul(seed.w.mul(3.0).add(9.0)));
-    const w = U.uWindDir.mul(U.uWindRun).mul(2.0);
-    p.assign(vec3(p.x.add(w.x), p.y, p.z.add(w.y)));
+    // falling at 9-12 m/s, nudged to whole falls through the box in the clock's loop (tsl.js)
+    p.y.subAssign(U.uTime.mul(loopRate(seed.w.mul(3.0).add(9.0).div(30.0)).mul(30.0)));
+    p.assign(vec3(p.x.add(drift.x), p.y, p.z.add(drift.y)));
     const c = cameraPosition.sub(BOX.mul(0.5));
     p.assign(c.add(mod(p.sub(c), BOX)));
     const fall = normalize(vec3(U.uWindDir.x.mul(U.uWind).mul(0.2), -1.0, U.uWindDir.y.mul(U.uWind).mul(0.2)));

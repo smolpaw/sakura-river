@@ -6,8 +6,8 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { createWorld, depthTexture } from './world.js';
-import { U, sceneFog, pcfSoftShadowFilter, setLightMap } from './tsl.js';
-import { makeFarShadow, FAR_LAYER, CLOUDS } from './sunshadow.js';
+import { U, sceneFog, pcfSoftShadowFilter, setLightMap, LOOP, RUN_LOOP, FLOW_LOOP, CLOCK } from './tsl.js';
+import { makeFarShadow, FAR_LAYER, CLOUDS, CLOUD_LOOP } from './sunshadow.js';
 import { lightMap, lightMapAdd, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE, FLOWER_ATTRS, trunkBendAttributes } from './tree.js';
 import { makeTurf, makeFlowers, SHRUB_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
@@ -973,6 +973,37 @@ export async function create(canvas, opts = {}) {
     }
   }
 
+  // ---------- the running clocks ----------
+  // Scene time, the wind's run, the river pattern's run and the clouds' drift, kept here in doubles. The shaders get
+  // them wrapped at their loops (tsl.js LOOP, RUN_LOOP, FLOW_LOOP; sunshadow.js CLOUD_LOOP for the clouds' shadows),
+  // over which every use repeats exactly: a wrap shows nothing, and the floats keep their precision however long the
+  // scene runs (docs/performance.md, Bounded clocks). The sky's clouds (noise in rotated octaves) don't repeat: once
+  // their drift is CLOUD_WRAP out it starts again from nothing, the sky crossfading from the clouds before over
+  // CLOUD_FADE s, every day or two. The CPU's animation takes the time unwrapped.
+  const CLOUD_WRAP = 2000, CLOUD_FADE = 60;
+  const CK = { time: 0, run: 0, flow: 0, cloud: new THREE.Vector2(), base: new THREE.Vector2(), old: new THREE.Vector2(), fade: 0, wrap: true };
+  const wrapAt = (v, p) => (CK.wrap ? v - p * Math.floor(v / p) : v);
+  function runClocks(dt) {
+    CK.time += dt; CK.run += dt * S.wind; CK.flow += dt * S.river * 1.3;
+    CK.cloud.x += dt * (0.006 + S.wind * 0.012); CK.cloud.y -= dt * (0.003 + S.wind * 0.005);
+    U.uTime.value = wrapAt(CK.time, LOOP); CLOCK.base = CK.time - U.uTime.value;
+    U.uWindRun.value = wrapAt(CK.run, RUN_LOOP);
+    U.uFlow.value = wrapAt(CK.flow, FLOW_LOOP);
+    CLOUDS.uPos.value.set(wrapAt(CK.cloud.x, CLOUD_LOOP), wrapAt(CK.cloud.y, CLOUD_LOOP));
+    // the rain's drift with the wind, within its box (weather.js)
+    rain.userData.drift.value.set(wrapAt(U.uWindDir.value.x * CK.run * 2, 60), wrapAt(U.uWindDir.value.y * CK.run * 2, 60));
+    const c = sky.uniforms;
+    c.uCloud.value.subVectors(CK.cloud, CK.base);
+    if (CK.fade > 0) CK.fade = Math.max(0, CK.fade - dt / CLOUD_FADE);
+    else if (CK.wrap && Math.max(Math.abs(c.uCloud.value.x), Math.abs(c.uCloud.value.y)) > CLOUD_WRAP) {
+      CK.old.copy(CK.base); CK.base.copy(CK.cloud); CK.fade = 1;
+      c.uCloud.value.set(0, 0);
+    }
+    c.uCloudOld.value.subVectors(CK.cloud, CK.old);
+    c.uCloudFade.value = smoothstep(0, 1, CK.fade);
+    post.grade.uniforms.time.value = U.uTime.value;
+  }
+
   // ---------- loop ----------
   const timer = new THREE.Timer();
   const tmpV = new THREE.Vector3(), sdl = new THREE.Vector3(), camDir = new THREE.Vector3();
@@ -1027,15 +1058,10 @@ export async function create(canvas, opts = {}) {
       U.uSkyAmb.value.copy(ambBase).add(tmpC.copy(flashCol).multiplyScalar(flash * 0.6));
       flashed = flash > 0.001;
     }
-    U.uTime.value += dt;
     U.uWind.value = S.wind;
-    U.uWindRun.value += dt * S.wind;
-    U.uFlow.value += dt * S.river * 1.3;
+    runClocks(dt);
     water.uniforms.uSpeed.value = S.river;
-    sky.uniforms.uCloud.value.x += dt * (0.006 + S.wind * 0.012);
-    sky.uniforms.uCloud.value.y -= dt * (0.003 + S.wind * 0.005);
-    // the clouds' shadows drift with the sky's clouds (sunshadow.js)
-    CLOUDS.uPos.value.copy(sky.uniforms.uCloud.value); CLOUDS.uCover.value = S.clouds; CLOUDS.uSun.value.copy(U.uSunDir.value);
+    CLOUDS.uCover.value = S.clouds; CLOUDS.uSun.value.copy(U.uSunDir.value);
     U.uFogDensity.value = 0.0006 + Math.pow(S.fog, 1.5) * 0.013;
     U.uFogFalloff.value = 0.028;
     U.uAerial.value = (0.7 + 1.2 * S.fog) / 2400; // hazier air with the weather's haze
@@ -1043,12 +1069,11 @@ export async function create(canvas, opts = {}) {
     U.uMist.value = smoothstep(4.2, 5.0, clockH) * smoothstep(8.3, 6.8, clockH) * lerp(1, 0.4, S.wind / 1.6);
     mist.visible = warming || U.uMist.value > 0.001; // warm-up builds its pipeline
     post.bloom.uniforms.strength.value = S.bloom * 1.6;
-    post.grade.uniforms.time.value = U.uTime.value;
 
-    if (petals.isPetalSystem) petals.update(dt, U.uTime.value, S.wind, S.river);
+    if (petals.isPetalSystem) petals.update(dt, CK.time, S.wind, S.river);
     else petals.update(renderer, warming ? 1 / 60 : dt, U.uTime.value, S.wind, S.river);
-    koi.update(dt, U.uTime.value);
-    boats.update(U.uTime.value, camera.position);
+    koi.update(dt, CK.time);
+    boats.update(CK.time, camera.position);
     rafts.geometry.instanceCount = Math.round(G.rafts.n * Math.min(1, S.petals / 0.6)); // fewer when fewer petals fall
     deer.update(dt, { hour: clockH, rain: S.rain, camera, walker: walker && walk.state, warming });
     herons.update(dt, clockH, camera, warming, walker && walk.state);
@@ -1061,9 +1086,9 @@ export async function create(canvas, opts = {}) {
     // the hearths' smoke: thickest when the rice is on, morning and evening; thinned by rain
     const cook = Math.exp(-(((clockH - 6.8) / 1.3) ** 2)) + Math.exp(-(((clockH - 17.8) / 1.4) ** 2));
     smoke.uAmount.value = (0.3 + 0.7 * Math.min(1, cook)) * (1 - 0.6 * S.rain);
-    birds.update(dt, { t: U.uTime.value, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
+    birds.update(dt, { t: CK.time, hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, windDir: U.uWindDir.value, flash, camera, focus: controls.target });
     butterflies.update({ hour: clockH, rain: S.rain, clouds: S.clouds, wind: S.wind / 1.6, warming });
-    perched.update({ hour: clockH, rain: S.rain, wind: S.wind / 1.6, camera, walker: walker && walk.state, warming });
+    perched.update({ t: CK.time, hour: clockH, rain: S.rain, wind: S.wind / 1.6, camera, walker: walker && walk.state, warming });
     for (const b of perched.bitten()) dropped.drop(b);
     dropped.update(dt, { wind: S.wind / 1.6, windDir: U.uWindDir.value });
     turtles.update(dt, { hour: clockH, rain: S.rain, clouds: S.clouds, camera, walker: walker && walk.state, warming });
@@ -1361,6 +1386,23 @@ export async function create(canvas, opts = {}) {
     setView(pos, target) { if (walking) setWalk(false, false); tween = null; camera.position.set(...pos); controls.target.set(...target); controls.update(); },
     heroView() { if (walking) setWalk(false, false); cinematic = false; controls.enabled = true; tween = null; camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); },
     advance(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt, false); },
+    // debug: the running clocks as after `at` s at the current wind and river, or set one by one ({ time, run, flow,
+    // cloud: [x, y] }); `wrap` false hands the shaders them unwrapped (precision checks, and a frame wrapped matching
+    // one unwrapped)
+    setClocks(at, wrap = true) {
+      const c = typeof at === 'number' ? { time: at, run: at * S.wind, flow: at * S.river * 1.3, cloud: [at * (0.006 + S.wind * 0.012), -at * (0.003 + S.wind * 0.005)] } : at;
+      Object.assign(CK, { time: c.time, run: c.run, flow: c.flow, fade: 0, wrap });
+      CK.cloud.fromArray(c.cloud); CK.base.set(0, 0); CK.old.set(0, 0);
+      runClocks(0);
+    },
+    // debug: the clocks (time, run, flow, cloud: unwrapped), what the shaders have of them, and the loops they wrap at
+    clockInfo() {
+      return {
+        time: CK.time, run: CK.run, flow: CK.flow, cloud: CK.cloud.toArray(),
+        uTime: U.uTime.value, uWindRun: U.uWindRun.value, uFlow: U.uFlow.value, uCloud: sky.uniforms.uCloud.value.toArray(), cloudFade: sky.uniforms.uCloudFade.value,
+        loops: { time: LOOP, run: RUN_LOOP, flow: FLOW_LOOP, cloudShadow: CLOUD_LOOP, cloud: CLOUD_WRAP, cloudFade: CLOUD_FADE },
+      };
+    },
     bench: probe,
     hashScene: () => hashScene(scene, { heightCache: world.heightCacheData() }),
     // bench: triangles per drawable (instances included; a model level's: those in the camera's view), largest first

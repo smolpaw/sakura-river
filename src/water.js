@@ -5,7 +5,7 @@ import {
   Fn, float, vec2, vec3, vec4, uniform, texture, attribute, mix, max, min, pow, dot, normalize, clamp, length, reflect, sin, cos, abs, floor, fract,
   positionWorld, cameraPosition, reflector, If, select, exp,
 } from 'three/tsl';
-import { U, vnoise, hash12, sstep, applyFog, fogTint } from './tsl.js';
+import { U, vnoiseLoop, hash12, sstep, applyFog, fogTint, LOOP, loopRate, loopIdx, loopDrift, flowDrift } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
 
 // wheel: the waterwheel's hub and its axle's direction ({ pos: [x, y, z], yaw }), where it churns the water white;
@@ -27,30 +27,40 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const t = rockTex.sample(ruv);
     return select(within(ruv), vec2(t.r.mul(4.0), t.g), vec2(4.0, 0.0));
   });
+  // the noise at (p.x * sx + ox, (p.y - uFlow * k) * sy) (+ off), drifting across at `across` cells per second
+  const octave = (p, sx, ox, k, sy, off = null, across = 0) => {
+    const [fr, fn] = flowDrift(k * sy), [tr, tn] = loopDrift(across);
+    let q = vec2(p.x.mul(sx).add(ox), p.y.mul(sy).sub(U.uFlow.mul(fr)));
+    if (off) q = q.add(off);
+    if (across) q = q.add(vec2(U.uTime.mul(tr), 0.0));
+    return vnoiseLoop(q, vec2(tn, fn));
+  };
   const hfield = Fn(([p]) => {
     // p.x across (m), p.y along (m, increases downstream: the patterns scroll with the current)
-    const f = U.uFlow, t = U.uTime;
+    // (each octave's lattice wrapped where the run of uFlow's and uTime's loops takes it: tsl.js vnoiseLoop)
+    const t = U.uTime;
     const h = float(0).toVar();
-    h.addAssign(vnoise(vec2(p.x.mul(0.45), p.y.sub(f.mul(0.9)).mul(0.3))).mul(0.55));
-    h.addAssign(vnoise(vec2(p.x.mul(1.1).add(4.0), p.y.sub(f).mul(0.8)).add(vec2(0.0, sin(t.mul(0.3)).mul(0.2)))).mul(0.28));
-    h.addAssign(vnoise(vec2(p.x.mul(2.7), p.y.sub(f.mul(1.15)).mul(2.2)).add(t.mul(vec2(0.13, 0.0)))).mul(0.13));
-    h.addAssign(vnoise(vec2(p.x.mul(6.0).add(t.mul(0.4)), p.y.sub(f.mul(1.2)).mul(5.0))).mul(0.05).mul(U.uWind.add(0.4)));
+    h.addAssign(octave(p, 0.45, 0, 0.9, 0.3).mul(0.55));
+    h.addAssign(octave(p, 1.1, 4.0, 1.0, 0.8, vec2(0.0, sin(t.mul(0.3)).mul(0.2))).mul(0.28));
+    h.addAssign(octave(p, 2.7, 0, 1.15, 2.2, null, 0.13).mul(0.13));
+    h.addAssign(octave(p, 6.0, 0, 1.2, 5.0, null, 0.4).mul(0.05).mul(U.uWind.add(0.4)));
     // standing ripple streaks
-    h.addAssign(vnoise(vec2(p.x.mul(3.5), p.y.sub(f.mul(1.05)).mul(0.35))).mul(0.12));
+    h.addAssign(octave(p, 3.5, 0, 1.05, 0.35).mul(0.12));
     return h;
   });
   // raindrops: rings spreading from random points of two jittered grids (world metres); returns a slope.
   // Each cell's drop lands at a random moment of its cycle, in a fraction of cycles that grows with the rain.
   const ripples = Fn(([xz]) => {
     const g = vec2(0.0).toVar();
-    for (const [cell, off, rate] of [[0.55, 0.0, 1.1], [0.37, 0.43, 1.37]]) {
+    for (const [cell, off, rate0] of [[0.55, 0.0, 1.1], [0.37, 0.43, 1.37]]) {
+      const rate = loopRate(rate0), n = Math.round(rate * LOOP); // (the cycles in a loop of uTime)
       const q = xz.div(cell).add(off);
       const id = floor(q), f = fract(q).sub(0.5);
       const h = hash12(id);
       const c = vec2(h, hash12(id.add(19.7))).sub(0.5).mul(0.3);
       const cyc = U.uTime.mul(rate).add(h.mul(13.0));
       const ph = fract(cyc);
-      const on = hash12(id.add(floor(cyc).mul(7.13))).lessThan(U.uRain).select(1.0, 0.0);
+      const on = hash12(id.add(loopIdx(floor(cyc), n).mul(7.13))).lessThan(U.uRain).select(1.0, 0.0);
       const v = f.sub(c), d = length(v);
       const x = d.sub(ph.mul(0.33));
       const env = float(1.0).sub(ph).mul(float(1.0).sub(ph)).mul(sstep(0.1, 0.0, abs(x)));
@@ -126,10 +136,10 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
     const sd = max(dot(R, U.uSunDir), 0.0);
     col.addAssign(U.uSunColor.mul(U.uSunVis).mul(sunShadow).mul(pow(sd, 900.0).mul(7.0).add(pow(sd, 90.0).mul(0.35))));
     // shore & rock foam
-    const foamN = vnoise(vec2(p.x.mul(2.2), p.y.sub(U.uFlow.mul(1.1)).mul(1.6))).mul(0.6).add(vnoise(vec2(p.x.mul(7.0), p.y.sub(U.uFlow.mul(1.2)).mul(5.0))).mul(0.4));
+    const foamN = octave(p, 2.2, 0, 1.1, 1.6).mul(0.6).add(octave(p, 7.0, 0, 1.2, 5.0).mul(0.4));
     // a band along the shore; at rocks, white water streaked along the current (none on the rock itself)
     const shore = sstep(0.32, 0.02, bed).mul(sstep(0.35, 0.7, foamN.add(float(1.0).sub(sstep(0.0, 0.2, bed)).mul(0.25))));
-    const streak = vnoise(vec2(p.x.mul(6.0), p.y.sub(U.uFlow.mul(1.3)).mul(0.9))).mul(0.6).add(foamN.mul(0.4));
+    const streak = octave(p, 6.0, 0, 1.3, 0.9).mul(0.6).add(foamN.mul(0.4));
     const broken = sstep(0.2, 0.65, wake.mul(streak.mul(0.9).add(0.45)));
     const foam = max(shore, broken).mul(sstep(0.0, 0.05, rock)).toVar();
     if (wheel) {
@@ -142,7 +152,7 @@ export function makeWater(geometry, depthMap, sky, { reflectionScale = 0, cleari
       const churn = sstep(0.75, 0.25, a.abs()).mul(sstep(2.2, 1.2, b));
       const trail = sstep(1.4, 0.4, a.abs()).mul(sstep(-0.5, 0.5, down)).mul(sstep(9.0, 1.0, down)).mul(streak.mul(0.8).add(0.3));
       // broken into bubbles and streaks: the churn thick, the trail thinning into lines along the current
-      const bub = vnoise(vec2(p.x.mul(9.0), p.y.sub(U.uFlow.mul(1.6)).mul(7.0))).mul(0.5).add(foamN.mul(0.5));
+      const bub = octave(p, 9.0, 0, 1.6, 7.0).mul(0.5).add(foamN.mul(0.5));
       // (the noise sits round 0.5: the cut falls as the churn rises, so the white covers more of it near the wheel)
       const cutC = float(0.78).sub(churn.mul(0.3)), cutT = float(0.72).sub(trail.mul(0.12));
       const white = max(sstep(cutC, cutC.add(0.06), bub).mul(churn), sstep(cutT, cutT.add(0.05), streak.mul(0.6).add(bub.mul(0.4))).mul(trail));
@@ -181,7 +191,8 @@ export function makeMist(riverGeo) {
     const dy = abs(normalize(wp.sub(cameraPosition)).y);
     const path = min(float(DY).div(max(dy, 1e-3)), 40.0);
     const density = exp(wp.y.div(-1.6)).mul(0.065);
-    const drift = vnoise(wp.xz.mul(0.06).add(U.uTime.mul(vec2(0.05, 0.02))).add(wp.y.mul(3.1))).mul(0.8).add(0.6);
+    const [rx, nx] = loopDrift(0.05), [rz, nz] = loopDrift(0.02);
+    const drift = vnoiseLoop(wp.xz.mul(0.06).add(U.uTime.mul(vec2(rx, rz))).add(wp.y.mul(3.1)), vec2(nx, nz)).mul(0.8).add(0.6);
     // over the water only (the ribbon runs to 1.32 half-widths: full to 0.5, gone by 0.8, before the bank rises)
     const edge = sstep(0.6, 0.38, abs(attribute('uv', 'vec2').x.mul(2.0).sub(1.0)));
     const level = sstep(0.05, 0.35, abs(cameraPosition.y.sub(wp.y))); // a sheet at eye level would show as a line

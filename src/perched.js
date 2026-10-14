@@ -20,7 +20,7 @@
 // violet at its edges; no shadows, not in the reflection.
 import * as THREE from 'three/webgpu';
 import { Fn, vec2, vec3, float, sin, cos, abs, sign, min, max, mix, clamp, select, floor, fract, length, atan, dot, pow, reflect, attribute, uniform, positionGeometry, normalGeometry, positionWorld, cameraPosition, transformNormalToView, faceDirection } from 'three/tsl';
-import { LitMaterial, U, sstep, hash12, SHADOW_NORMAL_BIAS } from './tsl.js';
+import { LitMaterial, U, sstep, hash12, SHADOW_NORMAL_BIAS, LOOP, CLOCK, loopW, loopRate, loopIdx } from './tsl.js';
 import { bridgeFrame, BRIDGE_Z, RAIL_OFF } from './props.js';
 import { TORII } from './village.js';
 import { groundBounce } from './materials.js';
@@ -72,6 +72,7 @@ const SHAPES = {
 };
 const ELBOW = { sparrow: 0.055, crow: 0.22 }; // where the spread wing's hand starts (x)
 const HZ = { sparrow: 15, crow: 4.2 }; // wing beats per second
+const OVER = -1e4, NOT_YET = 1e6; // a flight's times (aE.xy) when it is long over, and a coming back not yet set
 
 // parts (aInfo.x): 0 body, 1 wing, 2 tail, 3 leg, 4 upper beak tip, 5 lower beak tip (opens)
 const RING = 16; // vertices round each of the body's rings
@@ -173,7 +174,7 @@ const c3 = (p) => vec3(p[0], p[1], p[2]);
 // aA: perch point (x, y, z), seed; aB: along the perch per metre (x, y, z: its slope), the perch's curvature
 // (y = c s²); aC: kind (0 the sparrow's shape, 1 the crow's), size, how far it hops either way (m), rank; aD: its
 // loops' radius (m), how often it flies one, which side it faces most, its flight's rise (m); aE: when its flight left
-// and when it comes back (uTime s), its flight's run (x, z, m); aF: species (SPECIES), 1 if out of sight while away
+// and when it comes back (uTime s: scene time less CLOCK.base), its flight's run (x, z, m); aF: species (SPECIES), 1 if out of sight while away
 function perchedMaterial(sc, uAmount) {
   const A = attribute('aA', 'vec4'), B = attribute('aB', 'vec4'), C = attribute('aC', 'vec4'), D = attribute('aD', 'vec4');
   // (rounded: an equality test on the value interpolated to the fragments can miss it by a hair)
@@ -185,18 +186,21 @@ function perchedMaterial(sc, uAmount) {
   const h = (k, j) => hash12(vec2(k, seed.mul(53.1).add(j * 7.31)));
   const isWing = part.equal(1.0).select(1.0, 0.0);
 
+  // (every clock below fits the scene clock's loop, tsl.js: a step's or a cycle's period whole steps of it, the steps'
+  // counts wrapped with it where they pick hashed values, the rates whole turns)
+  const steps = (T) => floor(float(LOOP).div(T).add(0.5)).max(1.0); // in a loop
   // ---- perched: hops and turns on a step clock of 2-6 s, its steps jittered ----
-  const H = mix(float(3.0), float(4.5), kind).mul(fract(seed.mul(7.7)).mul(0.8).add(0.6));
-  const tw = t.div(H).add(sin(t.mul(1.3).div(H).add(seed.mul(20.0))).mul(0.25));
-  const k = floor(tw), f = fract(tw), since = f.mul(H);
+  const NH = steps(mix(float(3.0), float(4.5), kind).mul(fract(seed.mul(7.7)).mul(0.8).add(0.6))), H = float(LOOP).div(NH);
+  const tw = t.div(H).add(sin(t.mul(loopW(float(1.3).div(H))).add(seed.mul(20.0))).mul(0.25));
+  const k0 = floor(tw), k = loopIdx(k0, NH), kp = loopIdx(k0.sub(1.0), NH), f = fract(tw), since = f.mul(H);
   const hop = sstep(0.0, mix(float(0.14), float(0.32), kind), since);
-  const sPrev = h(k.sub(1.0), 1).sub(0.5).mul(2.0).mul(range), sCur = h(k, 1).sub(0.5).mul(2.0).mul(range);
+  const sPrev = h(kp, 1).sub(0.5).mul(2.0).mul(range), sCur = h(k, 1).sub(0.5).mul(2.0).mul(range);
   const s = mix(sPrev, sCur, hop);
   const arc = hop.mul(hop.oneMinus()).mul(4.0).mul(mix(float(0.022), float(0.1), kind)).mul(sstep(0.004, 0.012, abs(sCur.sub(sPrev))));
   // it faces off the perch one way or the other (mostly D.z's side), turning about in a hop; the crow looser
   const side = (kk) => select(h(kk, 2).lessThan(mix(float(0.62), float(0.5), kind)), D.z, D.z.oneMinus());
   const jit = (kk) => h(kk, 9).sub(0.5).mul(mix(float(0.5), float(1.2), kind));
-  const face = mix(side(k.sub(1.0)).mul(Math.PI).add(jit(k.sub(1.0))), side(k).mul(Math.PI).add(jit(k)), hop);
+  const face = mix(side(kp).mul(Math.PI).add(jit(kp)), side(k).mul(Math.PI).add(jit(k)), hop);
   const perchYaw = atan(B.x, B.z);
   const sitYaw = perchYaw.add(Math.PI / 2).add(face);
   // what it does through the step: preens, puffs up (sparrows), caws (the crow)
@@ -204,23 +208,24 @@ function perchedMaterial(sc, uAmount) {
   const preen = b.lessThan(0.16).select(1.0, 0.0).mul(sstep(0.12, 0.22, f)).mul(sstep(0.92, 0.8, f));
   const puff = b.greaterThanEqual(0.16).and(b.lessThan(0.32)).select(1.0, 0.0).mul(sstep(0.05, 0.2, f)).mul(sstep(0.98, 0.85, f)).mul(sparrow);
   const cawWin = b.greaterThan(0.55).select(1.0, 0.0).mul(sstep(0.2, 0.28, f)).mul(sstep(0.75, 0.67, f)).mul(kind);
-  const cq = fract(t.mul(1.5));
+  const cq = fract(t.mul(loopRate(1.5)));
   const caw = sstep(0.0, 0.06, cq).mul(sstep(0.42, 0.28, cq)).mul(cawWin);
   // the head: quick turns on its own clock, the crow's slower; preening, turned round to the wing and dipping
-  const ht = t.mul(mix(float(1.5), float(0.6), kind)).add(seed.mul(3.0)), hk = floor(ht);
+  const hr = loopRate(mix(float(1.5), float(0.6), kind)), nh = floor(hr.mul(LOOP).add(0.5));
+  const ht = t.mul(hr).add(seed.mul(3.0)), hk0 = floor(ht), hk = loopIdx(hk0, nh), hkp = loopIdx(hk0.sub(1.0), nh);
   const hTurn = sstep(0.0, mix(float(0.08), float(0.2), kind), fract(ht).div(mix(float(1.5), float(0.6), kind)));
   const pside = h(k, 6).lessThan(0.5).select(-1.0, 1.0);
-  const headYaw = mix(mix(h(hk.sub(1.0), 4), h(hk, 4), hTurn).sub(0.5).mul(1.8), pside.mul(2.3).add(sin(t.mul(17.0)).mul(0.12)), preen);
-  const headDip = mix(mix(h(hk.sub(1.0), 5), h(hk, 5), hTurn).sub(0.45).mul(0.5), sin(t.mul(23.0)).mul(0.1).add(0.8), preen).add(cawWin.mul(0.3));
+  const headYaw = mix(mix(h(hkp, 4), h(hk, 4), hTurn).sub(0.5).mul(1.8), pside.mul(2.3).add(sin(t.mul(17.0)).mul(0.12)), preen);
+  const headDip = mix(mix(h(hkp, 5), h(hk, 5), hTurn).sub(0.45).mul(0.5), sin(t.mul(23.0)).mul(0.1).add(0.8), preen).add(cawWin.mul(0.3));
 
   // ---- a sparrow's loop: out over its side of the perch and back, now and then ----
-  const Cy = fract(seed.mul(3.3)).mul(22.0).add(16.0), cyc = floor(t.div(Cy));
-  const lu = t.sub(cyc.mul(Cy)).div(fract(seed.mul(5.1)).mul(1.6).add(2.8));
+  const NC = steps(fract(seed.mul(3.3)).mul(22.0).add(16.0)), Cy = float(LOOP).div(NC), cyc0 = floor(t.div(Cy)), cyc = loopIdx(cyc0, NC);
+  const lu = t.sub(cyc0.mul(Cy)).div(fract(seed.mul(5.1)).mul(1.6).add(2.8));
   // ---- a flight from the perch, set from the CPU: leaving, there (the crow out of sight in the woods, the others
   // perched where they landed), coming back ----
   const to = vec3(E.z, D.w, E.w), len = length(to);
   const dur = clamp(len.div(mix(float(7.0), float(8.0), kind)), 0.3, 11.0);
-  const ta = U.uTime.sub(E.x), tb = U.uTime.sub(E.y);
+  const ta = U.uTime.sub(E.x), tb = U.uTime.sub(E.y); // (E: times since the clock's last wrap, CLOCK.base)
   const leaving = ta.greaterThanEqual(0.0).and(ta.lessThan(dur)).select(1.0, 0.0);
   const comingIn = tb.greaterThanEqual(0.0).and(tb.lessThan(dur)).select(1.0, 0.0);
   const there = ta.greaterThanEqual(dur).and(tb.lessThan(0.0)).select(1.0, 0.0);
@@ -249,9 +254,9 @@ function perchedMaterial(sc, uAmount) {
   const away = max(loopFly, flying);
   const flick = kind.mul(sin(hop.mul(Math.PI))).mul(sstep(0.012, 0.05, abs(sCur.sub(sPrev)))).mul(0.6); // the crow's wings open in a hop
   const flyAll = max(away, flick);
-  const ph = t.mul(mix(float(HZ.sparrow), float(HZ.crow), kind).mul(TAU));
+  const ph = t.mul(loopW(mix(float(HZ.sparrow), float(HZ.crow), kind).mul(TAU)));
   // sparrows fly in bursts of beats with the wings shut between (bounding); the crow beats steadily
-  const burst = mix(sstep(-0.3, 0.2, sin(t.mul(1.7 * TAU).add(seed.mul(9.0)))), float(1.0), kind);
+  const burst = mix(sstep(-0.3, 0.2, sin(t.mul(loopW(1.7 * TAU)).add(seed.mul(9.0)))), float(1.0), kind);
   // (in a hop the crow half opens its wings, held out level and the hands drooping)
   const a1 = mix(float(0.15), sin(ph).mul(0.75).add(0.15), away), a2 = a1.add(mix(float(-0.3), sin(ph.sub(1.0)).mul(0.35), away));
   const spread = isWing.mul(max(away.mul(burst.mul(0.85).add(0.15)), flick));
@@ -272,7 +277,7 @@ function perchedMaterial(sc, uAmount) {
   let n = mix(sitN, mix(rotX(sitN, tilt.negate()), flapN, isWing), m).normalize();
   // the wagtail: a long tail, pumped up and down as it stands; a slimmer body
   const wag = species.equal(3.0).select(1.0, 0.0), rump = c3(sc.s.rump);
-  const pump = sin(t.mul(2.4 * TAU)).mul(0.25).add(0.05).mul(flyAll.oneMinus());
+  const pump = sin(t.mul(loopW(2.4 * TAU))).mul(0.25).add(0.05).mul(flyAll.oneMinus());
   p = mix(p, rotX(p.sub(rump).mul(vec3(1.0, 2.4, 2.4)), pump).add(rump), part.equal(2.0).select(1.0, 0.0).mul(wag));
   p = vec3(p.x.mul(wag.mul(-0.15).add(1.0)), p.y, p.z);
   // the kingfisher: a long dagger of a bill, a stub of a tail
@@ -540,7 +545,7 @@ function perchedData(world, { lantern, tree, crown, rocks }) {
     // ranks spread through the groups (golden-ratio steps), so each thins out; the crow goes to roost half-way
     aC.set([o.kind, o.size, o.range, o.kind ? 0.5 : ((i * 0.618034 + 0.3) % 1) * 0.9], i * 4);
     aD.set([o.loopR, o.loopP, o.face, 0], i * 4);
-    aE.set([-1e4, -1e4 + 1, 0, 0], i * 4); // home: its flight long over
+    aE.set([OVER, OVER + 1, 0, 0], i * 4); // home: its flight long over
     aF.set([o.species ?? SPECIES.sparrow, o.species === SPECIES.crow ? 1 : 0, 0, 0], i * 4);
   });
   return { aA, aB, aC, aD, aE, aF, n, birds, fishing, crow: { at: cp, to }, spans: spans.map((sp) => sp.mid.toArray().map((v) => +v.toFixed(1))) };
@@ -629,21 +634,34 @@ export function makePerched(world, opts) {
   // ---------- each bird's flight: written into its instance ----------
   const at = (i) => new THREE.Vector3(inst[i * W], inst[i * W + 1], inst[i * W + 2]);
   const dur = (i, len) => Math.min(11, Math.max(0.3, len / (d.birds[i].kind ? 8 : 7))); // as the vertex stage has it
-  // off to P (leaving at t0, back at t1: Infinity for not yet)
+  // off to P (leaving at t0, back at t1: Infinity for not yet; scene times, written as uTime's: since CLOCK.base)
   const fly = (i, P, t0, t1 = Infinity) => {
     const a = at(i), o = i * W;
     inst[o + 15] = P.y - a.y; // aD.w
-    inst[o + 16] = t0; inst[o + 17] = Math.min(t1, 1e6); inst[o + 18] = P.x - a.x; inst[o + 19] = P.z - a.z;
+    inst[o + 16] = t0 - CLOCK.base; inst[o + 17] = t1 === Infinity ? NOT_YET : t1 - CLOCK.base; inst[o + 18] = P.x - a.x; inst[o + 19] = P.z - a.z;
     ib.needsUpdate = true;
     return t0 + dur(i, a.distanceTo(P));
   };
-  const comeBack = (i, t1) => { inst[i * W + 17] = t1; ib.needsUpdate = true; return t1 + dur(i, Math.hypot(inst[i * W + 15], inst[i * W + 18], inst[i * W + 19])); };
+  const comeBack = (i, t1) => { inst[i * W + 17] = t1 - CLOCK.base; ib.needsUpdate = true; return t1 + dur(i, Math.hypot(inst[i * W + 15], inst[i * W + 18], inst[i * W + 19])); };
+  // uTime wrapped (CLOCK.base moved on a loop): the flights' times moved back with it
+  let base = CLOCK.base;
+  const rebase = () => {
+    const shift = CLOCK.base - base;
+    base = CLOCK.base;
+    if (!shift) return;
+    for (let i = 0; i < d.n; i++) {
+      const o = i * W;
+      if (inst[o + 16] > OVER) inst[o + 16] -= shift;
+      if (inst[o + 17] > OVER + 1 && inst[o + 17] < NOT_YET) inst[o + 17] -= shift;
+    }
+    ib.needsUpdate = true;
+  };
   // landed: where it went is its perch now (facing `yaw` along it), its flight cleared
   const land = (i, yaw = rng() * TAU) => {
     const o = i * W;
     inst[o] += inst[o + 18]; inst[o + 1] += inst[o + 15]; inst[o + 2] += inst[o + 19];
     inst[o + 4] = Math.cos(yaw); inst[o + 5] = 0; inst[o + 6] = Math.sin(yaw); inst[o + 7] = 0;
-    inst[o + 15] = 0; inst[o + 16] = -1e4; inst[o + 17] = -1e4 + 1; inst[o + 18] = 0; inst[o + 19] = 0;
+    inst[o + 15] = 0; inst[o + 16] = OVER; inst[o + 17] = OVER + 1; inst[o + 18] = 0; inst[o + 19] = 0;
     ib.needsUpdate = true;
   };
 
@@ -674,18 +692,20 @@ export function makePerched(world, opts) {
   const kingfisher = d.birds.map((b, i) => (b.species === SPECIES.kingfisher ? { i, next: rand(5, 15), lands: 0, dive: null, home: d.fishing[0] } : null)).filter(Boolean)[0];
   const splashes = [], events = [];
   let song = rand(4, 15), lastT = null; // the white-eyes' next song (s); the clock at the last update
+  let last = 0; // the scene time at the last update
   const tmp = new THREE.Vector3(), walkerAt = new THREE.Vector3();
   let calm = false;
 
   return {
     mesh,
-    // ctx: { hour, rain, wind (0..1), camera, walker (where the walker's feet are: {x, y, z}, or null), warming }
+    // ctx: { t (scene time, s), hour, rain, wind (0..1), camera, walker (where the walker's feet are: {x, y, z}, or null), warming }
     update(ctx) {
       const h = ctx.hour;
       const day = smoothstep(5.3, 6.3, h) * (1 - smoothstep(17.2, 18.4, h));
       uAmount.value = day * (1 - 0.7 * smoothstep(0.05, 0.5, ctx.rain)) * (1 - smoothstep(0.5, 0.75, ctx.wind));
       mesh.visible = ctx.warming || uAmount.value > 0.001; // (warm-up builds the pipeline)
-      const now = U.uTime.value, out = uAmount.value > 0.5 && !calm;
+      rebase();
+      const now = last = ctx.t, out = uAmount.value > 0.5 && !calm;
       if (ctx.walker) walkerAt.set(ctx.walker.x, ctx.walker.y + 1.2, ctx.walker.z);
       // how near someone is: the walker, or the camera at `k` of the walker's distances
       const near = (P, r, k) => Math.min(ctx.walker ? walkerAt.distanceTo(P) / r : Infinity, ctx.camera.position.distanceTo(P) / (r * k));
@@ -785,7 +805,7 @@ export function makePerched(world, opts) {
     splashes, // rings on the water (touches.js)
     events, // calls for the sound (audio.js call), taken each frame
     // whole flowers bitten off and let fall: those due, taken each frame
-    bitten() { const now = U.uTime.value, due = bites.filter((b) => now >= b.t); for (const b of due) bites.splice(bites.indexOf(b), 1); return due; },
+    bitten() { const now = last, due = bites.filter((b) => now >= b.t); for (const b of due) bites.splice(bites.indexOf(b), 1); return due; },
     // debug: where each sits (now), its species, the rope spans' middles, the crow's and the sparrow groups' states, how
     // many rocks the wagtails have; calm: no bird minds anyone (for close looks)
     info(o = {}) {

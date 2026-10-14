@@ -27,7 +27,7 @@ class MapLookup extends THREE.TextureNode {
 }
 const uTexel = uniform(new THREE.Vector2(1, 1)).setGroup(renderGroup); // one texel: in uv, and in metres (normal offset)
 const uOn = uniform(0).setGroup(renderGroup);
-// the clouds: their drift (the sky's cloud offset, sky.js) and cover (0..1), and the sun's direction
+// the clouds: their drift (the sky's clouds' drift, wrapped every CLOUD_LOOP: main.js), cover (0..1), the sun's direction
 export const CLOUDS = {
   uPos: uniform(new THREE.Vector2()).setGroup(renderGroup),
   uCover: uniform(0.35).setGroup(renderGroup),
@@ -51,6 +51,9 @@ const farShadow = Fn(([pos, nrm]) => {
   return s;
 });
 
+// The pattern repeats every 200 pi along either axis of c below (each wave's rate in it is a whole number of turns over
+// that), so every 62.5 pi of drift (c moves 3.2 times the drift)
+export const CLOUD_LOOP = 62.5 * Math.PI;
 // The clouds' shadows: a cloud layer CLOUD_H up, a pattern drifting with the sky's clouds, thresholded
 // by the cover as the sky's are; where the sun's ray through the point meets it, 70% of the sun is held back. Under
 // a full overcast the sun is already dim and even (weather.js), so the patches fade out there.

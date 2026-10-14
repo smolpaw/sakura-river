@@ -8,12 +8,13 @@
 // lamps after dusk. One instanced draw for the cloths, one merged mesh for the poles; both cast shadows.
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec2, vec3, sin, cos, max, clamp, mix, select, pow, normalize, dot, attribute, uv, texture, positionWorld, cameraPosition, transformNormalToView, diffuseColor } from 'three/tsl';
-import { LitMaterial, U, sstep, lanternLight } from './tsl.js';
+import { LitMaterial, U, sstep, lanternLight, RUN_LOOP } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
 import { groundBounce } from './materials.js';
 import { BANNER, BANNER_INK, BANNER_TEXTS } from './gen/banners.js';
 
 const NU = 8, NV = 24; // the cloth's grid
+const TAU = Math.PI * 2;
 
 function clothGeometry(d) {
   const pos = [], tex = [], idx = [];
@@ -43,11 +44,16 @@ function clothMaterial(ink) {
   // the wind's strength here with its gusts (tsl.js windOffset), a wet cloth hanging heavier
   const gust = sin(U.uTime.mul(0.31).add(base.x.mul(0.015))).mul(sin(U.uTime.mul(0.19).add(1.3).add(base.z.mul(0.01)))).mul(0.45).add(0.55);
   const g = clamp(U.uWind.div(1.6), 0.0, 1.2).mul(gust.mul(0.6).add(0.55)).mul(float(1).sub(U.uWet.mul(0.3))).toVar();
+  // the ripples run faster in a stronger wind: their phase a part with the clock and a part with the wind's run (its
+  // integral, so it moves smoothly as the wind changes; a phase of time times the gusting wind sped up as the clock
+  // grew and churned after minutes), each rate whole turns over its clock's loop (tsl.js)
+  const runW = (w) => (Math.round((w * RUN_LOOP) / TAU) * TAU) / RUN_LOOP;
+  const run1 = t.mul(3.2).add(U.uWindRun.mul(runW(3.3))), run2 = t.mul(4.7).add(U.uWindRun.mul(runW(4.675)));
   // the cloth at (u, v) (u from the tied edge, v down from the top) in the world
   const at = (u, v) => {
     const m = u.mul(pow(v, 1.2)); // held along the top and the tied edge: the bottom corner moves most
-    const w1 = sin(u.mul(W * 7.0).add(v.mul(H * 1.7)).sub(t.mul(g.mul(6.0).add(3.2))));
-    const w2 = sin(u.mul(W * 12.0).sub(v.mul(H * 2.4)).sub(t.mul(g.mul(8.5).add(4.7))).add(1.7));
+    const w1 = sin(u.mul(W * 7.0).add(v.mul(H * 1.7)).sub(run1));
+    const w2 = sin(u.mul(W * 12.0).sub(v.mul(H * 2.4)).sub(run2).add(1.7));
     const idle = sin(t.mul(0.7)).mul(0.6).add(sin(t.mul(1.31).add(2.0)).mul(0.4));
     // out of its plane: bellied downwind, rippling, and a slow sway in still air
     const dn = m.mul(wn.mul(g).mul(1.1).add(w1.mul(g.mul(0.12).add(0.035))).add(w2.mul(g.mul(0.05).add(0.012))).add(idle.mul(0.03)));

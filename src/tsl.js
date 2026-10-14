@@ -10,9 +10,9 @@ import { LIGHTMAP } from './lights.js';
 import { sunShadow } from './sunshadow.js';
 
 export const U = {
-  uTime: uniform(0),
+  uTime: uniform(0), // scene time (s), wrapped every LOOP s (see below)
   uWind: uniform(0.5),
-  uWindRun: uniform(0), // wind integrated over time: drift that stays smooth while the wind changes
+  uWindRun: uniform(0), // wind integrated over time: drift that stays smooth while the wind changes; wrapped every RUN_LOOP
   uWindDir: uniform(new THREE.Vector2(0.62, 0.78).normalize()),
   uFogColor: uniform(new THREE.Color(0.7, 0.6, 0.6)),
   uFogSunColor: uniform(new THREE.Color(1.4, 0.9, 0.6)),
@@ -24,7 +24,7 @@ export const U = {
   uSunColor: uniform(new THREE.Color(1, 0.7, 0.5)),
   uSunVis: uniform(1),
   uSkyAmb: uniform(new THREE.Color(0.4, 0.45, 0.6)),
-  uFlow: uniform(0),
+  uFlow: uniform(0), // the river's pattern's run (m along it), wrapped every FLOW_LOOP
   uLights: uniform(0), // the lamps: 0 off .. 1 fully on (dusk)
   uLightColor: uniform(new THREE.Color(1.0, 0.6, 0.3)), // warm light through the paper
   uFireA: uniform(new THREE.Vector3(0, -1e4, 0)), // the fire baskets' flames (lanterns.js): their light flickers
@@ -84,6 +84,37 @@ export const vnoise = Fn(([p]) => {
   const i10 = floor(p.add(vec2(1, 0))), i01 = floor(p.add(vec2(0, 1))), i11 = floor(p.add(vec2(1, 1)));
   return mix(mix(hash12(i), hash12(i10), u.x), mix(hash12(i01), hash12(i11), u.x), u.y);
 }).setLayout({ name: 'vnoise', type: 'float', inputs: [{ name: 'p', type: 'vec2' }] });
+
+// ---------- the running clocks' loops ----------
+// main.js keeps the clocks in doubles and gives the shaders uTime wrapped every LOOP s, uFlow every FLOW_LOOP and
+// uWindRun every RUN_LOOP, so they never grow past what a float holds to a fraction of a frame however long the scene
+// runs. Every use repeats exactly over its loop, so a wrap shows nothing: a sine's rate (rad/s) or a cycle's (per s) is
+// nudged, by under half a turn over the loop, to a whole number of turns in it (loopW, loopRate, loopPeriod), a pattern
+// drifting with a clock has its lattice wrapped where the drift over a loop ends (loopDrift, flowDrift, vnoiseLoop),
+// and a count of cycles that picks hashed values is wrapped with it (loopIdx). A rate in rad/s with up to three
+// decimals already fits.
+const TAU = Math.PI * 2, TURNS = 1000; // turns of a sine of 1 rad/s in a loop
+export const LOOP = TURNS * TAU; // ~1.75 h
+export const FLOW_LOOP = 2000, RUN_LOOP = 50;
+export const CLOCK = { base: 0 }; // scene time = U.uTime + CLOCK.base: what the CPU takes from the times it writes into instance data
+const num = (x) => typeof x === 'number';
+export const loopW = (w) => (num(w) ? Math.round(w * TURNS) / TURNS : floor(w.mul(TURNS).add(0.5)).div(TURNS));
+export const loopRate = (r) => (num(r) ? Math.round(r * LOOP) / LOOP : floor(r.mul(LOOP).add(0.5)).div(LOOP));
+export const loopPeriod = (T) => (num(T) ? LOOP / Math.max(1, Math.round(LOOP / T)) : float(LOOP).div(max(floor(float(LOOP).div(T).add(0.5)), 1.0)));
+// whole numbers k counted mod n (n 0: k as it is; the half keeps k / n off whole numbers, where the division's rounding
+// could tip the floor)
+export const loopIdx = (k, n) => k.sub(floor(k.add(0.5).div(max(n, 1.0))).mul(n));
+// a drift of `rate` noise cells per second of uTime (per unit of uFlow): [the rate nudged to a whole number of cells per
+// loop, that number, for vnoiseLoop's n]
+const drift = (loop) => (rate) => { const n = Math.round(rate * loop); return [n / loop, Math.abs(n)]; };
+export const loopDrift = drift(LOOP), flowDrift = drift(FLOW_LOOP);
+// vnoise with its lattice wrapped every n (vec2) cells (an axis with n 0 as vnoise has it)
+export const vnoiseLoop = Fn(([p, n]) => {
+  const f = fract(p).toVar();
+  const u = f.mul(f).mul(f.mul(-2.0).add(3.0)).toVar();
+  const at = (o) => hash12(loopIdx(o ? floor(p.add(vec2(...o))) : floor(p), n));
+  return mix(mix(at(null), at([1, 0]), u.x), mix(at([0, 1]), at([1, 1]), u.x), u.y);
+}).setLayout({ name: 'vnoiseLoop', type: 'float', inputs: [{ name: 'p', type: 'vec2' }, { name: 'n', type: 'vec2' }] });
 
 // sin-based hash used by the post passes (GLSL: fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453))
 export const hashSin = Fn(([p]) => fract(sin(dot(p, vec2(12.9898, 78.233))).mul(43758.5453)));

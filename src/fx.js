@@ -5,7 +5,7 @@ import {
   positionGeometry, normalGeometry, positionWorld, positionView, cameraPosition, cameraViewMatrix, uv, screenDPR, select,
   diffuseColor, transformNormalToView, normalView,
 } from 'three/tsl';
-import { U, sstep, vnoise, applyFog, LitMaterial, lanternLight } from './tsl.js';
+import { U, sstep, vnoise, vnoiseLoop, applyFog, LitMaterial, lanternLight, LOOP, loopW, loopPeriod, loopIdx, loopDrift } from './tsl.js';
 import { sunShadow } from './sunshadow.js';
 import { mulberry32 } from './noise.js';
 import { INK } from './lanterns.js';
@@ -60,12 +60,13 @@ export function makeMotes(center, count) {
   const uPx = uniform(1);
   const base = instancedBufferAttribute(new THREE.InstancedBufferAttribute(p, 3), 'vec3');
   const seed = instancedBufferAttribute(new THREE.InstancedBufferAttribute(s, 1), 'float');
-  const t = U.uTime.mul(seed.mul(0.2).add(0.15));
+  // (each mote's rates whole turns over the clock's loop, tsl.js; the drift's 30 m are 0.6 of RUN_LOOP)
+  const w = seed.mul(0.2).add(0.15), t = (k) => U.uTime.mul(loopW(w.mul(k)));
   const drift = mod(U.uWindRun.mul(0.6).add(seed.mul(30.0)), 30.0);
   const pos = vec3(
-    base.x.add(sin(t.add(seed.mul(40.0))).mul(1.2)).add(U.uWindDir.x.mul(drift)).sub(U.uWindDir.x.mul(15.0)),
-    base.y.add(sin(t.mul(1.3).add(seed.mul(9.0))).mul(0.6)),
-    base.z.add(cos(t.mul(0.8).add(seed.mul(17.0))).mul(1.2)).add(U.uWindDir.y.mul(drift)).sub(U.uWindDir.y.mul(15.0)),
+    base.x.add(sin(t(1).add(seed.mul(40.0))).mul(1.2)).add(U.uWindDir.x.mul(drift)).sub(U.uWindDir.x.mul(15.0)),
+    base.y.add(sin(t(1.3).add(seed.mul(9.0))).mul(0.6)),
+    base.z.add(cos(t(0.8).add(seed.mul(17.0))).mul(1.2)).add(U.uWindDir.y.mul(drift)).sub(U.uWindDir.y.mul(15.0)),
   );
   const mvz = cameraViewMatrix.mul(vec4(pos, 1.0)).z;
   const V = normalize(pos.sub(cameraPosition));
@@ -247,8 +248,10 @@ export function makeFires(fires) {
   const vk = k.zw.toVarying('vFireUV'), vl = L.toVarying('vFireLayer');
   m.colorNode = Fn(() => {
     const u = vk.x, v = vk.y, core = vl.x, seed = vl.y, t = U.uTime;
-    const n1 = vnoise(vec2(u.mul(1.6).add(seed), v.mul(2.6).sub(t.mul(2.4))));
-    const n2 = vnoise(vec2(u.mul(3.8).sub(seed), v.mul(5.5).sub(t.mul(4.3))));
+    // (rising with the clock, the lattice wrapped where its loop ends: tsl.js)
+    const [r1, m1] = loopDrift(2.4), [r2, m2] = loopDrift(4.3);
+    const n1 = vnoiseLoop(vec2(u.mul(1.6).add(seed), v.mul(2.6).sub(t.mul(r1))), vec2(0, m1));
+    const n2 = vnoiseLoop(vec2(u.mul(3.8).sub(seed), v.mul(5.5).sub(t.mul(r2))), vec2(0, m2));
     // a tongue, waving more towards its tip, ragged at the top
     const ud = u.add(n1.sub(0.5).mul(v).mul(0.9)).abs();
     const w = pow(float(1.0).sub(v), 0.75).mul(sstep(0.0, 0.18, v).mul(0.5).add(0.5)).mul(n2.mul(0.5).add(0.72));
@@ -284,6 +287,7 @@ function risers(sources, per, life) {
   geo.setAttribute('aCorner', new THREE.Float32BufferAttribute(corner, 4));
   geo.setIndex(idx);
   const k = attribute('aCorner', 'vec4');
+  // (`life` fits a whole number of times into the clock's loop: risers' callers pass loopPeriod's)
   const age = U.uTime.div(life).add(k.z).fract();
   return { geo, src: attribute('aSrc', 'vec3'), k, age, seed: k.w };
 }
@@ -297,7 +301,7 @@ const billboard = (centre, k, size) => {
 // Smoke from the farmhouses' hearths (irori), seeping out of the thatch's smoke gables: thin blue-grey wisps that rise,
 // widen and lean away with the wind. `uAmount` (0..1): more at the cooking hours, less in rain (main.js).
 export function makeSmoke(sources) {
-  const LIFE = 16;
+  const LIFE = loopPeriod(16);
   const { geo, src, k, age, seed } = risers(sources, 26, LIFE);
   const uAmount = uniform(0.5);
   const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
@@ -324,7 +328,7 @@ export function makeSmoke(sources) {
 
 // Sparks over the fire baskets: specks flung up off the flames, cooling from yellow to red as they rise and drift.
 export function makeSparks(fires) {
-  const LIFE = 1.6;
+  const LIFE = loopPeriod(1.6), CYCLES = Math.round(LOOP / LIFE); // (flights in the clock's loop)
   const { geo, src, k, age: age0, seed } = risers(fires, 26, LIFE);
   const m = new THREE.MeshBasicNodeMaterial({
     transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
@@ -332,7 +336,7 @@ export function makeSparks(fires) {
     blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // keep the sky's alpha for the light-shaft mask
   });
   // each spark its own flight: a cycle's phase picks a fresh direction and speed
-  const cyc = floor(U.uTime.div(LIFE).add(k.z));
+  const cyc = loopIdx(floor(U.uTime.div(LIFE).add(k.z)), CYCLES);
   const h = vec2(sin(cyc.mul(12.9898).add(seed.mul(78.233))).mul(43758.5).fract(), sin(cyc.mul(39.346).add(seed.mul(11.135))).mul(24634.6).fract());
   // (each flight its own length: some die young; the speed varies, so they never climb as beads on a string)
   const age = age0.div(h.y.mul(0.5).add(0.5)).toVar();

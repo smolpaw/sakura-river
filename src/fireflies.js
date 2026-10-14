@@ -6,7 +6,7 @@
 // mirrors them. None by day, in rain or a strong wind (`update` hides the mesh).
 import * as THREE from 'three/webgpu';
 import { Fn, float, vec2, vec3, vec4, uniform, attribute, sin, cos, floor, fract, exp, dot, max, length, normalize, mix, cameraPosition, positionGeometry } from 'three/tsl';
-import { U, sstep, fogAmount } from './tsl.js';
+import { U, sstep, fogAmount, LOOP, loopW, loopPeriod, loopIdx } from './tsl.js';
 import { mulberry32, smoothstep } from './noise.js';
 
 // Anchors (on the main thread at create: a few milliseconds): per firefly aA = (x, y, z, wander radius), aB = (seed, blink offset s, blink
@@ -81,19 +81,21 @@ export function makeFireflies(d, uFocal) {
   const uAmount = uniform(0);
   const t = U.uTime, s = B.x;
   // wandering: two slow sines on each axis (a loop of a few metres every minute or so) and a quicker small weave
-  const w = s.mul(0.1).add(0.12);
+  // (every rate whole turns over the clock's loop, and the flashes' period whole cycles: tsl.js)
+  const w = s.mul(0.1).add(0.12), tw = (m) => t.mul(loopW(w.mul(m)));
   const wander = vec3(
-    sin(t.mul(w).add(s.mul(37.0))).mul(0.65).add(sin(t.mul(w.mul(2.3)).add(s.mul(91.0))).mul(0.35)).mul(A.w),
-    sin(t.mul(w.mul(1.7)).add(s.mul(53.0))).mul(B.w),
-    cos(t.mul(w.mul(0.9)).add(s.mul(17.0))).mul(0.65).add(sin(t.mul(w.mul(1.9)).add(s.mul(29.0))).mul(0.35)).mul(A.w),
+    sin(tw(1).add(s.mul(37.0))).mul(0.65).add(sin(tw(2.3).add(s.mul(91.0))).mul(0.35)).mul(A.w),
+    sin(tw(1.7).add(s.mul(53.0))).mul(B.w),
+    cos(tw(0.9).add(s.mul(17.0))).mul(0.65).add(sin(tw(1.9).add(s.mul(29.0))).mul(0.35)).mul(A.w),
   );
   const weave = vec3(sin(t.mul(1.3).add(s.mul(71.0))), sin(t.mul(1.7).add(s.mul(13.0))).mul(0.5), cos(t.mul(1.1).add(s.mul(43.0)))).mul(0.07);
   const centre = A.xyz.add(wander).add(weave);
   // the flash: a soft rise, about a second lit, a slower fade; one cycle in six or so skipped (a dim one)
-  const tc = t.add(B.y), cyc = floor(tc.div(B.z));
-  const f = tc.sub(cyc.mul(B.z));
+  const period = loopPeriod(B.z), tc = t.add(B.y), cyc = floor(tc.div(period));
+  const f = tc.sub(cyc.mul(period));
   const flash = sstep(0.0, 0.3, f).mul(sstep(1.25, 0.55, f));
-  const skip = fract(sin(cyc.mul(12.9898).add(s.mul(78.233))).mul(43758.5)).lessThan(0.17).select(0.15, 1.0);
+  const ci = loopIdx(cyc, floor(float(LOOP).div(period).add(0.5)));
+  const skip = fract(sin(ci.mul(12.9898).add(s.mul(78.233))).mul(43758.5)).lessThan(0.17).select(0.15, 1.0);
   const glow = flash.mul(skip).add(0.015);
   // the light: a core of about a centimetre in a halo of about 6 cm, each at least a pixel or a few across far off,
   // the light spread over them (the core's less than in full, so a far firefly stays a faint point)
