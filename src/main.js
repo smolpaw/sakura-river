@@ -148,7 +148,10 @@ export async function create(canvas, opts = {}) {
   const tierName = tierNow = opts.quality || detectTier(renderer);
   const Q = { ...TIERS[tierName] };
   const ST = opts.stress || null; // bench-only future-content scenario
-  const dpr = Math.min(window.devicePixelRatio || 1, Q.pr);
+  // the device pixel ratio, capped by the tier; it changes with the browser's zoom and as the window moves to another
+  // display (followed below, with the sizing)
+  const deviceRatio = () => Math.min(window.devicePixelRatio || 1, Q.pr);
+  let dpr = deviceRatio();
   renderer.setPixelRatio(dpr);
   renderer.toneMappingExposure = 1.0; // read by renderOutput() in the post pipeline
   renderer.shadowMap.enabled = true;
@@ -553,9 +556,10 @@ export async function create(canvas, opts = {}) {
   scene.add(koi.mesh);
   // reflection buffer per CSS pixel above DPR 1.4 (0.35 at DPR 2 passes against sub-pixel A/A, 0.25 does not;
   // bench/dpr_parity.py); the light shafts are per CSS pixel at every DPR (see buildPipeline below)
+  const reflScale = () => opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr);
   // where things touch the water (touches.js): the heron's legs, the boat, the fisherman's float, a koi rising
   const touches = makeTouches();
-  const water = makeWater(G.river, depthMap, sky, { reflectionScale: opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr), clearing: koiClearing(koi.state, koi.count), wheel: G.village.wheel, touches });
+  const water = makeWater(G.river, depthMap, sky, { reflectionScale: reflScale(), clearing: koiClearing(koi.state, koi.count), wheel: G.village.wheel, touches });
   water.mesh.name = 'water';
   scene.add(water.mesh);
   const mist = makeMist(G.river);
@@ -670,7 +674,8 @@ export async function create(canvas, opts = {}) {
   // (post.js). On tiers that supersample (ultra) and with `upscale: false` the canvas itself scales instead and the
   // browser stretches it (bilinear).
   const upscaling = (opts.upscale ?? true) && Q.ss === 1;
-  const post = buildPipeline(renderer, scene, camera, { raySamples: Q.rays, msaa, shaftScale: opts.shaftScale ?? 0.5 / dpr, ss: Q.ss, upscale: upscaling, upscaleSharpness: opts.upscaleSharpness });
+  const shaftScale = () => opts.shaftScale ?? 0.5 / dpr;
+  const post = buildPipeline(renderer, scene, camera, { raySamples: Q.rays, msaa, shaftScale: shaftScale(), ss: Q.ss, upscale: upscaling, upscaleSharpness: opts.upscaleSharpness });
   const rays = post.shafts.uniforms;
 
   // ---------- camera / controls ----------
@@ -877,8 +882,7 @@ export async function create(canvas, opts = {}) {
   // ---------- sizing / adaptive quality ----------
   let W = 1, H = 1;
   let pixelScale = 1; // adaptive render scale: the scene pass's resolution (upscaling), else the canvas's
-  const reflBase = reflector ? reflector.resolutionScale : 0; // the reflection's buffer over the drawing buffer
-  let reflLevel = 1; // the controller's step on it
+  let reflLevel = 1; // the controller's step on the reflection's buffer
   function resize() {
     const w = Math.max(1, canvas.clientWidth | 0), h = Math.max(1, canvas.clientHeight | 0);
     W = w; H = h;
@@ -894,7 +898,7 @@ export async function create(canvas, opts = {}) {
     const ss = ssNow = upscaling ? pixelScale : Math.max(1, Math.min(Q.ss, maxTex / Math.max(g.res.value.x, g.res.value.y)));
     post.setScale(ss, g.res.value.x, g.res.value.y);
     // the reflection's buffer follows the scene pass's resolution down
-    if (reflector) reflector.resolutionScale = reflBase * reflLevel * Math.min(1, ss);
+    if (reflector) reflector.resolutionScale = reflScale() * reflLevel * Math.min(1, ss);
     // sharpening by the scene's pixel density: less where pixels are small (high DPR) or supersampled (the Lanczos
     // downsample sharpens a little itself)
     const spr = pr * ss;
@@ -908,6 +912,17 @@ export async function create(canvas, opts = {}) {
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);
   resize();
+  // a new device pixel ratio (the browser zoomed, the window moved to another display): the drawing buffer and the
+  // effect buffers sized for it, checked each frame (a resolution media query's change event also tells of it, but
+  // Chromium sent none for an emulated change while this page ran)
+  let ratio = window.devicePixelRatio || 1;
+  function followRatio() {
+    if ((window.devicePixelRatio || 1) === ratio) return;
+    ratio = window.devicePixelRatio || 1;
+    dpr = deviceRatio();
+    post.setShaftScale(shaftScale());
+    resize();
+  }
 
   // ---------- adaptive quality: GPU time -> render resolution, then second-order settings ----------
   let frames = 0, acc = 0, statT = 0, fpsShown = 60;
@@ -1214,6 +1229,7 @@ export async function create(canvas, opts = {}) {
 
     // reflections
     if (!doRender) return;
+    followRatio();
     frameNo++;
     if (probe) probe.beginFrame();
     // (every pass on the first frames and on those of the warm-up that bring parts of the scene in)

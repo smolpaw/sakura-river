@@ -230,6 +230,7 @@ export function buildPipeline(renderer, scene, camera, { raySamples, bloomStreng
   const scenePass = pass(scene, camera, { samples: msaa });
   scenePass.setResolutionScale(ss);
   const color = scenePass.getTextureNode('output');
+  let shaftBase = shaftScale;
   const shafts = lightShafts(color, raySamples, shaftScale);
   const hdr = Fn(() => {
     const c = color.sample(uv());
@@ -260,10 +261,11 @@ export function buildPipeline(renderer, scene, camera, { raySamples, bloomStreng
     setScale(s, w, h) {
       const d = Math.min(1, s);
       if (down || up) { scenePass.setResolutionScale(s); ldr.setResolutionScale(s); }
-      shafts.setScale(shaftScale * d);
+      shafts.setScale(shaftBase * d);
       bl.setSize(Math.max(1, Math.floor(w * d)), Math.max(1, Math.floor(h * d)));
       if (down) { down.uniforms.inRes.value.set(Math.floor(w * s), Math.floor(h * s)); down.uniforms.outRes.value.set(w, h); }
       if (up) up.setEnabled(s < 0.999);
     },
+    setShaftScale(v) { shaftBase = v; }, // (setScale applies it)
   };
 }
