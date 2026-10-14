@@ -8,6 +8,9 @@ const hyp = (a, b) => Math.sqrt(a * a + b * b); // Math.hypot is several times s
 // (grass.js inverts this on the GPU to find the triangle under a blade)
 export const TERRAIN_GRID = { kx: 16, cx: 5.86, ox: -2, kz: 18, cz: 6.2, z0: 4, zMax: 260 };
 export const terrainSMaxZ = () => Math.asinh((TERRAIN_GRID.zMax - TERRAIN_GRID.z0) / TERRAIN_GRID.kz) / TERRAIN_GRID.cz;
+// the farmhouses' pads' dry-stone walls (padGround): the face's top this far out from the pad's edge (m), its batter
+// (rise over run), and the step between the pad and the ground over which the bank turns from an eased slope into it
+export const WALL = { top: 0.15, batter: 3, min: 0.25, full: 0.45 };
 
 export function createWorld(seed = 7) {
   const N = makeNoise(seed);
@@ -66,14 +69,19 @@ export function createWorld(seed = 7) {
     return Math.min(g, temple.y - 0.4 + 0.5 * Math.max(0, templeDist(x, z) - 1.5));
   }
 
-  // ground height and the farmland there (field(), or null): river bed below 0, water level is y = 0
-  function heightField(x, z) {
+  // the ground before the farmhouses' pads are levelled into it (the farmland and the lanes' wear in it), and the
+  // farmland there (field(), or null)
+  function unlevelled(x, z) {
     let g = ground(x, z);
     const F = field(x, z, g);
     if (F) g = lerp(g, F.y, F.m);
     g -= 0.08 * smoothstep(1.7, 0.7, laneDist(x, z)); // the lanes worn a little into the ground
-    const pad = padAt(x, z);
-    if (pad) g = lerp(g, pad.y, pad.m);
+    return { g, F };
+  }
+  // ground height and the farmland there (field(), or null): river bed below 0, water level is y = 0
+  function heightField(x, z) {
+    const u = unlevelled(x, z), F = u.F;
+    const g = padGround(x, z, u.g);
     // river channel; where it cuts through the temple's knoll the banks are rock walls (vegetation.js cliffData): the
     // ground rises straight from the bed to the turf, a metre behind their faces
     const d = Math.abs(x - riverX(z)), t = d / riverHW(z);
@@ -156,7 +164,7 @@ export function createWorld(seed = 7) {
     const zc = b.yard / 2, hd = b.hd + b.yard / 2;
     return hyp(Math.max(0, Math.abs(lx) - b.hw), Math.max(0, Math.abs(lz - zc) - hd));
   };
-  // the pad under (x, z): its level and how much of it there is (1 on it, a steep bank over 2 m), or null
+  // the pad under (x, z): its level and how much of it there is (1 on it, 0 from 2.2 m out), or null
   function padAt(x, z) {
     for (const b of BUILDINGS) {
       if (Math.abs(x - b.x) > 20 || Math.abs(z - b.z) > 20) continue;
@@ -164,6 +172,26 @@ export function createWorld(seed = 7) {
       if (d < 2.2) return { y: b.y, m: smoothstep(2.2, 0.15, d), b, d };
     }
     return null;
+  }
+  // how far (x, z) lies outside a building's pad (its yard included) along the nearer of its axes: the distance out
+  // from its nearest side, square round its corners
+  const padEdge = (b, x, z) => {
+    const dx = x - b.x, dz = z - b.z, lx = dx * b.c - dz * b.s, lz = dx * b.s + dz * b.c;
+    return Math.max(Math.abs(lx) - b.hw, Math.abs(lz - b.yard / 2) - b.hd - b.yard / 2);
+  };
+  // The pads levelled into the ground g at (x, z). Where a pad is cut into the slope or built up on it by more than
+  // WALL.full, its bank is a dry-stone wall's face (vegetation.js wallStones lays the stones on it): a plane from
+  // WALL.top out from the pad's edge, battered back at WALL.batter (rise over run) into the earth it holds, down or up
+  // to the ground; square at the pad's corners. Under WALL.min the pad eases into the ground over 2.2 m of bank.
+  function padGround(x, z, g) {
+    for (const b of BUILDINGS) {
+      if (Math.abs(x - b.x) > 20 || Math.abs(z - b.z) > 20) continue;
+      const e = padEdge(b, x, z);
+      if (e >= 2.2) continue;
+      const lim = Math.max(0, e - WALL.top) * WALL.batter, face = b.y + clamp(g - b.y, -lim, lim);
+      return lerp(lerp(g, b.y, smoothstep(2.2, 0.15, padDist(b, x, z))), face, smoothstep(WALL.min, WALL.full, Math.abs(g - b.y)));
+    }
+    return g;
   }
   // the small cherries along the river stand in their own clearings (their Blender trunks fit the ground there)
   const CLEAR = [[-50.4, -92], [-5.3, -150], [-43.9, -225], [2.2, -40]];
@@ -735,7 +763,7 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = HC.data, k = j * HC.nx + i;
     return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + HC.nx] * (1 - u) + d[k + HC.nx + 1] * u) * v;
   }
-  return { N, height, heightField, zoneAt, padAt, padDist, BUILDINGS, ground, LANES, CLEAR, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove, wild, scrub };
+  return { N, height, heightField, unlevelled, zoneAt, padAt, padDist, padEdge, BUILDINGS, ground, LANES, CLEAR, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove, wild, scrub };
 }
 
 // water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map (G = rock foam)

@@ -356,37 +356,40 @@ const hashCopy = (matrix, i) => {
   return x - Math.floor(x);
 };
 
-// Many copies of one small model as merged meshes, a full one and a far one per group (lists[i]: { matrix, color, n }),
+// Many copies of a few small models (kinds) as merged meshes, a full one and a far one per group (lists[i]: { matrix,
+// color, n, kind: each copy's index in kinds, or none for kinds[0] }),
 // switched by the camera's distance to the group's middle at `range` times lodScale (with HYST metres of hysteresis).
 // For a model of a few dozen triangles in thousands of copies: instanced past 1,024 copies three moves the matrices
 // from a uniform buffer to per-instance attributes, which cost ~1.4 ms a frame here for 2,100 stones of 24 triangles
 // (WebGL, RTX 2060); merged they cost nothing measurable. Each group's mesh is culled whole against each pass's camera
 // by three (frustumCulled), so it keeps its shadow out of view.
 // With `stones` (the village's dry-stone walls) every vertex also carries aStone (bytes): x how deep it lies in the
-// joints with the copies round it (lists[i].joint: per copy, then vertex of the full model; vegetation.js stoneJoints,
+// joints with the copies round it (lists[i].joint: per copy, then vertex of its full model; vegetation.js stoneJoints,
 // worked out in the rocks' generation job), y a hash of its copy (0..1), z its copy's course up the wall
 // (lists[i].course: 0 the foot, 1 the top), w 1 on the far level (no joints: drawn as the far stone).
-export async function makeMerged(url, kind, lists, mat, range, lodScale = 1, { stones = false } = {}) {
+export async function makeMerged(url, kinds, lists, mat, range, lodScale = 1, { stones = false } = {}) {
   const gltf = await loadModel(url);
   range *= lodScale;
-  const models = [plainGeometry(gltf, kind), plainGeometry(gltf, kind + '_far')];
+  const models = kinds.map((k) => [plainGeometry(gltf, k), plainGeometry(gltf, k + '_far')]);
   const group = new THREE.Group(), m = new THREE.Matrix4();
   const sets = lists.filter((l) => l.n > 0).map((l) => {
     const centre = new THREE.Vector3();
-    const levels = models.map((base, far) => {
+    const levels = [0, 1].map((far) => {
       // (the far level has no joints: its aStone.w flags it, and the material leaves it as the far stone, since a group
       // switches levels by its middle and a far level can be drawn well within the stone detail's reach)
-      const parts = [], joint = stones && (far ? new Float32Array(l.n * base.attributes.position.count) : l.joint);
-      for (let i = 0; i < l.n; i++) {
-        const g = base.clone().applyMatrix4(m.fromArray(l.matrix, i * 16)), c = g.attributes.color;
+      const parts = [];
+      for (let i = 0, o = 0; i < l.n; i++) {
+        const full = models[l.kind ? l.kind[i] : 0][0], nv = full.attributes.position.count; // (the joints: per vertex of the full model)
+        const g = models[l.kind ? l.kind[i] : 0][far].clone().applyMatrix4(m.fromArray(l.matrix, i * 16)), c = g.attributes.color;
         const tint = l.color.subarray(i * 3, i * 3 + 3);
         for (let v = 0; v < c.count; v++) c.setXYZ(v, c.getX(v) * tint[0], c.getY(v) * tint[1], c.getZ(v) * tint[2]);
-        if (joint) {
+        if (stones) {
           const a = new Uint8Array(c.count * 4), h = Math.round(hashCopy(l.matrix, i) * 255), course = Math.round((l.course ? l.course[i] : 1) * 255);
-          for (let v = 0; v < c.count; v++) { a[v * 4] = Math.round(joint[i * c.count + v] * 255); a[v * 4 + 1] = h; a[v * 4 + 2] = course; a[v * 4 + 3] = far ? 255 : 0; }
+          for (let v = 0; v < c.count; v++) { a[v * 4] = far ? 0 : Math.round(l.joint[o + v] * 255); a[v * 4 + 1] = h; a[v * 4 + 2] = course; a[v * 4 + 3] = far ? 255 : 0; }
           g.setAttribute('aStone', new THREE.BufferAttribute(a, 4, true));
         }
         parts.push(g);
+        o += nv;
       }
       const mesh = new THREE.Mesh(mergeGeometries(parts), mat);
       group.add(mesh);

@@ -4,8 +4,8 @@
 # A boulder is one mesh about 2.5 wide, 2 deep and 1.2 tall round its origin, its base where it sits in the ground
 # (Blender: z up; glTF: y up). The boulders are photogrammetry scans from Poly Haven (CC0, README.md Models),
 # downloaded once into tools/.model-cache/ and simplified to each level's triangles from the full scan. The stone at
-# the water's edge (and in the village's walls) is modelled here: granite rounded by the water, with a broad face where
-# it split. Shading in the vertex colours: each stone its own grey, mottled by the scan's own light and dark (the
+# the water's edge is modelled here: granite rounded by the water, with a broad face where it split; and the village's
+# dry-stone walls' stones (wall_stone), each with a lighter `_far` model. Shading in the vertex colours: each stone its own grey, mottled by the scan's own light and dark (the
 # modelled stone by noise), the scan's occlusion, lichen on what faces the sky, moss in patches on top, ambient
 # occlusion in the hollows and under the base. Each also has a `_near` model for the Ultra tier, from more of the
 # scan's triangles (the modelled stone: a finer sphere, grained and pitted, shaded as the full one, forest.py
@@ -106,6 +106,87 @@ def stone(name, seed, target, *, splits, lumps, moss, grey, ref=None):
     me.color_attributes.active_color = ca
     link(me, name)
     return me
+
+
+# ---------- the village's dry-stone walls ----------
+def wall_stone(name, seed, target, *, block, cuts, flat, grey, moss=0.2):
+    """A stone for the village's dry-stone walls (src/vegetation.js wallStones lays them), filling the unit box round its
+    origin (x along the wall, z up it, -y out of it: each copy scaled to its size): split from a boulder, its face out
+    nearly flat (bulging a little, `flat` of the way), its outline broken by corners knocked off (`cuts` planes), its
+    sides and back rough and rounded into the bank. `block`: how square it is (0 a rounded field stone, 1 a block)."""
+    rng = random.Random(seed)
+    off = V((seed * 2.9, seed * 1.7, seed * 4.3))
+    planes = []
+    for _ in range(cuts):
+        a = rng.uniform(0, math.tau)
+        planes.append((V((math.cos(a), rng.uniform(-0.5, 0.2), math.sin(a))).normalized(), rng.uniform(0.72, 0.92)))
+    pw = lerp(2.2, 4.0, block)
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=4, radius=1.0)
+    for v in bm.verts:
+        d = v.co.normalized()
+        r = (abs(d.x) ** pw + abs(d.y) ** pw + abs(d.z) ** pw) ** (-1 / pw)
+        r *= 1 + 0.1 * noise.noise(d * 1.4 + off) + 0.04 * noise.noise(d * 3.5 + off)
+        for n, pd in planes:
+            c = d.dot(n)
+            if c > 0.05:
+                r = smin(r, pd / c, 0.1)
+        p = d * r
+        # the split face: out of the box's front, pressed nearly flat, a faint swell and the split's ripples on it
+        f = 0.62
+        if p.y < -f:
+            p.y = -f + (p.y + f) * (1 - flat) - 0.025 * noise.noise(p * 2.6 + off)
+        v.co = p
+    me = bpy.data.meshes.new('wall')
+    bm.to_mesh(me)
+    bm.free()
+    lo = [min(v.co[i] for v in me.vertices) for i in range(3)]
+    hi = [max(v.co[i] for v in me.vertices) for i in range(3)]
+    for v in me.vertices:
+        v.co = V([(v.co[i] - (lo[i] + hi[i]) / 2) / (hi[i] - lo[i]) for i in range(3)])
+    ob = link(me, 'wall')
+    dec = ob.modifiers.new('decimate', 'DECIMATE')
+    dec.ratio = min(1.0, target / max(1, tris(me)))
+    dec.use_collapse_triangulate = True
+    me = evaluated(ob)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    bm.normal_update()
+    bm.verts.index_update()
+    ao = vertex_ao(bm, 0.3)
+    cols = []
+    for v in bm.verts:
+        p, n = v.co, v.normal
+        c = V(grey) * (0.86 + 0.16 * noise.noise(p * 2.2 + off) + 0.1 * noise.noise(p * 6.5 + off))
+        lich = smoothstep(0.35, 0.55, noise.noise(p * 5.5 + off * 2)) * smoothstep(-0.3, 0.5, n.z - n.y * 0.5)
+        c = c.lerp(V(LICHEN), lich * 0.3)
+        m = smoothstep(0.35, 0.75, n.z + 0.5 * noise.noise(p * 1.6 + off * 0.7) + 0.2 * noise.noise(p * 7 + off)) * moss
+        c = c.lerp(V(MOSS) * (0.8 + 0.4 * noise.noise(p * 9 + off)), m)
+        # the face weathered paler than the sides and back, which lie in the joints and the bank
+        c *= lerp(0.55, 1.0, ao[v.index]) * lerp(0.8, 1.06, smoothstep(0.2, -0.8, n.y))
+        cols.append(c)
+    for f in bm.faces:
+        f.smooth = True
+    out = bpy.data.meshes.new(name)
+    bm.to_mesh(out)
+    bm.free()
+    out.validate()
+    # the split face's arris sharp (its normals split from the sides'), the rest smooth
+    out.set_sharp_from_angle(angle=math.radians(38))
+    ca = out.color_attributes.new('Color', 'FLOAT_COLOR', 'POINT')
+    for i, c in enumerate(cols):
+        ca.data[i].color = (*c, 1.0)
+    out.color_attributes.active_color = ca
+    link(out, name)
+    return out
+
+
+# the walls' stones (vegetation.js WALL_KINDS): three face stones, blocky to rounded, and a small one chinked between
+# them; each with a lighter `_far` model
+WALL_STONES = [('wall0', 71, dict(block=0.85, cuts=4, flat=0.92)), ('wall1', 72, dict(block=0.6, cuts=5, flat=0.85)),
+               ('wall2', 73, dict(block=0.3, cuts=3, flat=0.75)), ('chink', 74, dict(block=0.5, cuts=5, flat=0.7))]
+WALL_TRIS = {'': (60, 22), '_far': (18, 8)}  # (face stones', chinks' triangles)
 
 
 # ---------- the scanned boulders ----------
@@ -241,7 +322,7 @@ def scanned(name, src, tex, target, *, grey, moss, size):
 
 
 # five boulders, each full (`rockN`), far (`rockN_far`) and near (`rockN_near`), and one stone for the pebbles at the
-# water's edge (and the village's stone walls, with a far one), and its near one
+# water's edge and its near one; the walls' stones (WALL_STONES) full and far
 KINDS = [f'rock{i}' for i in range(5)]
 TARGET, FAR, NEAR = 1200, 0.25, 4
 # the scan (Poly Haven asset, which loose piece of it or None) and moss
@@ -263,9 +344,10 @@ if __name__ == '__main__':
             print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     me = full['pebble'] = stone('pebble', 61, 90, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41))
     print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
-    # the same stone, lighter, for the farmhouses' stone walls seen from further off
-    me = stone('pebble_far', 61, 24, splits=1, lumps=0.6, moss=0.15, grey=(0.46, 0.44, 0.41))
-    print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
+    for level, (face, small) in WALL_TRIS.items():
+        for kind, seed, shape in WALL_STONES:
+            me = wall_stone(kind + level, seed, small if kind == 'chink' else face, grey=(0.46, 0.44, 0.41), **shape)
+            print(f'{me.name}: {tris(me)} triangles, {len(me.vertices)} vertices')
     # the near models (the Ultra tier's, which tools/blender.mjs puts in public/models/): the same stones on a finer
     # sphere, grained and chipped, shaded as the full ones (forest.py colour_at)
     for i, kind in enumerate(KINDS):

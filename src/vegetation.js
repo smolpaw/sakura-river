@@ -1,6 +1,7 @@
-// The deer's turf, wildflowers, rocks & pebbles, the gorge's rock walls, the woods on the hills — all instanced
+// The deer's turf, wildflowers, rocks & pebbles, the farmhouses' dry-stone walls, the gorge's rock walls, the woods on the hills
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
+import { WALL } from './world.js';
 import { toroSites } from './village.js';
 
 const V = THREE.Vector3;
@@ -231,32 +232,39 @@ export function rockPlan(world, tier, treePos) {
   return { rng, placements, pebbles, rocksInWater };
 }
 
-// How deep each vertex of each copy of a model (its vertices: { position, normal }, flat arrays; lods.js modelVertices)
-// in list l ({ matrix, n }) lies in the joints between the copies, as ambient occlusion from its neighbours: each copy
-// taken as a rounded box (the model's bounds, a superellipsoid of power 4), the vertex is in the joint as far as the
-// points a little way out along its normal (PROBE, metres) lie inside another copy (1: against or under another, 0:
-// open). Per copy, then vertex. (The village's dry-stone walls: lods.js makeMerged draws it into their aStone.)
+// How deep each vertex of each copy in list l ({ matrix, n, kind }: the copies and which of `models` each is) lies in
+// the joints between the copies, as ambient occlusion from its neighbours. models: the kinds' vertices ({ position,
+// normal }, flat arrays; lods.js modelVertices). Each copy taken as a rounded box (its model's bounds, a
+// superellipsoid of power 4), the vertex is in the joint as far as the points a little way out along its normal (PROBE,
+// metres) lie inside another copy (1: against or under another, 0: open). Per copy, then vertex. (The village's
+// dry-stone walls: lods.js makeMerged draws it into their aStone.)
 const PROBE = [[0, 1], [0.07, 1], [0.2, 0.6]];
-export function stoneJoints(l, { position, normal }) {
-  const base = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(position, 3)).setAttribute('normal', new THREE.BufferAttribute(normal, 3));
-  base.computeBoundingBox();
-  const bb = base.boundingBox, c = bb.getCenter(new THREE.Vector3()), hs = bb.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-  const pos = base.attributes.position, nrm = base.attributes.normal, nv = pos.count, n = l.n;
+export function stoneJoints(l, models) {
+  const K = models.map(({ position, normal }) => {
+    const g = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(position, 3)).setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+    g.computeBoundingBox();
+    const c = g.boundingBox.getCenter(new V()), hs = g.boundingBox.getSize(new V()).multiplyScalar(0.5);
+    return { pos: g.attributes.position, nrm: g.attributes.normal, nv: position.length / 3, c, hs, inv: new V(1 / hs.x, 1 / hs.y, 1 / hs.z) };
+  });
+  const n = l.n, kind = l.kind;
   const M = new THREE.Matrix4(), I = new THREE.Matrix4(), N = new THREE.Matrix3(), inv = new Float32Array(n * 16), at = new Float32Array(n * 4);
+  const off = new Int32Array(n + 1); // where each copy's vertices start in the output
   const cell = new Map(), C = 2, key = (x, z) => `${Math.floor(x / C)},${Math.floor(z / C)}`;
   for (let i = 0; i < n; i++) {
+    const k = K[kind[i]];
+    off[i + 1] = off[i] + k.nv;
     M.fromArray(l.matrix, i * 16);
     I.copy(M).invert().toArray(inv, i * 16);
     const e = M.elements, s = Math.max(Math.hypot(e[0], e[1], e[2]), Math.hypot(e[4], e[5], e[6]), Math.hypot(e[8], e[9], e[10]));
-    const w = new THREE.Vector3().copy(c).applyMatrix4(M);
-    at[i * 4] = w.x; at[i * 4 + 1] = w.y; at[i * 4 + 2] = w.z; at[i * 4 + 3] = hs.length() * s;
-    const k = key(w.x, w.z);
-    if (!cell.has(k)) cell.set(k, []);
-    cell.get(k).push(i);
+    const w = new V().copy(k.c).applyMatrix4(M);
+    at[i * 4] = w.x; at[i * 4 + 1] = w.y; at[i * 4 + 2] = w.z; at[i * 4 + 3] = k.hs.length() * s;
+    const ck = key(w.x, w.z);
+    if (!cell.has(ck)) cell.set(ck, []);
+    cell.get(ck).push(i);
   }
-  const out = new Float32Array(n * nv), p = new THREE.Vector3(), d = new THREE.Vector3(), near = [], reach = PROBE[PROBE.length - 1][0];
-  const ix = 1 / hs.x, iy = 1 / hs.y, iz = 1 / hs.z;
+  const out = new Float32Array(off[n]), p = new V(), d = new V(), near = [], reach = PROBE[PROBE.length - 1][0];
   for (let i = 0; i < n; i++) {
+    const { pos, nrm, nv } = K[kind[i]];
     M.fromArray(l.matrix, i * 16);
     N.getNormalMatrix(M);
     const x0 = at[i * 4], y0 = at[i * 4 + 1], z0 = at[i * 4 + 2], r0 = at[i * 4 + 3] + reach;
@@ -269,35 +277,35 @@ export function stoneJoints(l, { position, normal }) {
       p.fromBufferAttribute(pos, v).applyMatrix4(M);
       d.fromBufferAttribute(nrm, v).applyMatrix3(N).normalize();
       let occ = 0;
-      for (let k = 0; k < near.length && occ < 1; k++) {
-        const j = near[k], o = j * 16, e = inv, rj = at[j * 4 + 3] + reach;
+      for (let q = 0; q < near.length && occ < 1; q++) {
+        const j = near[q], o = j * 16, e = inv, rj = at[j * 4 + 3] + reach, { c, inv: ih } = K[kind[j]];
         // (only the copies whose bounding sphere the probes can reach)
         if ((at[j * 4] - p.x) ** 2 + (at[j * 4 + 1] - p.y) ** 2 + (at[j * 4 + 2] - p.z) ** 2 > rj * rj) continue;
         // the vertex and its normal in copy j's frame, in units of its half-size: then how far inside it each probe is
         // (1 well inside, 0 outside, soft across its surface)
-        const px = (e[o] * p.x + e[o + 4] * p.y + e[o + 8] * p.z + e[o + 12] - c.x) * ix;
-        const py = (e[o + 1] * p.x + e[o + 5] * p.y + e[o + 9] * p.z + e[o + 13] - c.y) * iy;
-        const pz = (e[o + 2] * p.x + e[o + 6] * p.y + e[o + 10] * p.z + e[o + 14] - c.z) * iz;
-        const dx = (e[o] * d.x + e[o + 4] * d.y + e[o + 8] * d.z) * ix;
-        const dy = (e[o + 1] * d.x + e[o + 5] * d.y + e[o + 9] * d.z) * iy;
-        const dz = (e[o + 2] * d.x + e[o + 6] * d.y + e[o + 10] * d.z) * iz;
-        for (let q = 0; q < PROBE.length; q++) {
-          const s = PROBE[q][0], w = PROBE[q][1];
+        const px = (e[o] * p.x + e[o + 4] * p.y + e[o + 8] * p.z + e[o + 12] - c.x) * ih.x;
+        const py = (e[o + 1] * p.x + e[o + 5] * p.y + e[o + 9] * p.z + e[o + 13] - c.y) * ih.y;
+        const pz = (e[o + 2] * p.x + e[o + 6] * p.y + e[o + 10] * p.z + e[o + 14] - c.z) * ih.z;
+        const dx = (e[o] * d.x + e[o + 4] * d.y + e[o + 8] * d.z) * ih.x;
+        const dy = (e[o + 1] * d.x + e[o + 5] * d.y + e[o + 9] * d.z) * ih.y;
+        const dz = (e[o + 2] * d.x + e[o + 6] * d.y + e[o + 10] * d.z) * ih.z;
+        for (let r = 0; r < PROBE.length; r++) {
+          const s = PROBE[r][0], w = PROBE[r][1];
           if (w <= occ) continue;
           const lx = px + dx * s, ly = py + dy * s, lz = pz + dz * s;
           const t = Math.min(1, Math.max(0, (1.06 - Math.sqrt(Math.sqrt(lx * lx * lx * lx + ly * ly * ly * ly + lz * lz * lz * lz))) / 0.12));
           occ = Math.max(occ, w * t * t * (3 - 2 * t));
         }
       }
-      out[i * nv + v] = occ;
+      out[off[i] + v] = occ;
     }
   }
   return out;
 }
 
-// pebble: the pebble model's vertices (lods.js modelVertices), for the walls' joints (stoneJoints)
+// walls: the walls' stones' vertices (lods.js modelVertices), per kind of WALL_KINDS, for their joints (stoneJoints)
 const OUTCROPS = 45; // rock outcrops on the hills (rocksData)
-export function rocksData(world, tier, treePos, pebble) {
+export function rocksData(world, tier, treePos, walls) {
   const { rng, placements, pebbles, rocksInWater } = rockPlan(world, tier, treePos);
   const isPebble = new Set(pebbles);
   const all = placements.concat(pebbles);
@@ -337,72 +345,145 @@ export function rocksData(world, tier, treePos, pebble) {
       l.m.push(...m4.elements); l.c.push(tint, tint * (0.97 + r3() * 0.05), tint * (0.93 + r3() * 0.08));
     }
   }
-  // the farmhouses' pads (world.js BUILDINGS): dry-stone walls (ishigaki) on the banks where a pad is built up or cut
-  // into the slope by more than 40 cm: courses of rounded stones from the bank's foot to its top (the pebbles' stone,
-  // ~4,000 of them, merged in groups by place: lods.js makeMerged)
+  const data = (l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 });
+  const groups = wallStones(world).map((w) => ({ ...w, joint: stoneJoints(w, walls) }));
+  return { boulders: lists.map(data), pebbles: data(stones), walls: groups, rocksInWater, blockers: placements };
+}
+
+// ---------- the farmhouses' dry-stone walls ----------
+// The walls (nozura-zumi) on the faces world.js padGround cuts and builds round the pads where they step more than
+// WALL.min from the ground: field stones split to a face, of WALL_KINDS (tools/rocks.py: three face stones, blocky to
+// rounded, each filling the unit box round its origin, its face out along +z; and a small one for the chinks), laid
+// up each side of each pad from the wall's foot (the ground, or the yard below a cut) to its top (the yard, or the
+// ground above a cut). Each stone is set on the highest of what lies under it (the ground or the stones laid
+// before), so every one rests on the turf or on others: the lowest gap along the wall is filled next, with a stone as
+// wide as the gap allows (bigger low down, flatter and smaller towards the top, the top course cut to the wall's
+// height), so the courses run roughly level, broken where a big stone spans two. A slot too narrow for a face stone
+// takes a chink up to its neighbours, and small chinks are knocked into the gaps at the stones' lower corners. Each
+// stone leans back with the face's batter, its face a little proud or sunk, turned a little.
+// Returns the copies merged in groups per 50 m square (lods.js makeMerged): { matrix, color, n, kind (its WALL_KINDS
+// index), course (0 the wall's foot, 1 its top) }.
+export const WALL_KINDS = ['wall0', 'wall1', 'wall2', 'chink'];
+const CHINK = 3;
+const WALL_CELL = 0.05; // m along the wall: the stones' bed is followed at this step
+// m: the stones' faces stand this far out of the ground's face (world.js padGround), so the ground, a flat slope
+// between its mesh's vertices half a metre apart, stays inside them and shows only deep in the joints
+const PROUD = 0.22;
+function wallStones(world) {
   const r2 = mulberry32(4321), groups = new Map();
-  // the pebble's underside (its vertices facing down or sideways: what it rests on) and how far its top stands above its
-  // origin, for setting the foot course into the ground (below)
-  const pv = pebble.position, pn = pebble.normal, under = [];
-  let py1 = -Infinity;
-  for (let i = 1; i < pv.length; i += 3) py1 = Math.max(py1, pv[i]);
-  for (let i = 0; i < pv.length; i += 3) if (pn[i + 1] < 0.4) under.push(pv[i], pv[i + 1], pv[i + 2]);
-  const uv = new V();
-  world.BUILDINGS.forEach((b) => {
-    // a group per 50 m square of the village (lods.js makeMerged draws each merged, near or far by its middle)
-    const key = `${Math.floor(b.x / 50)},${Math.floor(b.z / 50)}`;
-    if (!groups.has(key)) groups.set(key, { m: [], c: [], k: [] });
-    const wall = groups.get(key);
-    const z0 = -b.hd, z1 = b.hd + b.yard;
-    // columns of stones along the pad's edge, set in from its corners by a stone's half-width (or they hang over the
-    // next side's bank), and one on each corner's diagonal; each goes out across the bank (world.js padAt: 0.15 ..
-    // 2.2 m out)
-    const edge = [[-b.hw, z0, b.hw, z0, 0, -1], [b.hw, z0, b.hw, z1, 1, 0], [b.hw, z1, -b.hw, z1, 0, 1], [-b.hw, z1, -b.hw, z0, -1, 0]];
-    const IN = 0.55, columns = [];
-    edge.forEach(([ax, az, bx, bz, ox, oz], k) => {
-      const dx = Math.sign(bx - ax), dz = Math.sign(bz - az), len = Math.hypot(bx - ax, bz - az) - 2 * IN, n = Math.max(1, Math.round(len / 0.85));
-      for (let i = 0; i <= n; i++) columns.push([lerp(ax + dx * IN, bx - dx * IN, i / n), lerp(az + dz * IN, bz - dz * IN, i / n), ox, oz]);
-      const [, , , , nx, nz] = edge[(k + 1) % 4];
-      columns.push([bx, bz, (ox + nx) * Math.SQRT1_2, (oz + nz) * Math.SQRT1_2]);
-    });
-    for (const [lx, lz, ox, oz] of columns) {
-      const at = (o) => [b.x + (lx + ox * o) * b.c + (lz + oz * o) * b.s, b.z - (lx + ox * o) * b.s + (lz + oz * o) * b.c];
-      const [fx, fz] = at(2.4);
-      const foot = world.height(fx, fz), step = Math.abs(foot - b.y);
-      if (step < 0.4) continue;
-      // Courses 0.45 m apart of stones about 0.6 m tall, their centres on the bank's surface: each course's outer
-      // underside rests on the top of the course below, which stands that much further out, however steep the bank
-      // (near a half-stone out per course on a gentle bank, nearly above one another on a steep one).
-      const rows = Math.max(1, Math.round(step / 0.45));
-      for (let r = 0; r < rows; r++) {
-        // up the bank: the height of this course, and how far out the bank stands at that height
-        const t = (r + 0.5) / rows, yy = lerp(Math.min(foot, b.y), Math.max(foot, b.y), t);
-        let o = 0.15, best = Infinity;
-        for (let k = 0; k <= 24; k++) { const oo = 0.15 + k * 0.085, [qx, qz] = at(oo), dy = Math.abs(world.height(qx, qz) - yy); if (dy < best) { best = dy; o = oo; } }
-        const [x, z] = at(o + (r2() - 0.5) * 0.12);
-        const sc = 0.44 + r2() * 0.2;
-        p.set(x, yy - sc * 0.3, z);
-        q.setFromEuler(new THREE.Euler((r2() - 0.5) * 0.3, r2() * 6.28, (r2() - 0.5) * 0.3));
-        s.set(sc * (1 + r2() * 0.3), sc * (0.85 + r2() * 0.3), sc * (1 + r2() * 0.3));
-        const t2 = 0.5 + r2() * 0.28;
-        m.compose(p, q, s);
-        if (r === 0 && step > 1.0) {
-          // the foot course stands on the turf, and on a steep bank its outer underside hangs out over it: it is
-          // sunk by that much and stretched up (by up to 1.7×: a footing stone) so its top stays under the course above
-          let over = -Infinity;
-          for (let k = 0; k < under.length; k += 3) { uv.set(under[k], under[k + 1], under[k + 2]).applyMatrix4(m); over = Math.max(over, uv.y - world.height(uv.x, uv.z)); }
-          if (over > -0.03) { const d = over + 0.06; p.y -= d; s.y *= Math.min(1.7, 1 + d / (s.y * py1)); m.compose(p, q, s); }
+  const k = WALL.batter, nn = Math.hypot(k, 1);
+  const m = new THREE.Matrix4(), R = new THREE.Matrix4(), q = new THREE.Quaternion(), e3 = new THREE.Euler(), sc = new V(), at = new V();
+  const X = new V(), U = new V(), Nn = new V();
+  for (const b of world.BUILDINGS) {
+    const gk = `${Math.floor(b.x / 50)},${Math.floor(b.z / 50)}`;
+    if (!groups.has(gk)) groups.set(gk, { m: [], c: [], k: [], kind: [] });
+    const G = groups.get(gk), P = b.y;
+    const put = (kind, tc, yc, w, h, d, out, face, course, tint) => {
+      // the stone's frame: along the wall, up its face (the batter), out of it
+      X.set(face.ax * b.c + face.az * b.s, 0, -face.ax * b.s + face.az * b.c);
+      const ox = face.ox * b.c + face.oz * b.s, oz = -face.ox * b.s + face.oz * b.c, sg = face.fill ? 1 : -1;
+      Nn.set(ox * k * sg, 1, oz * k * sg).divideScalar(nn); // (built up: out and up; cut: towards the yard and up)
+      U.crossVectors(Nn, X);
+      if (U.y < 0) { X.negate(); U.negate(); }
+      R.makeBasis(X, U, Nn);
+      q.setFromRotationMatrix(R).multiply(new THREE.Quaternion().setFromEuler(e3.set((r2() - 0.5) * 0.1, (r2() - 0.5) * 0.12, (r2() - 0.5) * 0.16)));
+      // its face PROUD in front of the ground's (world.js WALL: `top + rise / batter` out from the pad's edge), less
+      // `out` metres
+      const ef = WALL.top + Math.abs(yc - P) / k;
+      const [x, z] = face.toW(tc, ef);
+      at.set(x, yc, z).addScaledVector(Nn, PROUD - d / 2 - out);
+      sc.set(w, h * nn / k, d);
+      m.compose(at, q, sc);
+      G.m.push(...m.elements);
+      G.c.push(tint, tint * 0.98, tint * 0.93);
+      G.k.push(course);
+      G.kind.push(kind);
+    };
+    // the pad's sides: middle and direction along it (in the building's frame), the way out, half its length
+    const zc = b.yard / 2, hd = b.hd + b.yard / 2;
+    const sides = [[0, zc - hd, 1, 0, 0, -1, b.hw], [b.hw, zc, 0, 1, 1, 0, hd], [0, zc + hd, -1, 0, 0, 1, b.hw], [-b.hw, zc, 0, -1, -1, 0, hd]];
+    for (const [cx, cz, ax, az, ox, oz, half] of sides) {
+      const toW = (t, e) => {
+        const lx = cx + ax * t + ox * e, lz = cz + az * t + oz * e;
+        return [b.x + lx * b.c + lz * b.s, b.z - lx * b.s + lz * b.c];
+      };
+      const ground = (t, e) => world.unlevelled(...toW(t, e)).g;
+      // Along the side and past its ends to the corners: where the face starts (past the side's end, the corner's
+      // hip, where the next side's face meets it), where it meets the ground (walked out along it from there), and so
+      // the wall's foot and top. Sampled every 0.25 m, the cells between take the nearer sample.
+      const reach = half + 2.2, n = Math.ceil((2 * reach) / WALL_CELL) + 1, S = 0.25, ns = Math.ceil((2 * reach) / S) + 1;
+      const samp = [];
+      for (let j = 0; j < ns; j++) {
+        const t = -reach + j * S, e0 = Math.max(WALL.top, Math.abs(t) - half), hip = (e0 - WALL.top) * k;
+        let e = e0, g = ground(t, e);
+        if (Math.abs(g - P) <= hip + 0.05) { samp.push(null); continue; }
+        while (e < 2.2 && Math.abs(g - P) > (e - WALL.top) * k) { e += 0.2; g = ground(t, e); }
+        let a = Math.max(e0, e - 0.2), c = Math.min(e, 2.2);
+        for (let it = 0; it < 4; it++) { const mid = (a + c) / 2, gm = ground(t, mid); if (Math.abs(gm - P) > (mid - WALL.top) * k) a = mid; else c = mid; }
+        g = ground(t, c);
+        const fill = g < P;
+        // (the ground a little further out too, under the foot stones' fronts)
+        const foot = fill ? Math.min(g, ground(t, c + 0.3)) - 0.06 : P - 0.06;
+        const top = fill ? P - hip + 0.03 : g + 0.03;
+        samp.push(top - (fill ? foot : P + hip) >= 0.3 ? { lo: fill ? foot : P + hip - (hip > 0 ? 0 : 0.06), hi: top, fill } : null);
+      }
+      const lo = new Float32Array(n), hi = new Float32Array(n), sky = new Float32Array(n), ok = new Uint8Array(n), fill = new Uint8Array(n);
+      for (let i = 0; i < n; i++) {
+        const sp = samp[Math.min(ns - 1, Math.round((i * WALL_CELL) / S))];
+        if (!sp) continue;
+        ok[i] = 1; lo[i] = sky[i] = sp.lo; hi[i] = sp.hi; fill[i] = sp.fill ? 1 : 0;
+      }
+      // (built up or cut, as the ground is where the stone stands)
+      const face = (i) => ({ ax, az, ox, oz, toW, fill: fill[i] === 1 });
+      const open = (i) => ok[i] && sky[i] < hi[i] - 0.08;
+      const T = (i) => -reach + i * WALL_CELL;
+      for (let guard = 0; guard < 20000; guard++) {
+        // the lowest bed still open, and the run of cells about as low round it
+        let i0 = -1;
+        for (let i = 0; i < n; i++) if (open(i) && (i0 < 0 || sky[i] < sky[i0])) i0 = i;
+        if (i0 < 0) break;
+        const low = sky[i0];
+        let a = i0, c = i0;
+        while (a > 0 && open(a - 1) && sky[a - 1] <= low + 0.07 && hi[a - 1] > low + 0.15) a--;
+        while (c < n - 1 && open(c + 1) && sky[c + 1] <= low + 0.07 && hi[c + 1] > low + 0.15) c++;
+        const run = (c - a + 1) * WALL_CELL, up = (low - lo[i0]) / Math.max(0.3, hi[i0] - lo[i0]);
+        const tint = 0.5 + r2() * 0.28;
+        if (run < 0.26) {
+          // a slot: a chink up to the lower of its sides (a shallow one is left for the stone over it to bridge)
+          const side = Math.min(a > 0 && ok[a - 1] ? sky[a - 1] : Infinity, c < n - 1 && ok[c + 1] ? sky[c + 1] : Infinity, hi[i0]);
+          const h = clamp(side - low, 0.06, 0.2);
+          if (side - low < 0.1) { for (let i = a; i <= c; i++) sky[i] = Math.max(low + 0.03, Math.min(side, hi[i])); continue; }
+          put(CHINK, (T(a) + T(c)) / 2, low + h / 2 - 0.02, run + 0.08, h + 0.05, 0.22, -0.01, face(i0), up, tint);
+          for (let i = a; i <= c; i++) sky[i] = low + h;
+          continue;
         }
-        wall.m.push(...m.elements);
-        wall.c.push(t2, t2 * 0.98, t2 * 0.93);
-        wall.k.push(rows > 1 ? r / (rows - 1) : 1);
+        // the stone: wide and tall low in the wall, smaller and flatter up it; as wide as the run leaves room for
+        // (now and then a big one low down)
+        let w = lerp(0.42, 1.1, r2() ** 1.4) * (1.15 - 0.35 * up) * (up < 0.5 && r2() < 0.18 ? 1.45 : 1);
+        let h = clamp(w * lerp(0.4, 0.75, r2()) * (1.05 - 0.25 * up), 0.18, 0.8);
+        w = Math.min(w, run);
+        if (run - w < 0.28) w = run;
+        const cw = Math.max(1, Math.round(w / WALL_CELL)), s0 = r2() < 0.5 ? a : c - cw + 1;
+        let rest = -Infinity, room = Infinity;
+        for (let i = s0; i < s0 + cw; i++) { rest = Math.max(rest, sky[i]); room = Math.min(room, hi[i]); }
+        room -= rest;
+        if (room < 0.1) { sky[i0] = hi[i0]; continue; }
+        if (room < h + 0.18) h = room; // (the top course cut to the wall's height)
+        const tc = (T(s0) + T(s0 + cw - 1)) / 2, kind = r2() < 0.42 ? 0 : r2() < 0.6 ? 1 : 2;
+        put(kind, tc, rest - 0.03 + h / 2, w + 0.06, h + 0.05, lerp(0.4, 0.7, r2()), (r2() - 0.5) * 0.06, face(i0), up, tint);
+        for (let i = s0; i < s0 + cw; i++) sky[i] = rest + h - 0.02;
+        // chinks knocked into the gaps at its lower corners, where it meets its neighbours
+        for (const end of [-1, 1]) {
+          if (r2() > 0.3 || rest - low > 0.12) continue;
+          const sz = lerp(0.1, 0.2, r2());
+          put(CHINK, tc + end * (w / 2 + 0.01), rest + sz * 0.25, sz, sz * lerp(0.6, 0.9, r2()), 0.2, 0.0, face(i0), up, tint * 0.95);
+        }
       }
     }
-  });
-  // (walls: each stone's course up the wall, 0 the foot, 1 the top; how deep each vertex lies in the joints)
-  const data = (l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3, ...(l.k && { course: new Float32Array(l.k) }) });
-  const walls = [...groups.values()].filter((g) => g.c.length).map(data).map((w) => ({ ...w, joint: stoneJoints(w, pebble) }));
-  return { boulders: lists.map(data), pebbles: data(stones), walls, rocksInWater, blockers: placements };
+  }
+  return [...groups.values()].filter((g) => g.c.length).map((g) => ({
+    matrix: new Float32Array(g.m), color: new Float32Array(g.c), n: g.c.length / 3, course: new Float32Array(g.k), kind: new Uint8Array(g.kind),
+  }));
 }
 
 // ---------- the gorge's rock walls ----------

@@ -10,7 +10,7 @@ import { U, sceneFog, pcfSoftShadowFilter, setLightMap, LOOP, RUN_LOOP, FLOW_LOO
 import { makeFarShadow, FAR_LAYER, CLOUDS, CLOUD_LOOP } from './sunshadow.js';
 import { lightMap, lightMapAdd, lamp } from './lights.js';
 import { buildFlowerGeometry, atlasTexture, barkTextures, MAIN_TREE, FLOWER_ATTRS, trunkBendAttributes } from './tree.js';
-import { makeTurf, makeFlowers, SHRUB_KINDS, SPRING_KINDS, ROCK_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
+import { makeTurf, makeFlowers, SHRUB_KINDS, SPRING_KINDS, ROCK_KINDS, WALL_KINDS, FOREST_KINDS, CLIFF_KINDS, BAMBOO_KINDS } from './vegetation.js';
 import { makeLods, makeMerged, makeView, loadModel, ultraUrl, shareInstancedPipelines, modelVertices } from './lods.js';
 import { makeGrass } from './grass.js';
 import { bakeImpostors, makeImpostors } from './impostors.js';
@@ -223,7 +223,7 @@ export async function create(canvas, opts = {}) {
     fuji: { name: 'fuji' },
     props: { name: 'props', args: { triMul } },
     lanterns: { name: 'lanterns', args: { tier: tierName } },
-    rocks: { name: 'rocks', args: modelVertices(rocksUrl, 'pebble').then((pebble) => ({ tier: tierName, pebble })) }, // (the walls' joints)
+    rocks: { name: 'rocks', args: Promise.all(WALL_KINDS.map((k) => modelVertices(rocksUrl, k))).then((walls) => ({ tier: tierName, walls })) }, // (the walls' joints)
     grassMask: { name: 'grassMask', args: { tier: tierName } },
     turf: { name: 'turf', args: { count: Q.turf * (ST ? ST.grass : 1) } },
     flowers: { name: 'flowers', args: { count: Q.flowers, tier: tierName } },
@@ -479,7 +479,7 @@ export async function create(canvas, opts = {}) {
   const rocks = await makeLods(rocksUrl, ROCK_KINDS, G.rocks.boulders, rockMat, [45], { lodScale, ...nearOf('rocks') });
   const pebbles = await makeLods(rocksUrl, ['pebble'], [G.rocks.pebbles], rockMat, [], { lodScale, ...nearOf('rocks', 8) });
   // the village's stone walls: merged, a group per few farmhouses (layer 1: far from the river, never in its reflection)
-  const walls = await makeMerged(rocksUrl, 'pebble', G.rocks.walls, M.rockMaterial({ walls: true }), 70, lodScale, { stones: true });
+  const walls = await makeMerged(rocksUrl, WALL_KINDS, G.rocks.walls, M.rockMaterial({ walls: true }), 70, lodScale, { stones: true });
   walls.traverse((o) => { if (o.isMesh) o.layers.set(1); });
   walls.name = 'stoneWalls';
   scene.add(walls);
