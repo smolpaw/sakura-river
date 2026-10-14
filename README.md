@@ -89,6 +89,14 @@ Ambience:
 - Birds: "Kamikosawa Canyon Forest Near Koyasan Japan - Forest Birds Quiet" by Lawrence Dolton, radio aporee, CC BY-NC-SA 3.0. https://archive.org/details/aporee_68851_79871
 - Water under the bridge: "easy lapping of waves on the rocks-birds, White Sea, Russia" by Nikolaj Terent'ev, radio aporee, CC BY 3.0. https://archive.org/details/aporee_24924_28918
 - Temple bell: "Mii-dera" (the evening bell of Mii-dera, Ōtsu), radio aporee, Public Domain Mark 1.0. https://archive.org/details/aporee_31518_36212
+- Rain off the eaves: "Rain pouring from eaves.wav" by Martineerok, Freesound, CC BY 4.0. https://freesound.org/people/Martineerok/sounds/391839/
+- Rain on the river: "180723 Rain, on water lake, modulating light to med, cottage ONTARIO.flac" by TRP, Freesound, CC0. https://freesound.org/people/TRP/sounds/572429/
+- The bridge's creaking boards: "Squeaking Floor Planks Walking" by qubodup, Freesound, CC0. https://freesound.org/people/qubodup/sounds/740803/
+- The moored boat's creaks: "Venice_CloseUp_Boat_squeaks" by nicotep, Freesound, CC0. https://freesound.org/people/nicotep/sounds/843241/
+- The water knocking on its hull: "Soutuvene, liplatus venettä vasten / Rowing boat, wooden, small waves lapping against the boat, holding still on a lake when fishing, autumn" by YleArkisto, Freesound, CC BY 4.0. https://freesound.org/people/YleArkisto/sounds/361112/
+- The village's dog: "2012_04_22_barking_dog.wav" by reinsamba, Freesound, CC BY 4.0. https://freesound.org/people/reinsamba/sounds/156418/
+- The village's axe: "Chopping wood" by AugustSandberg, Freesound, CC0. https://freesound.org/people/AugustSandberg/sounds/677798/
+- The village's cock: "Rooster crowing - slightly far.wav" by Wax_vibe, Freesound, CC0. https://freesound.org/people/Wax_vibe/sounds/642782/
 - Bush warbler: XC993079, Japanese Bush Warbler (*Horornis diphone*), Karuizawa, by Xavier Riera, xeno-canto, CC BY-NC-SA 4.0. https://xeno-canto.org/993079
 - Waterwheel: "Watermill" by Pierre Sibanarco, BigSoundBank, CC0. https://bigsoundbank.com/mill-wheel-bladed-s2768.html
 - Frogs: "1586 Dōbaru, Kokuraminami Ward, Kitakyushu, Fukuoka 803-0266, Japan - Frogs" by thomasmartinnutt, radio aporee, Public Domain Mark 1.0. https://archive.org/details/aporee_65287_75404
@@ -102,6 +110,8 @@ Animals (xeno-canto recordings are CC BY-NC-SA 4.0):
 - Japanese wagtail's flight calls: XC527476, Japanese Wagtail (*Motacilla grandis*), Japan, by Markus Jacobs, xeno-canto. https://xeno-canto.org/527476
 - Skylark's song: XC283467, Eurasian Skylark (*Alauda arvensis japonica*), Erimo, Hokkaidō, by Antony Schubert, xeno-canto. https://xeno-canto.org/283467
 - Spot-billed duck's quacks: XC858061, Eastern Spot-billed Duck (*Anas zonorhyncha*), Japan, by Joshua Chong, xeno-canto. https://xeno-canto.org/858061
+- Mandarin drake's calls: XC191331, Mandarin Duck (*Aix galericulata*), Myogi-ko Reservoir, Gunma, by Andrew Spencer, xeno-canto. https://xeno-canto.org/191331
+- Ural owl's song: XC578814, Ural Owl (*Strix uralensis*), Lake Miike, Miyazaki, by Okamoto Keita Sin, xeno-canto. https://xeno-canto.org/578814
 - White-eye's song: XC993083, Warbling White-eye (*Zosterops japonicus*), Japan, by Xavier Riera, xeno-canto. https://xeno-canto.org/993083
 - The plop into water: "Fishing Lure Plop Water - Game SFX (2 or 2)" by el_boss, Freesound, CC0. https://freesound.org/people/el_boss/sounds/853279/
 

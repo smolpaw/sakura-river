@@ -2,14 +2,15 @@
 //   node tools/audio.mjs [name ...]
 // Needs ffmpeg with libmp3lame. Sources are downloaded once into tools/.audio-cache/. Given names, it builds only the
 // outputs whose names start with one of them (`node tools/audio.mjs step- frogs`) and leaves the other files as they are.
-// - Beds (river, wind, rain, birds, lapping, waterwheel, frogs, bamboo, the skylark's song) become seamless loops: the segment's tail is
+// - Beds (river, wind, rain, birds, lapping, waterwheel, frogs, bamboo, the skylark's song, rain off the eaves and on the
+//   water) become seamless loops: the segment's tail is
 //   crossfaded into its head, and the file carries PAD seconds of the loop's own end before it and of its start after
 //   it, so the page can loop [PAD, PAD + length] and stay seamless whatever the MP3 decoder does with encoder delay and
 //   padding.
 //   They are levelled to BED_LUFS, with the peak held under -1 dBFS.
-// - One-shots (thunder, bush-warbler songs, the temple bell, the fisherman's tune, the animals' calls and the plop of
-//   one going into the water) are trimmed, faded and peak-normalised (the bell and the tune levelled); mono, panned by
-//   the page.
+// - One-shots (thunder, bush-warbler songs, the temple bell's strokes, the fisherman's tune, the animals' calls and the
+//   plop of one going into the water, the bridge's and the boat's creaks, the village's dog, axe and cock) are
+//   trimmed, faded and peak-normalised (the bell and the tune levelled); mono, panned by the page.
 // - Footsteps (geta on four surfaces) are cut at each step's onset, layered with a geta's wooden knock where the
 //   recording is not of geta, and levelled to one loudness; mono.
 // - Music tracks are re-encoded at LAME VBR -V 5 (about 140 kbps against the sources' 192) without their tags; their
@@ -55,6 +56,21 @@ const SRC = {
   pontoon: BSB('1845'),
   path: BSB('3216'),
   grass: BSB('0854'),
+  // rain pouring and dripping off the eaves; rain on a lake
+  roof: 'https://cdn.freesound.org/previews/391/391839_1540977-hq.mp3',
+  rainwater: 'https://cdn.freesound.org/previews/572/572429_97550-hq.mp3',
+  // floor planks creaking under bare feet; a small boat's hull creaking against its post; waves knocking on a rowing
+  // boat's hull
+  creak: 'https://cdn.freesound.org/previews/740/740803_71257-hq.mp3',
+  hull: 'https://cdn.freesound.org/previews/843/843241_7529214-hq.mp3',
+  knock: 'https://cdn.freesound.org/previews/361/361112_4415905-hq.mp3',
+  // a Ural owl's song, Miyazaki; a mandarin drake's calls, Gunma
+  owl: 'https://xeno-canto.org/578814/download',
+  oshidori: 'https://xeno-canto.org/191331/download',
+  // the village: a farm dog's barks, an axe splitting logs, a cock crowing some way off
+  dog: 'https://cdn.freesound.org/previews/156/156418_18799-hq.mp3',
+  chop: 'https://cdn.freesound.org/previews/677/677798_1934171-hq.mp3',
+  rooster: 'https://cdn.freesound.org/previews/642/642782_12197619-hq.mp3',
 };
 
 // loops: source, start and length in seconds (plus XF of crossfade taken after it), filters
@@ -77,6 +93,10 @@ const BEDS = [
   { out: 'bamboo', src: 'bamboo', at: 140, len: 40, af: 'highpass=f=300,highpass=f=300,highpass=f=280' },
   // a skylark's unbroken song (the recording is cut below 1.8 kHz already)
   { out: 'hibari', src: 'hibari', at: 10, len: 50, af: 'highpass=f=1500' },
+  // rain off the eaves: pouring and dripping, a steady stretch
+  { out: 'roof', src: 'roof', at: 61, len: 30, af: 'highpass=f=120' },
+  // rain hissing and pattering on open water, medium rain
+  { out: 'rainwater', src: 'rainwater', at: 191, len: 30, af: 'highpass=f=150' },
 ];
 const XF = 3;
 
@@ -85,8 +105,9 @@ const SHOTS = [
   ...[['3179', 0, 14], ['3115', 0.3, 17], ['3114', 0.1, 11.2], ['3182', 0.2, 24]].map(([n, at, len], i) => ({ out: `thunder-near-${i + 1}`, url: BSB(n), at, len })),
   ...[['3116', 0, 22], ['2718', 0.2, 23], ['3181', 0, 26]].map(([n, at, len], i) => ({ out: `thunder-far-${i + 1}`, url: BSB(n), at, len })),
   ...[[3.6, 3.6], [11.4, 3.6], [55.0, 3.8], [18.2, 8.8]].map(([at, len], i) => ({ out: `uguisu-${i + 1}`, src: 'uguisu', at, len, af: 'highpass=f=700', peak: -6 })),
-  // the evening bell's last three strikes, about 21 s apart, the last one decaying fully; a faint 5 kHz insect line
-  { out: 'bell', src: 'bell', at: 100.0, len: 65, af: 'highpass=f=40,lowpass=f=4000', lufs: -20 },
+  // the bell's strokes (the recording holds the evening bell's seven, struck about 20.7 s apart): the fifth and sixth
+  // ringing until just before the next stroke, the seventh, the last, ringing out fully; a faint 5 kHz insect line cut
+  ...[[79.4, 20.7, 0.6], [100.15, 20.75, 0.6], [141.88, 25.1, 2]].map(([at, len, fade], i) => ({ out: `bell-${i + 1}`, src: 'bell', at, len, af: 'highpass=f=40,lowpass=f=4000', lufs: -20, fade })),
   // the fisherman's tune (Auld Lang Syne, sung in Japan as 蛍の光): the recording's whistled verse, the low band's
   // breath noise cut; its hummed verse (up to the "Happy New Year" at the end), three semitones lower for an older
   // voice, formants and tempo kept; the phrases' times in src/audio.js (TUNE)
@@ -104,6 +125,20 @@ const SHOTS = [
   ...[[0.6, 2.6], [23.8, 2.8], [41.4, 2.8]].map(([at, len], i) => ({ out: `karugamo-${i + 1}`, src: 'karugamo', at, len, af: 'highpass=f=450', peak: -4, fade: 0.3 })),
   ...[[2.7, 3.9], [10.3, 5.4], [21.3, 3.0]].map(([at, len], i) => ({ out: `mejiro-${i + 1}`, src: 'mejiro', at, len, af: 'highpass=f=2000', peak: -6, fade: 0.4 })),
   { out: 'plop-1', src: 'plop', at: 0, len: 0.38, af: 'highpass=f=150', peak: -3, fade: 0.1 },
+  // the mandarin drake's short whistled calls
+  ...[[24.45, 0.9], [12.35, 0.55], [28.35, 0.55]].map(([at, len], i) => ({ out: `oshidori-${i + 1}`, src: 'oshidori', at, len, af: 'highpass=f=600', peak: -6, fade: 0.12 })),
+  // the Ural owl's two-part song (a hoot, a pause, then the longer second part); the recording's background hiss and
+  // the night's other sounds taken down
+  ...[[0.35, 4.95], [30.85, 4.95], [60.6, 5.0]].map(([at, len], i) => ({ out: `owl-${i + 1}`, src: 'owl', at, len, af: 'highpass=f=180,lowpass=f=2500,afftdn=nr=12:nf=-40', peak: -3, fade: 0.3 })),
+  // the bridge's boards creaking (soft barefoot steps under them cut away below 200 Hz)
+  ...[[16.25, 1.45], [21.4, 1.0], [25.5, 0.65], [27.05, 1.1], [29.4, 0.7]].map(([at, len], i) => ({ out: `creak-${i + 1}`, src: 'creak', at, len, af: 'highpass=f=200,highpass=f=200', peak: -3, fade: 0.25 })),
+  // the moored boat: its hull creaking against its rope, and the water knocking on its planks
+  ...[[20.4, 0.8], [33.35, 0.8], [58.4, 0.8], [121.25, 0.8]].map(([at, len], i) => ({ out: `hull-${i + 1}`, src: 'hull', at, len, af: 'highpass=f=200', peak: -3, fade: 0.3 })),
+  ...[[5.75, 0.55], [13.45, 0.55], [37.0, 0.55]].map(([at, len], i) => ({ out: `knock-${i + 1}`, src: 'knock', at, len, af: 'highpass=f=80', peak: -3, fade: 0.25 })),
+  // the village: barks (a pair, one, a quick pair), axe strokes splitting logs, a cock's crows
+  ...[[1.55, 0.9], [3.4, 0.75], [15.85, 1.0]].map(([at, len], i) => ({ out: `dog-${i + 1}`, src: 'dog', at, len, af: 'highpass=f=150', peak: -3, fade: 0.25 })),
+  ...[[0.6, 1.2], [9.3, 1.2], [17.0, 1.2], [28.2, 1.2]].map(([at, len], i) => ({ out: `chop-${i + 1}`, src: 'chop', at, len, af: 'highpass=f=100', peak: -3, fade: 0.6 })),
+  ...[[3.3, 3.0], [20.6, 4.0]].map(([at, len], i) => ({ out: `rooster-${i + 1}`, src: 'rooster', at, len, af: 'highpass=f=300', peak: -3, fade: 0.6 })),
 ];
 
 // Footsteps: geta (wooden clogs) recorded on a street in Kyoto give the stone set as they are, and their wooden knock,

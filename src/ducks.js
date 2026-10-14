@@ -26,10 +26,10 @@ import duckUrl from './models/duck.glb?url&inline';
 
 // kinds: the duck's then the drake's model; size: against life (the spot-billed duck 57 cm bill to tail, the
 // mandarin 45: large, as the scene's birds are); home: the stretch they keep to (z); start: where they are first
-// (z); call: their call for the sound (audio.js; the mandarins are quiet)
+// (z); call: their call for the sound (audio.js: the spot-billed ducks' quack, the mandarin drake's whistle)
 const PAIRS = [
   { kinds: ['duck', 'duck'], size: 1.3, home: [-46, 24], start: [-20, 10], call: 'karugamo' },
-  { kinds: ['oshidori_f', 'oshidori_m'], size: 1.05, home: [-92, -66], start: [-86, -70], call: null },
+  { kinds: ['oshidori_f', 'oshidori_m'], size: 1.05, home: [-92, -66], start: [-86, -70], call: 'oshidori' },
 ];
 const FLUSH = 10, CAMERA_FLUSH = 2.5; // m
 const QUIET = 40; // s before they head home after a flight

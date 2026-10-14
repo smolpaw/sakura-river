@@ -142,11 +142,13 @@ export async function create(canvas, opts = {}) {
     throw Object.assign(new Error('no WebGPU or WebGL2: ' + (e && e.message)), { code: 'unsupported' });
   }
   // A lost device (a driver reset, the GPU out of memory, the browser's GPU watchdog after a long stall) ends the
-  // scene, during start-up or after: the loop stops and the page is told (onLost), since nothing renders after it.
-  let lost = null;
+  // scene, during start-up or after: the loop stops, the sound fades out for good, and the page is told (onLost),
+  // since nothing renders after it.
+  let lost = null, sound = null;
   renderer.onDeviceLost = (info) => {
     if (lost) return;
     lost = { api: info.api, message: info.message, reason: info.reason };
+    if (sound) sound.dispose();
     renderer._onDeviceLost(info); // three's own: logs it and stops its compile and render calls on the dead device
     opts.onLost && opts.onLost(lost);
   };
@@ -666,7 +668,7 @@ export async function create(canvas, opts = {}) {
   rain.name = 'rain';
   rain.visible = false;
   scene.add(rain);
-  const sound = createSound(world, bridge.center);
+  sound = createSound(world, bridge.center);
   const lightning = makeLightning((x, z, dist, bolt) => sound.thunder(x, z, dist, bolt, camera));
   lightning.mesh.name = 'lightning';
   scene.add(lightning.mesh);
@@ -1151,12 +1153,12 @@ export async function create(canvas, opts = {}) {
     ducks.update(dt, { hour: clockH, rain: S.rain, camera, walker: walker && walk.state, warming });
     frogs.update(dt, { camera, walker: walker && walk.state });
     tanuki.update(dt, { hour: clockH, camera, walker: walker && walk.state, warming });
-    // the animals' calls, from where each is
-    for (const s of [deer, herons, perched, turtles, ducks, frogs]) {
+    // the animals' calls and the moored boat's knocks and creaks, from where each is
+    for (const s of [deer, herons, perched, turtles, ducks, frogs, boats]) {
       for (const e of s.events) sound.call(e.kind, e.x, e.y, e.z, camera);
       s.events.length = 0;
     }
-    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera, fisher: figures.voice(), lark: birds.lark(camera.position) });
+    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, clouds: S.clouds, fog: S.fog, hour: clockH, lapse: timeTween ? Math.sign(timeTween.delta) : 0, lights: U.uLights.value, camera, fisher: figures.voice(), lark: birds.lark(camera.position) });
 
     // camera
     walk.update(dt, walking && !tween); // (the body waits for the flight into its eye)
@@ -1455,7 +1457,9 @@ export async function create(canvas, opts = {}) {
     setSound(on) { sound.setEnabled(on); },
     setVolume(which, v) { sound.setVolume(which, v); },
     soundWaiting() { return sound.waiting; }, // on, but held back by the browser until a click or key press
-    soundInfo() { return sound.info(); },
+    soundInfo() { return sound.info(); }, // debug: the loops' gains, the music's decks and moods, the one-shots played and dropped (audio.js info)
+    soundDebug(o) { sound.debug(o); }, // debug: { seek: s } moves the playing track there, { clear: true } empties the played list
+    loseDevice() { renderer.onDeviceLost({ api: backendName, message: 'debug', reason: 'debug' }); }, // debug: as if the graphics device were lost
     cineView(u) { if (walking) setWalk(false, false); const p = posCurve.getPointAt(u), t = tgtCurve.getPointAt(u); tween = null; camera.position.copy(p); controls.target.copy(t); clampCamera(); controls.update(); },
     setView(pos, target) { if (walking) setWalk(false, false); tween = null; camera.position.set(...pos); controls.target.set(...target); controls.update(); },
     heroView() { if (walking) setWalk(false, false); cinematic = false; controls.enabled = true; tween = null; camera.position.copy(DEFAULT.pos); controls.target.copy(DEFAULT.target); controls.update(); },

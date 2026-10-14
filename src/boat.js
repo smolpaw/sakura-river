@@ -5,7 +5,8 @@
 // onto the grass, heeled a little, its stern at the water's edge. Each boat is one Object3D (its full model near, the
 // far one beyond FAR metres); the moored one's rocking is a few sines of the time on the CPU, and the rope's end
 // follows its bow in the vertex stage. Lit as the lamps (materials.js lampMaterial). The moored hull leaves a wake
-// in the current from its bow and its stern, and sends out faint rings round itself as it rocks (touches.js).
+// in the current from its bow and its stern, and sends out faint rings round itself as it rocks (touches.js), its
+// hull now and then knocked by the water and creaking at its rope as it does (events, for audio.js).
 import * as THREE from 'three/webgpu';
 import { attribute, positionLocal, uniform } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -228,11 +229,11 @@ export async function makeBoats(url, world, { rocks = [], lamps = [], rafts = nu
   // the moored hull in the current: a V from its bow, broken water off its square stern; rings round it at the
   // bottom of each heave and the ends of each roll (touches.js)
   const wakes = [{ x: 0, z: 0, r: 0.05, len: 4.6, amp: 1, lambda: 0.12 }, { x: 0, z: 0, r: 0.42, len: 2.2, amp: 0.7, lambda: 0.1 }];
-  const splashes = [];
+  const splashes = [], events = [];
   const along = new THREE.Vector3(), mid = new THREE.Vector3();
   let heave = 0, roll = 0;
   return {
-    group, wakes, splashes,
+    group, wakes, splashes, events, // events: the hull's knocks and creaks for the sound (audio.js call), taken each frame
     // once a frame: the moored boat rocks (heave of a couple of cm, ~1 degree of roll, less of pitch, a slow swing
     // on its rope); each boat its full or far model by the camera's distance
     update(t, cam) { // (cam: the camera's position)
@@ -248,8 +249,10 @@ export async function makeBoats(url, world, { rocks = [], lamps = [], rafts = nu
       // (the heave's lowest point: its rate turning from falling to rising; the slow roll's ends: its rate changing
       // sign; a ring every 2-7 s)
       const ring = (amp) => splashes.push({ x: mid.x, z: mid.z, amp, r: HALF.beam - 0.06, hx: along.x * (HALF.len - HALF.beam - 0.3), hz: along.z * (HALF.len - HALF.beam - 0.3) });
-      if (heave < 0 && dh >= 0) ring(0.8);
-      if (Math.sign(roll) !== Math.sign(dr) && roll !== 0) ring(0.4);
+      // the water knocks on the planks at some of the heave's low points; the hull creaks at its rope at some ends of
+      // the roll
+      if (heave < 0 && dh >= 0) { ring(0.8); if (Math.random() < 0.55) events.push({ kind: 'knock', x: mid.x, y: 0.15, z: mid.z }); }
+      if (Math.sign(roll) !== Math.sign(dr) && roll !== 0) { ring(0.4); if (Math.random() < 0.35) events.push({ kind: 'hull', x: mid.x, y: 0.4, z: mid.z }); }
       heave = dh; roll = dr;
       uBow.value.copy(tmp.copy(BOW_PEG).applyMatrix4(floating.o.matrix)).sub(bow);
       for (const b of boats) {
