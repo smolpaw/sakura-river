@@ -4,7 +4,8 @@
 // lods.js, a full model near and a lighter one beyond.
 // Its lights after dusk: a paper lantern under the eaves by each farmhouse's door and the mill's (drawn with the
 // riverside ones, fx.js), the light the lit shoji throw on the yard, and stone lanterns in pairs up the temple's
-// approach from the torii (temple.js toro), their light on the path (lights.js).
+// approach from the torii (temple.js toro), their light on the path (lights.js). Where the swallows nest (birds.js):
+// on each farmhouse's end wall by the doma's entrance, under the tie beam.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32 } from './noise.js';
@@ -30,7 +31,7 @@ export function villageData(world) {
     l.c.push(t, t * (0.97 + rng() * 0.05), t * (0.94 + rng() * 0.06));
   };
   // door lanterns (hang, look as lanterns.js) and the shoji's light on the yard (lights.js lamp: x, y, z, s, r)
-  const hang = [], look = [], spill = [], smoke = [];
+  const hang = [], look = [], spill = [], smoke = [], nests = [];
   // in each model's frame (tools/village.py, y up, its front +z): beside the door under the eave, the eave's
   // underside; the shoji's middle, the front wall's half-length
   const DOOR = { minka0: [6.7, 2.0, 2.9], minka1: [4.85, 1.85, 2.2], suisha: [-1.45, 1.8, 1.95] };
@@ -38,6 +39,9 @@ export function villageData(world) {
   // where the hearth's smoke leaves the thatch: the irimoya's smoke gable at one end of its ridge, the hipped roof's
   // ridge (fx.js makeSmoke)
   const SMOKE = { minka0: [4.1, 8.3, 0], minka1: [0.6, 7.2, 0] };
+  // the swallows' nest: on the end wall (+x), under the tie beam (below the thatch's low eave, so it shows from the
+  // yard), between the posts beyond the doma's door slid aside
+  const NEST = { minka0: [6.31, 1.83, -0.9], minka1: [4.46, 1.74, -1.6] };
   for (const b of world.BUILDINGS) {
     const sc = b.kind.startsWith('minka') ? 0.95 + rng() * 0.1 : 1;
     put(b.kind, b.x, b.y - 0.05, b.z, b.yaw, sc);
@@ -48,6 +52,8 @@ export function villageData(world) {
       look.push(rng() * 6.28, 0, 0.8 + rng() * 0.2, b.yaw);
     }
     if (SMOKE[b.kind]) smoke.push(...at(SMOKE[b.kind]));
+    // x, y, z, and the way the wall faces (yaw: the model's +x)
+    if (NEST[b.kind]) nests.push(...at(NEST[b.kind]), Math.atan2(b.c, -b.s));
     if (SHOJI[b.kind]) {
       const [d, half] = SHOJI[b.kind];
       for (const u of [-0.5, 0.5]) spill.push(at([u * half, 1.5, d + 1.4]));
@@ -59,7 +65,7 @@ export function villageData(world) {
   const wheel = w && { pos: [w.x + 2.9 * w.c, w.y - 0.05 + 1.6, w.z - 2.9 * w.s], yaw: w.yaw };
   return {
     lists: lists.map((l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 })), wheel,
-    lamps: { hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 }, spill: new Float32Array(spill.flat()), smoke: new Float32Array(smoke),
+    lamps: { hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 }, spill: new Float32Array(spill.flat()), smoke: new Float32Array(smoke), nests: new Float32Array(nests),
     toro: toroData(world),
   };
 }

@@ -1,14 +1,16 @@
 // Birds in flight, in the background: swallows hunting over the river by day (high in fair weather, skimming the
-// water under heavy cloud and in drizzle, as the saying has it before rain; gone in heavy rain), black kites circling
+// water under heavy cloud and in drizzle, as the saying has it before rain; gone in heavy rain), and a pair at each
+// farmhouse building its mud nest under the eave (hawking in front of the house, back to cling at the nest's rim a
+// few seconds, off again; into the nest for the night), black kites circling
 // high on clear days and drifting downwind, and crows flying home to the temple woods at dusk (out again at dawn, the
 // odd pair by day); bats jinking low over the river from dusk into the night and before dawn; skylarks going up from
 // the fields to hang high over them singing, then dropping back into the grass; and the grey heron when heron.js sends
 // it off its stretch of shallows. Lightning scatters them for a while. Paths run on the CPU (a few
-// dozen birds); the vertex stage flaps the wings.
+// dozen birds); the vertex stage flaps the wings. The nests: one mesh of mud cups.
 import * as THREE from 'three/webgpu';
 import { vec3, sin, cos, abs, sign, min, max, mix, attribute, positionGeometry, normalGeometry, transformNormalToView, faceDirection } from 'three/tsl';
 import { LitMaterial } from './tsl.js';
-import { mulberry32, clamp, lerp, smoothstep } from './noise.js';
+import { mulberry32, clamp, lerp, smoothstep, makeNoise } from './noise.js';
 
 const TAU = Math.PI * 2;
 
@@ -66,7 +68,8 @@ SPECIES.lark = {
   wing: [[0.04, 0.09, -0.12], [0.2, 0.1, -0.16], [0.38, 0.08, -0.14], [0.5, 0.02, -0.08]],
   flap: { hz: 12, o1: 0.25, a1: 0.65, o2: 0.05, a2: 0.4, lag: 0.8, glide: [0.35, -0.15], on: [0.7, 1.8], off: [0.08, 0.3] },
 };
-const COUNT = { swallow: 10, kite: 3, crow: 22, heron: 1, bat: 8, lark: 2 };
+const COUNT = { swallow: 10, kite: 3, crow: 22, heron: 1, bat: 8, lark: 2 }; // (the swallows hunting; the nests' pairs are more)
+const NEST = { r: [0.1, 0.08], deep: 0.1, near: 150 }; // a nest's half-width along the wall, how far it stands out, its depth (m); its pair out within `near` m of the camera
 
 function birdGeometry(sp) {
   const P = [], N = [], C = [], W = [], I = [], S = sp.span;
@@ -118,16 +121,46 @@ function birdMaterial(elbow) {
   return mat;
 }
 
-// world: height and river; tree: {x, z} of the cherry tree (swallows keep out of its crown)
-export function makeBirds(world, tree) {
+// the swallows' nests: a half cup of mud pellets on the wall at each (village.js nests: x, y, z, yaw out from the wall;
+// the rim at y), open at the top
+function nestGeometry(nests) {
+  const noise = makeNoise(17), P = [], C = [], I = [];
+  const NU = 12, NV = 6;
+  for (let k = 0; k < nests.length; k += 4) {
+    const [x, y, z, yaw] = nests.subarray(k, k + 4), ox = Math.sin(yaw), oz = Math.cos(yaw), base = P.length / 3;
+    for (let j = 0; j <= NV; j++) for (let i = 0; i <= NU; i++) {
+      // round from the wall on one side to the other (a), from the bottom up to the rim (b); lumpy
+      const a = (i / NU) * Math.PI, b = (j / NV) * Math.PI / 2, lump = 1 + 0.14 * noise.noise2(i * 0.9 + k, j * 1.3) * Math.sin(a);
+      const u = Math.cos(a) * Math.sin(b) * NEST.r[0] * lump, w = Math.sin(a) * Math.sin(b) * NEST.r[1] * lump, v = -Math.cos(b) * NEST.deep;
+      P.push(x + w * ox + u * oz, y + v, z + w * oz - u * ox);
+      const mud = 0.75 + 0.35 * noise.noise2(i * 2.7 + k * 3, j * 3.1), straw = smoothstep(0.55, 0.7, noise.noise2(i * 5.3 + k, j * 4.9 + 7));
+      C.push(lerp(0.34 * mud, 0.45, straw), lerp(0.25 * mud, 0.38, straw), lerp(0.15 * mud, 0.2, straw)); // dried mud, pale grey-brown, straw in it
+    }
+    for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) {
+      const a = base + j * (NU + 1) + i, b = a + 1, c = a + NU + 1, d = c + 1;
+      I.push(a, b, c, b, d, c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.setIndex(I);
+  g.computeVertexNormals();
+  return g;
+}
+
+// world: height and river; tree: {x, z} of the cherry tree (swallows keep out of its crown); nests: the swallows'
+// (village.js)
+export function makeBirds(world, tree, nests) {
   const rng = mulberry32(31);
   const rand = (a, b) => a + (b - a) * rng();
   const ground = (x, z) => Math.max(world.heightFast(x, z), 0);
   const group = new THREE.Group();
   group.name = 'birds';
   const kinds = {};
+  const nNests = nests.length / 4;
   for (const name in SPECIES) {
-    const sp = SPECIES[name], n = COUNT[name];
+    const sp = SPECIES[name], n = COUNT[name] + (name === 'swallow' ? 2 * nNests : 0);
     const geo = birdGeometry(sp);
     const aPose = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage);
     const aLook = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage);
@@ -143,6 +176,11 @@ export function makeBirds(world, tree) {
     }
     kinds[name] = { sp, birds, aPose, aLook };
   }
+
+  const nestMesh = new THREE.Mesh(nestGeometry(nests), new LitMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }));
+  nestMesh.name = 'nests';
+  nestMesh.receiveShadow = true;
+  group.add(nestMesh);
 
   // the crows' roosts: woods round the temple's knoll
   const roosts = [];
@@ -193,7 +231,7 @@ export function makeBirds(world, tree) {
 
   // ---------- swallows: hawking insects over the river near the view ----------
   function swallows(dt, presence, low) {
-    const { birds } = kinds.swallow, n = birds.length;
+    const n = COUNT.swallow, birds = kinds.swallow.birds.slice(0, n);
     const lo = lerp(6, 0.6, low), hi = lerp(18, 2.5, low);
     // ahead of the camera, most of them nearer than what it looks at
     const pick = (b) => {
@@ -220,6 +258,66 @@ export function makeBirds(world, tree) {
     }
   }
 
+  // ---------- swallows at their nests: a pair each, out while the camera is within NEST.near m ----------
+  // hawking in front of the house; home: to a point out from the nest; in: the last stretch on a curve to its rim;
+  // cling: there a few seconds, upright, wings raised and flickering; off: dropping away from it, then hawking again.
+  // When they are no longer wanted (dusk, rain) they go in for the night.
+  const nestAt = (k) => {
+    const [x, y, z, yaw] = nests.subarray(k * 4, k * 4 + 4);
+    return { x, y, z, ox: Math.sin(yaw), oz: Math.cos(yaw), yaw };
+  };
+  const rim = (N, out, up) => [N.x + N.ox * out, N.y + up, N.z + N.oz * out];
+  function nesting(dt, presence) {
+    const all = kinds.swallow.birds;
+    for (let i = COUNT.swallow; i < all.length; i++) {
+      const b = all[i], k = (i - COUNT.swallow) >> 1, N = nestAt(k);
+      const near = Math.hypot(N.x - cam.x, N.z - cam.z);
+      const want = presence > (((i - COUNT.swallow) & 1) + 0.5) / 2 && near < NEST.near;
+      if (b.state === 'away') {
+        b.wait = (b.wait ?? rand(0, 8)) - dt;
+        if (!want || b.wait > 0) continue;
+        // out of the nest
+        [b.x, b.y, b.z] = rim(N, 0.05, 0.02);
+        b.state = 'in'; b.mode = 'off'; b.t = 0; b.yaw = N.yaw; b.pitch = 0; b.bank = 0; b.v = 4;
+      }
+      if (near > NEST.near + 20) { away(b); b.mode = null; b.wait = rand(0, 8); continue; }
+      const hunt = () => {
+        const s = rand(-9, 9), o = rand(5, 16), x = N.x + N.ox * o + N.oz * s, z = N.z + N.oz * o - N.ox * s;
+        b.tx = x; b.tz = z; b.ty = ground(x, z) + rand(2.5, 9); b.v = rand(8, 11); b.retarget = rand(1.5, 4);
+      };
+      if (b.mode === 'hawk') {
+        if ((b.retarget -= dt) <= 0 || flatDist(b) < 3) hunt();
+        if ((b.home -= dt) <= 0 || !want) { b.mode = 'home'; b.t = 0; }
+        fly(b, dt, 3.5, 4, 1);
+        b.y = Math.max(b.y, ground(b.x, b.z) + 0.5);
+      } else if (b.mode === 'home') {
+        [b.tx, b.ty, b.tz] = rim(N, 5, 0.6);
+        b.v = 8; b.t += dt;
+        fly(b, dt, 5, 5, 0.5);
+        b.y = Math.max(b.y, ground(b.x, b.z) + 0.5);
+        if ((flatDist(b) < 2.2 && Math.abs(b.y - b.ty) < 1.5) || b.t > 8) { b.mode = 'in'; b.t = 0; b.from = [b.x, b.y, b.z]; }
+      } else if (b.mode === 'in') {
+        // a curve to the rim: straight at it at first, then up to it from below
+        b.t += dt / 0.9;
+        const u = Math.min(1, b.t), e = u * u * (3 - 2 * u), R = rim(N, 0.1, -0.02), M = rim(N, 1.2, -0.3), f = b.from;
+        for (let a = 0; a < 3; a++) b[['x', 'y', 'z'][a]] = (1 - e) * (1 - e) * f[a] + 2 * (1 - e) * e * M[a] + e * e * R[a];
+        b.yaw = N.yaw + Math.PI; b.pitch = lerp(0.2, 1.2, e); b.bank = 0; b.beat = true;
+        if (u >= 1) {
+          if (want) { b.mode = 'cling'; b.t = rand(2, 6); } else { away(b); b.mode = null; b.wait = rand(0, 20); } // in for the night
+        }
+      } else if (b.mode === 'cling') {
+        if ((b.t -= dt) <= 0 || !want) { b.mode = 'off'; b.t = 0; }
+      } else if (b.mode === 'off') {
+        // down and out from the nest, turning away
+        b.t += dt / 0.7;
+        const u = Math.min(1, b.t), R = rim(N, 0.1 + 2.5 * u, -0.02 - 0.7 * Math.sin(u * Math.PI / 2));
+        [b.x, b.y, b.z] = R;
+        b.yaw = N.yaw + Math.PI * (1 - u * u); b.pitch = lerp(1.0, -0.2, u); b.beat = true;
+        if (u >= 1) { b.mode = 'hawk'; b.yaw = N.yaw; b.v = 7; b.home = rand(12, 40); hunt(); }
+      }
+      b.cling = b.mode === 'cling';
+    }
+  }
   // ---------- bats: jinking low over the river and its banks near the view, from dusk ----------
   function bats(dt, presence) {
     const { birds } = kinds.bat, n = birds.length;
@@ -408,6 +506,8 @@ export function makeBirds(world, tree) {
     const { sp, birds, aPose, aLook } = kind;
     for (const b of birds) {
       if (b.state !== 'away' && b.y > -1e4) wings(b, sp, dt);
+      // clinging at the nest: the wings raised over the back, flickering
+      if (b.cling) { b.a1 = 1.1 + 0.3 * b.A * Math.sin(b.ph * 0.6); b.a2 = b.a1 + 0.35; }
       aPose.array.set([b.x, b.state === 'away' ? -1e5 : b.y, b.z, b.yaw], b.i * 4);
       aLook.array.set([b.a1, b.a2, b.bank, b.pitch], b.i * 4);
     }
@@ -435,6 +535,9 @@ export function makeBirds(world, tree) {
       // swallows: out by day, in the wind too (less so in a gale), not in heavy rain; low under heavy cloud or in drizzle
       const low = Math.max(smoothstep(0.55, 0.8, ctx.clouds), smoothstep(0.05, 0.2, ctx.rain));
       swallows(dt, day * (1 - smoothstep(0.4, 0.75, ctx.rain)) * (1 - 0.4 * gale) * calm, low);
+      // the nests' pairs: by day, sheltering in the nest from heavy rain and lightning
+      const nestTime = smoothstep(5.2, 6.0, h) * (1 - smoothstep(18.3, 18.9, h)) * (1 - smoothstep(0.45, 0.8, ctx.rain)) * calm;
+      nesting(dt, nestTime);
       // kites: on the thermals of clear days, gone under heavy cloud or rain
       const soar = smoothstep(6.8, 8.3, h) * (1 - smoothstep(16.3, 17.6, h));
       kites(dt, soar * (1 - smoothstep(0.55, 0.85, ctx.clouds)) * (1 - smoothstep(0.05, 0.25, ctx.rain)) * calm, ctx.t);
@@ -470,11 +573,13 @@ export function makeBirds(world, tree) {
       }
       return best && { x: best.x, y: best.y, z: best.z };
     },
-    // debug: the birds in the air, per species [x, y, z]
+    // debug: the birds in the air, per species [x, y, z]; the nests
     info() {
       const out = {};
       for (const name in kinds) out[name] = kinds[name].birds.filter((b) => b.state !== 'away' && b.y > -1e4).map((b) => [b.x, b.y, b.z].map((v) => +v.toFixed(1)));
       out.flocks = flocks.length;
+      // the nests [x, y, z] and what their pairs are doing
+      out.nests = [...Array(nNests)].map((_, k) => ({ at: [...nests.subarray(k * 4, k * 4 + 3)].map((v) => +v.toFixed(2)), pair: kinds.swallow.birds.slice(COUNT.swallow + 2 * k, COUNT.swallow + 2 * k + 2).map((b) => (b.state === 'away' ? 'away' : b.mode)) }));
       return out;
     },
   };

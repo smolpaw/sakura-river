@@ -615,7 +615,7 @@ export async function create(canvas, opts = {}) {
   const fireflies = makeFireflies(fireflyData(world, Q.fireflies), lanterns.uFocal);
   fireflies.mesh.name = 'fireflies';
   scene.add(fireflies.mesh);
-  const birds = makeBirds(world, { x: TX, z: TZ });
+  const birds = makeBirds(world, { x: TX, z: TZ }, G.village.nests);
   scene.add(birds.group);
   const butterflies = makeButterflies(world, { tree: [TX, TZ], flowers: G.flowers, posts: G.lanterns.lists[0], small: Lay.small, tier: tierName });
   scene.add(butterflies.mesh);
@@ -1384,7 +1384,7 @@ export async function create(canvas, opts = {}) {
     tick(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) step(dt); },
     simulate(sec, dt = 1 / 30) { for (let t = 0; t < sec; t += dt) step(dt, false); },
     backend: backendName,
-    birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]
+    birdInfo() { return birds.info(); }, // birds in the air per species, [x, y, z]; the swallows' nests and what each pair is doing
     perchInfo(o) { return perched.info(o); }, // the perched birds: each one's species and place, the crow's and the sparrow groups' states; { calm: true }: none minds anyone
     koiInfo() { return koi.info(); }, // each koi's [x, y, z, heading]
     deerInfo(o) { return deer.info(o); }, // each deer: where, heading, speed, what it is doing, how alarmed; the herd's plan; { calm: true } keeps them from minding the observer
