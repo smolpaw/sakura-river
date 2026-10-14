@@ -23,6 +23,8 @@ Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender model
 
 Drag to look round, scroll or pinch to zoom, right-drag to pan. Buttons: Cinematic (a flight round the valley), Orbit, Walk and Reset view. In walk mode, W A S D or the arrow keys walk, the mouse looks (click to lock the pointer, Esc to release it), and Shift hurries. On touch screens, the left thumb walks and the right one looks.
 
+The time slider moves the scene as it is dragged; its arrow keys step by half hours.
+
 The address keeps the time, the weather and the view (or the walker's place): `#t=<hour>&w=<weather>&v=<x,y,z,tx,ty,tz>`, or `&walk=<x,z,yaw,pitch>` (metres, degrees), with no hash at the opening view at night in clear weather. A page opened from it starts there, flying in briefly. The link button copies it. The photo button or H hides every control and the title; H, Esc (outside walk mode) or the button that shows in the corner after a touch or a mouse movement brings them back.
 
 Quality: Auto picks a tier and lowers the resolution under load; a tier picked by hand stays fixed. Frame rate: Auto runs at 60 fps and drops to 30 on slow devices; 60 and 30 hold that rate.
@@ -51,6 +53,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
     const scene = await create(canvas, { quality, fixedQuality, frameRate, backend, hour, view, introDuration, onProgress, onReady, onStats, onLost, onCinematicChange, onWalkChange });
     scene.setWeather(id, seconds);              // a preset from WEATHERS in src/weather.js
     scene.setTimeOfDay(hour, animate, forward); // 0..24, optionally as a time-lapse
+    scene.followTime(hour);                     // eased there within a fraction of a second (a slider being dragged)
     scene.timeOfDay();
     scene.view();                               // { pos, target, flying, home } or, walking, { walk: [x, z, yaw, pitch], flying }
     scene.set('wind' | 'petals' | 'river' | 'time' | 'fog' | 'bloom' | 'clouds' | 'rain' | 'lightning', value0to1);

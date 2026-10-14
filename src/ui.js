@@ -82,13 +82,13 @@ import { WEATHERS, TIMES } from './weather.js';
   showWeather();
   $('w-random').addEventListener('click', function () { pickWeather((wi + 1 + Math.floor(Math.random() * (WEATHERS.length - 1))) % WEATHERS.length); });
 
-  // ---------- time of day: fixed (no ticking clock); a preset or the half-hour slider moves there as a time-lapse ----------
+  // ---------- time of day: fixed (no ticking clock); a preset moves there as a time-lapse, the slider follows ----------
   var day = $('t-day'), dragged = null; // the slider's hour while it is being moved, shown instead of the scene's
   var tBtns = TIMES.map(function (t) {
     var b = document.createElement('button');
     b.type = 'button'; b.setAttribute('aria-label', t.name);
     b.innerHTML = '<b lang="ja"></b><span></span>'; b.firstChild.textContent = t.kanji; b.lastChild.textContent = t.name;
-    b.addEventListener('click', function () { if (engine) { engine.setTimeOfDay(t.hour); day.value = t.hour; } });
+    b.addEventListener('click', function () { if (engine) { engine.setTimeOfDay(t.hour); day.value = t.hour; showTime(); } });
     $('times').appendChild(b);
     return b;
   });
@@ -97,11 +97,23 @@ import { WEATHERS, TIMES } from './weather.js';
     if (!engine) return;
     var now = engine.timeOfDay(), h;
     do { h = Math.floor(Math.random() * 48) / 2; } while (Math.abs(((h - now + 36) % 24) - 12) < 2);
-    engine.setTimeOfDay(h); day.value = h;
+    engine.setTimeOfDay(h); day.value = h; showTime();
   });
-  day.addEventListener('input', function () { dragged = +this.value; showTime(); });
-  // straight to the chosen half hour, back if it is earlier (presets go forward through the night)
-  day.addEventListener('change', function () { dragged = null; if (engine) { engine.setTimeOfDay(+this.value, true, false); showTime(); } });
+  // the scene follows the slider as it moves (straight there, back if it is earlier; presets go forward through the
+  // night): a time change costs about what a time-lapse's frames do
+  day.addEventListener('input', function () { dragged = +this.value; if (engine) engine.followTime(dragged); showTime(); });
+  day.addEventListener('change', function () { dragged = null; showTime(); });
+  // the keys step it by half hours (Page Up and Down by two hours), onto the half hour (its step is any, so the presets'
+  // times sit on it as they are)
+  day.addEventListener('keydown', function (e) {
+    var d = { ArrowRight: 0.5, ArrowUp: 0.5, ArrowLeft: -0.5, ArrowDown: -0.5, PageUp: 2, PageDown: -2 }[e.key];
+    if (!d || !engine) return;
+    e.preventDefault();
+    var v = +day.value, n = d > 0 ? Math.floor(v / 0.5 + 1e-6) * 0.5 + d : Math.ceil(v / 0.5 - 1e-6) * 0.5 + d;
+    day.value = Math.min(+day.max, Math.max(+day.min, n));
+    engine.followTime(+day.value);
+    showTime();
+  });
   // the period the clock is in: dawn 04:30-09:00, afternoon to 17:00, dusk to 19:30, then night
   function period(h) { return h >= 4.5 && h < 9 ? 'dawn' : h >= 9 && h < 17 ? 'afternoon' : h >= 17 && h < 19.5 ? 'dusk' : 'night'; }
   function showTime() {
@@ -113,7 +125,8 @@ import { WEATHERS, TIMES } from './weather.js';
       $('btn-sound').title = waiting ? 'Click anywhere to start the sound' : 'Music and ambience';
     }
     $('clock').textContent = clock(dragged !== null ? dragged : h);
-    day.setAttribute('aria-valuetext', clock(+day.value));
+    var vt = clock(+day.value);
+    if (day.getAttribute('aria-valuetext') !== vt) day.setAttribute('aria-valuetext', vt);
     tBtns.forEach(function (b, i) { setPressed(b, TIMES[i].id === p); });
   }
   function clock(h) {

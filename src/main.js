@@ -861,6 +861,7 @@ export async function create(canvas, opts = {}) {
   let weatherTween = null; // { from, to, t, dur } in set() units
   // time of day: clock hours, fixed (no ticking clock, see CLAUDE.md); moves to a new time as a time-lapse
   let clockH = opts.hour ?? tToHour(0.92), timeTween = null; // { from, delta, lut, t, dur }
+  let follow = null; // the hour the clock is easing to (followTime), straight there
   const hemiBase = new THREE.Color(), ambBase = new THREE.Color(), flashCol = new THREE.Color(0.55, 0.6, 0.85), tmpC = new THREE.Color();
   let flashed = false;
 
@@ -1075,6 +1076,10 @@ export async function create(canvas, opts = {}) {
       clockH = (tt.from + tt.delta * Math.min(1, (i + f) / (lut.length - 1))) % 24;
       if (tt.t >= 1) timeTween = null;
     }
+    if (follow !== null) {
+      const d = follow - clockH;
+      if (Math.abs(d) < 0.002) { clockH = follow; follow = null; } else clockH += d * (1 - Math.exp(-dt * 10));
+    }
     const tod = hourToT(clockH);
     // every frame a time-lapse or the cloud cover has moved: in steps the sun's direction and colours jump, most
     // visibly on faces lit edge-on
@@ -1259,7 +1264,7 @@ export async function create(canvas, opts = {}) {
     // (every pass on the first frames and on those of the warm-up that bring parts of the scene in)
     const every = frameNo < 3 || revealing;
     sun.shadow.needsUpdate = frameNo % shadowEvery === 0 || every;
-    farShadow.update(scene, U.uSunDir.value, { every: timeTween ? 4 : 15, force: every || opts.farEveryFrame, warm: warming });
+    farShadow.update(scene, U.uSunDir.value, { every: timeTween || follow !== null ? 4 : 15, force: every || opts.farEveryFrame, warm: warming });
     // the reflector skips when the camera is below the water plane; fall back to the analytic sky then
     reflSkip = !(frameNo % reflEvery === 0 || every);
     water.uniforms.uHasRefl.value = reflector && reflEvery < 1e9 && camera.position.y > 0.02 ? 1 : 0;
@@ -1355,7 +1360,7 @@ export async function create(canvas, opts = {}) {
 
   return {
     set(name, v) {
-      if (name === 'time') { timeTween = null; clockH = tToHour(clamp(+v, -0.08, 1.08)); } // 04:50 .. 20:10
+      if (name === 'time') { timeTween = null; follow = null; clockH = tToHour(clamp(+v, -0.08, 1.08)); } // 04:50 .. 20:10
       else { weatherTween = null; setParam(name, v); }
     },
     setImmediate(name, v) {
@@ -1375,7 +1380,7 @@ export async function create(canvas, opts = {}) {
     // through midnight if need be, or (`forward` false) straight there, back if `hour` is earlier
     setTimeOfDay(hour, animate = true, forward = true) {
       const delta = forward ? (((hour - clockH) % 24) + 24) % 24 : hour - clockH;
-      timeTween = null;
+      timeTween = null; follow = null;
       if (animate && Math.abs(delta) > 0.01) {
         // the time-lapse slows where the light changes fastest: cumulative hours plus the sun's movement near the
         // horizon (at dusk and dawn the elevation changes steeply in a few clock minutes)
@@ -1391,6 +1396,8 @@ export async function create(canvas, opts = {}) {
       if (!timeTween) clockH = ((hour % 24) + 24) % 24;
     },
     timeOfDay() { return clockH; },
+    // the clock eased to `hour` (0..24) within a fraction of a second, straight there: the time slider being dragged
+    followTime(hour) { if (Number.isFinite(+hour)) { timeTween = null; follow = ((+hour % 24) + 24) % 24; } },
     // where the camera is: { pos, target } orbiting, { walk: [x, z, yaw, pitch] } (radians) walking; flying: on its way
     // between views (the opening, a reset, into or out of the walk); home: resting at the default view
     view() {
