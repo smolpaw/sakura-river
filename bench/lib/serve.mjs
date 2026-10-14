@@ -38,9 +38,18 @@ export function startServer(port = 0) {
       if (!fs.existsSync(file)) file = path.join(BENCH, '..', 'public', path.relative(BENCH, file));
       const st = fs.statSync(file);
       if (!st.isFile()) throw new Error('not a file');
-      res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store',
+      const head = { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store', 'accept-ranges': 'bytes',
         // cross-origin isolation gives performance.now() 5 us resolution instead of 100 us
-        'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' });
+        'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' };
+      // byte ranges, as the site's hosts serve them: a media element seeks with them (the music's tracks)
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? +range[1] : Math.max(0, st.size - +range[2]), end = range[1] && range[2] ? Math.min(+range[2], st.size - 1) : st.size - 1;
+        res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${st.size}`, 'content-length': end - start + 1 });
+        fs.createReadStream(file, { start, end }).pipe(res);
+        return;
+      }
+      res.writeHead(200, { ...head, 'content-length': st.size });
       fs.createReadStream(file).pipe(res);
     } catch (e) {
       res.writeHead(404); res.end(String(e.message));
