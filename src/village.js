@@ -34,9 +34,9 @@ export function villageData(world) {
   // door lanterns (hang, look as lanterns.js) and the shoji's light on the yard (lights.js lamp: x, y, z, s, r)
   const hang = [], look = [], spill = [], smoke = [], nests = [], houses = [];
   // in each model's frame (tools/village.py, y up, its front +z): beside the door under the eave, the eave's
-  // underside; the shoji's middle, the front wall's half-length
+  // underside; the front wall, and along it the lamps of the rooms behind the shoji (minka_layout's)
   const DOOR = { minka0: [6.7, 2.0, 2.9], minka1: [4.85, 1.85, 2.2], suisha: [-1.45, 1.8, 1.95] };
-  const SHOJI = { minka0: [3.6, 6.2], minka1: [2.9, 4.4] };
+  const SHOJI = { minka0: [3.6, -4.47, -0.91], minka1: [2.9, -2.4] };
   // where the hearth's smoke leaves the thatch: the irimoya's smoke gable at one end of its ridge, the hipped roof's
   // ridge (fx.js makeSmoke)
   const SMOKE = { minka0: [4.1, 8.3, 0], minka1: [0.6, 7.2, 0] };
@@ -57,8 +57,8 @@ export function villageData(world) {
     // x, y, z, and the way the wall faces (yaw: the model's +x)
     if (NEST[b.kind]) nests.push(...at(NEST[b.kind]), Math.atan2(b.c, -b.s));
     if (SHOJI[b.kind]) {
-      const [d, half] = SHOJI[b.kind];
-      for (const u of [-0.5, 0.5]) spill.push(at([u * half, 1.5, d + 1.4]));
+      const [d, ...rooms] = SHOJI[b.kind];
+      for (const x of rooms) spill.push(at([x, 1.4, d + 1.3]));
     }
   }
   for (const t of TORII) put('torii', t.x, world.height(t.x, t.z) - 0.1, t.z, t.yaw, 1);

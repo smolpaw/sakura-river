@@ -471,7 +471,7 @@ export async function create(canvas, opts = {}) {
     ...pts(cat('hang'), (x, y, z) => lamp(x, y - 0.36, z, 0.2, 3)),
     ...pts(fixed, (x, y, z) => lamp(x, y, z, 0.3, 2.4)),
     ...pts(G.lanterns.bonbori, (x, y, z) => lamp(x, y, z, 0.32, 3.2)),
-    ...pts(G.village.spill, (x, y, z) => lamp(x, y, z, 0.12, 3.5)),
+    ...pts(G.village.spill, (x, y, z) => lamp(x, y, z, 0.11, 3.4)),
   ]);
   setLightMap(lightData);
 

@@ -943,20 +943,57 @@ export function templeMaterial(d, { ao = null } = {}) {
   })());
 }
 
+// The farmhouses' shoji: their lattice (kumiko) and the lamplight through their paper, from where on the paper a pixel
+// lies (the attribute _pane, tools/village.py Kit.paper: x / 8 the lattice's columns, three a panel; y / 8 its rows,
+// six; z / 4 how far along the wall from the room's lamp, m). The paper is pasted on the outside of the lattice: its
+// frame (stiles and rails) stands proud of it, its thin bars show through it, faintly by day and dark against the lamp
+// at night. Each line is filtered over the pixel's footprint and fades to its average cover once finer than a pixel,
+// so the far models show it as the near ones do. `light`: the lamp's light on the paper, brightest low in the room's
+// middle (an andon on the floor, or the hearth); `phase`: the room's own, from its lamp's place (the point on the
+// paper less its distance from the lamp along the wall: the same over the room whatever the house's scale and turn).
+const SHOJI_ROW = 0.285; // m: a lattice row's height
+function shojiPane() {
+  const p = attribute('_pane', 'vec3');
+  const u = p.x.mul(8.0), v = p.y.mul(8.0), d = p.z.mul(4.0);
+  const lines = (x, w) => {
+    const fw = max(abs(dFdx(x)).add(abs(dFdy(x))), 1e-4);
+    const sharp = clamp(float(w).sub(abs(fract(x.add(0.5)).sub(0.5))).div(fw).add(0.5), 0.0, 1.0);
+    return mix(sharp, float(Math.min(1, 2 * w)), sstep(0.3, 0.8, fw));
+  };
+  const bars = max(lines(u, 0.05), lines(v, 0.05));
+  const frame = max(lines(u.div(3.0), 0.045), lines(v.div(6.0), 0.03));
+  const h = v.mul(SHOJI_ROW).sub(0.3);
+  const light = exp(d.mul(d).div(-1.0).sub(h.mul(h).div(0.55))).mul(0.95).add(0.05);
+  const n = normalWorldGeometry, along = vec3(n.z, 0.0, n.x.negate());
+  const lamp = wp.sub(along.div(max(along.length(), 1e-3)).mul(d));
+  return { bars, frame, light, phase: dot(lamp.xz, vec2(0.73, 0.51)) };
+}
+
 // the village's buildings (village.js): vertex colours with how much each part glows after dusk in their alpha (the
-// shoji, lit from inside); not every room is lit, and the light flickers a little as a lamp's would. The door
-// lanterns light the walls near them.
+// shoji, lit from inside: shojiPane). Each room's lamp is a little brighter or dimmer than the next and flickers
+// slowly on its own. The door lanterns light the walls near them.
 export function villageMaterial() {
   const col = attribute('color', 'vec4');
   const photo = kindPhotos();
+  const S = shojiPane();
+  const paper = sstep(0.02, 0.1, col.a);
+  const colorNode = Fn(() => {
+    const c = (photo.color ? col.rgb.mul(photo.color) : col.rgb).toVar();
+    // the bars' shadow through the paper; the frame timber ('#6b5038' against the paper's '#ece4cf', shaded as it)
+    c.assign(mix(c, c.mul(0.62), S.bars.mul(paper)));
+    c.assign(mix(c, col.rgb.mul(vec3(0.175, 0.104, 0.065)), S.frame.mul(paper)));
+    return c;
+  })();
   return new LitMaterial({
-    roughness: 0.85, metalness: 0, colorNode: photo.color ? col.rgb.mul(photo.color) : col.rgb, ...(photo.normal ? { normalNode: photo.normal } : {}),
+    roughness: 0.85, metalness: 0, colorNode, ...(photo.normal ? { normalNode: photo.normal } : {}),
   }, (out) => Fn(() => {
     const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
+    const t = U.uTime, ph = S.phase.toVar();
+    const room = sin(ph.mul(2.3).add(1.0)).mul(0.3).add(0.7);
+    const flicker = sin(t.mul(1.9).add(ph)).mul(0.05).add(sin(t.mul(4.7).add(ph.mul(1.7))).mul(0.035)).add(1.0);
+    const glow = col.a.mul(float(1.0).sub(S.frame)).mul(float(1.0).sub(S.bars.mul(0.75))).mul(S.light).mul(room).mul(flicker).toVar();
     If(U.uLights.greaterThan(0.0), () => {
-      const room = sstep(0.22, 0.36, vnoise(wp.xz.mul(0.45).add(wp.y.mul(0.3))));
-      const flicker = sin(U.uTime.mul(7.0).add(wp.x.mul(1.3))).mul(0.05).add(0.95);
-      o.addAssign(vec3(1.0, 0.64, 0.32).mul(col.a).mul(room.mul(0.8).add(0.2)).mul(flicker).mul(U.uLights).mul(0.85));
+      o.addAssign(vec3(1.0, 0.56, 0.24).mul(glow).mul(U.uLights).mul(0.8));
       o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
     });
     return o;
