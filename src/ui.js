@@ -269,6 +269,36 @@ import { WEATHERS, TIMES } from './weather.js';
     else fallback();
   });
 
+  // ---------- photo mode: every control hidden (H or the button; H again, Esc or the corner's button bring them back) ----------
+  var photoTimer = 0;
+  function photoAwake() {
+    // the way back shows for a while after any touch or movement, then fades
+    document.body.classList.remove('photo-quiet');
+    clearTimeout(photoTimer);
+    photoTimer = setTimeout(function () { document.body.classList.add('photo-quiet'); }, 2500);
+  }
+  function setPhoto(on) {
+    if (on === document.body.classList.contains('photo')) return;
+    document.body.classList.toggle('photo', on);
+    setPressed($('btn-photo'), on);
+    if (on) { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); photoAwake(); }
+    else { clearTimeout(photoTimer); document.body.classList.remove('photo-quiet'); wake(); }
+  }
+  $('btn-photo').addEventListener('click', function () { setPhoto(true); });
+  $('photo-exit').addEventListener('click', function () { setPhoto(false); $('btn-photo').focus({ preventScroll: true }); });
+  ['pointermove', 'pointerdown'].forEach(function (t) {
+    window.addEventListener(t, function () { if (document.body.classList.contains('photo')) photoAwake(); }, { capture: true, passive: true });
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    var el = e.target, tag = el && el.tagName;
+    if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && el.type !== 'range') || (el && el.isContentEditable)) return;
+    var photo = document.body.classList.contains('photo');
+    if (e.code === 'KeyH') setPhoto(!photo);
+    // (walking, Esc frees the mouse and then leaves the walk: walk.js)
+    else if (e.key === 'Escape' && photo && !walking) setPhoto(false);
+  });
+
   // ---------- loading, failure and how it runs ----------
   // the WebGL2 renderer when the page offers it after WebGPU failed here; for this tab's session only
   var backend = null;

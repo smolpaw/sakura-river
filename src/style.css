@@ -64,6 +64,14 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
   font: 500 13px/1.35 var(--sans); letter-spacing: 0.04em; color: var(--washi); pointer-events: none; opacity: 0; transition: opacity 1.2s ease; }
 .hint.show { opacity: 1; transition-duration: 0.35s; }
 
+/* photo mode: every control and the title hidden; a way back in the corner after any touch or movement (ui.js) */
+#photo-exit { display: none; position: fixed; z-index: 3; top: calc(18px + env(safe-area-inset-top, 0px)); right: 18px; height: 40px; padding: 0 14px;
+  background: var(--glass); -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25); }
+#photo-exit:hover { background: rgba(60, 50, 70, 0.66); }
+.photo #photo-exit { display: inline-flex; }
+.photo-quiet #photo-exit:not(:focus-visible) { opacity: 0; --fade: 1.2s; }
+.photo-quiet #scene { cursor: none; }
+.photo :is(.brand, .top-right, .side, .hint, .notice) { display: none; }
 
 .group { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .label { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 22px;
@@ -134,6 +142,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .notice[hidden], .notice [hidden] { display: none; }
 .notice .btn { padding: 7px 11px; }
 @media (prefers-reduced-motion: reduce) { .veil-mark, #btn-sound.waiting svg { animation: none; } .side, .veil { transition: none; } }
+@media (max-width: 560px) { #photo-exit { right: 12px; } }
 
 @media (max-width: 560px) {
   .side { left: 12px; right: 12px; width: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
