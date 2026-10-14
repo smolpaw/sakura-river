@@ -136,7 +136,7 @@ Close up, these surfaces are photographed texture sets from Poly Haven (https://
 - The lanes' earth: "Stony Dirt Path" by eye-candy.xyz.
 - The farmhouses' thatch and the straw in their yards: "Thatch Roof Angled" by Rob Tuytel and Dimitrios Savva.
 - Timber (the houses, the temple, the bridge, the lamp posts, the boats, the yards' firewood, carts and tubs; under the vermilion lacquer too): "Weathered Planks" by Dario Barresi and Dimitrios Savva.
-- The storehouse's and the temple's plaster: "Grey Plaster 02" by Rob Tuytel.
+- The storehouse's and the temple's plaster, the farmhouses' earthen walls: "Grey Plaster 02" by Rob Tuytel.
 - Roof tiles: "Grey Roof Tiles" by Rob Tuytel.
 - Built stone (foundations, the temple's terrace walls and steps, the bridge's abutments, the yards' wells and mortars): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
 - Carved and dressed stone (the Jizō, the stone lanterns, the lamps' feet, the temple buildings' platforms): "Rock Surface" by Amal Kumar.
