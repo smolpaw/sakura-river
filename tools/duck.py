@@ -1,4 +1,5 @@
-# The river's spot-billed ducks (karugamo, Anas zonorhyncha), built in Blender. Run through tools/blender.mjs:
+# The river's ducks, built in Blender: spot-billed ducks (karugamo, Anas zonorhyncha) and mandarins (oshidori, Aix
+# galericulata; KIND says how they differ). Run through tools/blender.mjs:
 #   blender -b --factory-startup -P tools/duck.py -- <out.glb>
 # A duck of about 0.57 m from the bill's tip to the tail's, afloat: the waterline is z = 0, a third of the body under
 # it. The body is a full-breasted boat rising at the stern to the pointed tail; the neck short and thick, the head
@@ -6,17 +7,18 @@
 # facing +z).
 # The plumage (body, neck, head, tail), the folded wings and the feet are signed distance fields (numpy) meshed by
 # surface nets and decimated to a budget, with the meshing helpers of tools/human.py; the spread wings are thin
-# cambered sheets built directly. Colours are painted per vertex (the dark brown body and back, the buff head and neck,
-# the white-edged tertials and the blue speculum on the folded wing, the black bill's yellow tip, the orange feet; the
-# spread wing's brown coverts, blue speculum between white bars and white underwing), then ambient occlusion darkens
-# them. Alpha says what the page (src/ducks.js) draws over them: 1 the body's plumage (its pale feather edges, and on
-# the head the dark crown, the eye stripe, the cheek stripe and the eye), 0.5 the wings' feathers (their edges), 0
-# the bill and the feet.
+# cambered sheets built directly. Colours are painted per vertex (the spot-billed duck's dark brown body and back, the
+# buff head and neck, the white-edged tertials and the blue speculum on the folded wing, the black bill's yellow tip,
+# the orange feet; the spread wing's brown coverts, blue speculum between white bars and white underwing; the
+# mandarins' in mandarin_colour), then ambient occlusion darkens them. Alpha says what the page (src/ducks.js MARKS)
+# draws over them: 1 the body's plumage (its pale feather edges, the marks on the head and the eye), 0.5 the wings'
+# feathers and the drake's sails (their edges), 0 the bill and the feet.
 # The wings have two forms: folded on the back (bone `fold_*`) and spread (`arm_*`, `hand_*`, modelled level). A clip
 # shows one and shrinks the other to HIDE into the body: the folded wings on the water, the spread ones in flight and
 # as the duck rises to flap. Every clip keys both, so the page's blend of clips (weights summing to 1) never shows the
 # spread wings' bind pose.
-# Meshes, skinned to one armature (`duck_rig`): `duck` (~6k triangles), `duck_far` (~1.1k).
+# Meshes, skinned to one armature (`duck_rig`), each kind's two: `duck`, `oshidori_m`, `oshidori_f` (~7.7-8.1k
+# triangles) and `<kind>_far` (~1.1k).
 # Clips (in place), keyed from poses computed here, linear between the keys at 30 fps: `float` (10 s loop: breathing
 # and rocking on the water, the head turning to look about, a quick wag of the tail), `paddle` (1 s loop of the feet
 # alone, the left and right in turn, the web feathered on the way forward: the page weights it by the speed), `fly`
@@ -41,8 +43,18 @@ HIDE = 0.01   # a hidden wing form's scale (not 0: its normals stay finite)
 
 
 # ---------- fields ----------
+# The kinds built (each its own meshes on the one rig, with the same clips): `duck` the spot-billed duck; `oshidori_m`
+# and `oshidori_f` the mandarin drake and duck (the page draws them smaller): a larger head, a short bill; the drake's
+# crest swept back from the crown, the orange ruff of long feathers on his cheeks and the two orange sails standing up
+# from his folded wings (the tertials: skinned to the folded wings, so in flight they go with them); the duck's crest
+# a short tuft at the nape.
+KIND = 'duck'
+
+
 def parts(p):
     """the plumage's components (each a field)"""
+    if KIND != 'duck':
+        return mandarin_parts(p)
     d = {}
     d['torso'] = ell(p, (0, 0.03, 0.035), (0.098, 0.195, 0.068), frame((0, 0.995, 0.1)))
     d['breast'] = ell(p, (0, -0.095, 0.05), (0.082, 0.1, 0.074))
@@ -51,6 +63,27 @@ def parts(p):
     d['neck'] = capsule(p, (0, -0.118, 0.07), (0, -0.148, 0.172), 0.046, 0.03)
     hd = ell(p, (0, -0.166, 0.199), (0.031, 0.049, 0.035), frame((0, -1, 0.12)))
     hd = smin(hd, ell(p, (0, -0.19, 0.19), (0.026, 0.03, 0.026)), 0.012)   # the cheeks, full towards the bill
+    d['head'] = hd
+    return d
+
+
+def mandarin_parts(p):
+    d = {}
+    d['torso'] = ell(p, (0, 0.03, 0.035), (0.098, 0.19, 0.07), frame((0, 0.995, 0.1)))
+    d['breast'] = ell(p, (0, -0.09, 0.052), (0.084, 0.098, 0.078))
+    d['stern'] = ell(p, (0, 0.165, 0.07), (0.054, 0.085, 0.04), frame((0, 0.95, 0.31)))
+    d['tail'] = ell(p, (0, 0.228, 0.088), (0.04, 0.05, 0.01), frame((0, 0.96, 0.28)))
+    d['neck'] = capsule(p, (0, -0.116, 0.07), (0, -0.146, 0.17), 0.05, 0.034)
+    hd = ell(p, (0, -0.162, 0.204), (0.034, 0.049, 0.038), frame((0, -1, 0.1)))
+    hd = smin(hd, ell(p, (0, -0.185, 0.193), (0.028, 0.03, 0.028)), 0.012)
+    if KIND == 'oshidori_m':
+        # the crest: from the crown back over the nape, falling
+        hd = smin(hd, ell(p, (0, -0.114, 0.214), (0.024, 0.064, 0.035), frame((0, 1, -0.5))), 0.014)
+        # the ruff: the cheeks' long feathers fanned out below and behind the eye
+        for m in (1, -1):
+            hd = smin(hd, ell(p, (m * 0.02, -0.15, 0.168), (0.026, 0.032, 0.038), frame((0, -0.5, 1))), 0.016)
+    else:
+        hd = smin(hd, ell(p, (0, -0.122, 0.2), (0.018, 0.034, 0.022), frame((0, 1, -0.5))), 0.012)
     d['head'] = hd
     return d
 
@@ -64,6 +97,17 @@ def plumage_sdf(p):
     return smin(f, d['head'], 0.02)
 
 
+SAIL_C = (0.046, 0.112, 0.13)                     # the drake's left sail: its centre, its radii (thickness, length, height)
+SAIL_R = (0.0032, 0.036, 0.046)
+SAIL_F = frame((0, 0.94, -0.34), (0.2, 0, 1))     # back along the wing, leaning back and out a little at the top
+
+
+def sail_sdf(p):
+    """the drake's left sail: a broad upright fan out of the folded wing, its front edge straight"""
+    along = (p[0] - SAIL_C[0]) * SAIL_F[1][0] + (p[1] - SAIL_C[1]) * SAIL_F[1][1] + (p[2] - SAIL_C[2]) * SAIL_F[1][2]
+    return smax(smax(ell(p, SAIL_C, SAIL_R, SAIL_F), 0.1 - p[2], 0.004), -0.02 - along, 0.003)
+
+
 FOLD_C = (0.058, 0.07, 0.083)                     # the left folded wing's centre
 FOLD_R = (0.02, 0.165, 0.027)
 FOLD_F = frame((-0.1, 0.99, 0.09))               # along it towards the tail, the tips converging over it
@@ -74,17 +118,20 @@ def fold_sdf(p):
     return ell(p, FOLD_C, FOLD_R, FOLD_F)
 
 
-BILL = ((0, -0.205, 0.196), (0, -0.266, 0.181))   # the bill's base and tip
+BILL = ((0, -0.205, 0.196), (0, -0.266, 0.181))   # the bill's base and tip (the rig's head bone ends at the tip)
+BILL_M = ((0, -0.203, 0.2), (0, -0.244, 0.188))    # the mandarins' short bill
 
 
 def bill_sdf(p):
-    """broad and flat, its sides nearly parallel, the tip rounded, the culmen dipping a little"""
+    """broad and flat, its sides nearly parallel, the tip rounded, the culmen dipping a little (the mandarins' short,
+    narrower and deeper at the base)"""
     x, y, z = p
-    a, b = BILL
+    a, b = BILL if KIND == 'duck' else BILL_M
+    k = 1.0 if KIND == 'duck' else 0.8
     t = np.clip((y - a[1]) / (b[1] - a[1]), 0.0, 1.0)
     zc = a[2] + (b[2] - a[2]) * t - 0.002 * np.sin(math.pi * t)
-    h = 0.0115 * (1 - t) ** 0.9 + 0.0035                 # half height
-    w = (0.0115 + 0.0015 * t) * np.sqrt(np.clip(1 - ((t - 0.8) / 0.2).clip(0, None) ** 2, 0.04, 1))  # half width
+    h = (0.0115 * (1 - t) ** 0.9 + 0.0035) * (1.0 if KIND == 'duck' else 1.05)   # half height
+    w = (0.0115 + 0.0015 * t) * k * np.sqrt(np.clip(1 - ((t - 0.8) / 0.2).clip(0, None) ** 2, 0.04, 1))  # half width
     q = np.sqrt((x / w) ** 2 + ((z - zc) / h) ** 2)
     return np.maximum((q - 1.0) * np.minimum(w, h), np.maximum(y - (a[1] + 0.014), b[1] - y))
 
@@ -168,6 +215,25 @@ UNDER_F = srgb('#9c9893')    # its flight feathers from below
 BILL_C = srgb('#1c1b1a')
 BILL_T = srgb('#e2b726')
 FOOT_C = srgb('#e0662a')
+# the mandarin drake
+M_FACE = srgb('#e2a868')     # the face, buff-orange
+M_RUFF = srgb('#d0601e')     # the ruff, orange
+M_CROWN = srgb('#2c3a1e')    # the forehead and crown, dark bronze-green
+M_CREST = srgb('#6a2a18')    # the crest's long rear feathers, chestnut
+M_BREAST = srgb('#3c1a2a')   # the breast, maroon-purple
+M_FLANK = srgb('#c99456')    # the flanks, golden buff
+M_BACK = srgb('#3e3528')     # the back, olive-brown
+M_SAIL = srgb('#d8702a')     # the sails
+M_BILL = srgb('#c4262a')
+M_NAIL = srgb('#f0dcc4')
+WHITE = srgb('#ece9e2')
+M_SPEC = srgb('#1f5c5a')     # the mandarins' speculum, green-blue
+# the mandarin duck
+F_HEAD = srgb('#76726c')     # grey
+F_BODY = srgb('#857a6c')     # the breast and flanks, grey-brown (the page dapples them)
+F_BACK = srgb('#4a4034')
+F_BILL = srgb('#5c5650')
+F_FOOT = srgb('#b8944c')
 
 
 def soft_pick(dists, k=0.006):
@@ -176,7 +242,43 @@ def soft_pick(dists, k=0.006):
     return w / w.sum(0)
 
 
+def mandarin_colour(P):
+    p = (P[:, 0], P[:, 1], P[:, 2])
+    x, y, z = p
+    d = parts(p)
+    W = soft_pick([d[n] for n in ['torso', 'breast', 'stern', 'tail', 'neck', 'head']])
+    n = len(P)
+    under = sstep(0.012, -0.012, z)                    # the belly, under water
+    if KIND == 'oshidori_m':
+        body = np.tile(M_FLANK, (n, 1))
+        body = body + (M_BREAST - body) * sstep(-0.035, -0.06, y)[:, None]          # the breast forward of the stripes
+        body = body + (M_BACK - body) * (sstep(0.07, 0.095, z) * sstep(0.06, 0.03, np.abs(x)))[:, None]
+        stern = np.tile(M_BACK, (n, 1)) + (TAILC - M_BACK) * sstep(0.15, 0.22, y)[:, None]
+        stern = stern + (WHITE - stern) * sstep(0.05, 0.03, z)[:, None]          # white under the tail
+        neck = np.tile(M_BREAST, (n, 1))
+        neck = neck + (M_RUFF - neck) * sstep(0.13, 0.155, z)[:, None]
+        head = np.tile(M_FACE, (n, 1))
+        ruff = sstep(0.2, 0.185, z) * sstep(-0.19, -0.17, y)                      # below and behind the eye
+        head = head + (M_RUFF - head) * ruff[:, None]
+        head = head + (M_CROWN - head) * sstep(0.214, 0.226, z + (y + 0.16) * 0.15)[:, None]   # the crown
+        head = head + (M_CREST - head) * (sstep(-0.15, -0.125, y) * sstep(0.185, 0.2, z))[:, None]  # the crest's long rear feathers
+        body = body + (WHITE - body) * under[:, None]
+    else:
+        body = np.tile(F_BODY, (n, 1))
+        body = body + (F_BACK - body) * (sstep(0.07, 0.095, z) * sstep(0.06, 0.03, np.abs(x)))[:, None]
+        body = body + (WHITE - body) * np.maximum(under, sstep(0.02, -0.0, z) * sstep(-0.02, -0.08, y))[:, None]
+        stern = np.tile(F_BACK, (n, 1)) + (WHITE - F_BACK) * sstep(0.05, 0.03, z)[:, None]
+        neck = np.tile(F_HEAD, (n, 1)) + (F_BODY - F_HEAD) * sstep(0.12, 0.08, z)[:, None]
+        head = np.tile(F_HEAD, (n, 1))
+        head = head + (WHITE * 0.8 - head) * (sstep(0.18, 0.165, z) * sstep(-0.16, -0.18, y))[:, None]   # the pale chin
+    tail = np.tile(TAILC, (n, 1))
+    C = sum(W[i][:, None] * c for i, c in enumerate([body, body, stern, tail, neck, head]))
+    return C, np.ones(n)
+
+
 def plumage_colour(P):
+    if KIND != 'duck':
+        return mandarin_colour(P)
     p = (P[:, 0], P[:, 1], P[:, 2])
     x, y, z = p
     d = parts(p)
@@ -206,12 +308,12 @@ def fold_colour(P):
     along = q[:, 1] / FOLD_R[1]      # -1 front .. 1 tip
     up = q[:, 2] / FOLD_R[2]         # -1 lower edge .. 1 top
     out = q[:, 0] / FOLD_R[0]        # -1 in .. 1 out
-    C = np.tile(WING, (len(P), 1))
+    C = np.tile(WING if KIND == 'duck' else M_BACK if KIND == 'oshidori_m' else F_BACK, (len(P), 1))
     C = C + (PRIM - C) * sstep(0.55, 0.8, along)[:, None]
     tert = sstep(0.0, 0.12, along) * sstep(0.62, 0.5, along) * sstep(0.35, 0.1, up) * sstep(-0.3, 0.1, out)
-    C = C + (TERT - C) * tert[:, None]
+    C = C + ((TERT if KIND == 'duck' else WHITE * 0.9) - C) * (tert * (1.0 if KIND == 'duck' else 0.5))[:, None]
     spec = sstep(-0.35, -0.2, along) * sstep(0.1, 0.0, along) * sstep(-0.1, -0.35, up) * sstep(0.0, 0.4, out)
-    C = C + (SPEC - C) * spec[:, None]
+    C = C + ((SPEC if KIND == 'duck' else M_SPEC) - C) * spec[:, None]
     return C, np.full(len(P), 0.5)
 
 
@@ -221,10 +323,10 @@ def spread_colour(S):
     prim = sstep(WRIST - 0.02, WRIST + 0.03, x)
     # above: brown coverts; on the secondaries the speculum between two white bars, a white trailing edge; the
     # primaries dark
-    up = np.tile(WING, (n, 1))
+    up = np.tile(WING if KIND == 'duck' else F_BACK, (n, 1))
     feathers = sstep(0.38, 0.46, v)
     spec = feathers * (1 - prim) * sstep(0.03, 0.06, x)
-    up = up + (SPEC - up) * spec[:, None]
+    up = up + ((SPEC if KIND == 'duck' else M_SPEC) - up) * spec[:, None]
     bar1 = sstep(0.36, 0.4, v) * sstep(0.46, 0.42, v) * (1 - prim) * sstep(0.03, 0.06, x)
     bar2 = sstep(0.9, 0.95, v) * (1 - prim) * sstep(0.03, 0.06, x)
     up = up + (SPEC_W - up) * np.maximum(bar1, bar2)[:, None]
@@ -238,16 +340,34 @@ def spread_colour(S):
 
 
 def bill_colour(P):
-    t = np.clip((P[:, 1] - BILL[0][1]) / (BILL[1][1] - BILL[0][1]), 0, 1)
-    C = BILL_C + (BILL_T - BILL_C) * sstep(0.62, 0.72, t)[:, None]
-    # the nail: dark, on the tip's top
-    nail = sstep(0.9, 0.95, t) * sstep(BILL[1][2] - 0.001, BILL[1][2] + 0.002, P[:, 2])
-    C = C + (BILL_C * 1.5 - C) * nail[:, None]
+    B = BILL if KIND == 'duck' else BILL_M
+    t = np.clip((P[:, 1] - B[0][1]) / (B[1][1] - B[0][1]), 0, 1)
+    nail = sstep(0.9, 0.95, t) * sstep(B[1][2] - 0.001, B[1][2] + 0.002, P[:, 2])
+    if KIND == 'duck':
+        C = BILL_C + (BILL_T - BILL_C) * sstep(0.62, 0.72, t)[:, None]
+        # the nail: dark, on the tip's top
+        C = C + (BILL_C * 1.5 - C) * nail[:, None]
+    else:
+        # the drake's red with a pale nail, the duck's grey with a pinkish one
+        base = M_BILL if KIND == 'oshidori_m' else F_BILL
+        C = np.tile(base, (len(P), 1)) + (M_NAIL - base) * sstep(0.8, 0.95, t)[:, None]
     return C, np.zeros(len(P))
 
 
 def foot_colour(P):
-    return np.tile(FOOT_C, (len(P), 1)), np.zeros(len(P))
+    return np.tile(F_FOOT if KIND == 'oshidori_f' else FOOT_C, (len(P), 1)), np.zeros(len(P))
+
+
+def sail_colour(P):
+    """orange, its rear edge black over a fine white line, its top a shade paler"""
+    q = (P - np.array(SAIL_C)) @ SAIL_F.T
+    along, up = q[:, 1] / SAIL_R[1], q[:, 2] / SAIL_R[2]
+    C = np.tile(M_SAIL, (len(P), 1)) + (M_FACE - M_SAIL) * sstep(0.3, 0.9, up)[:, None] * 0.4
+    edge = np.sqrt(along ** 2 + up ** 2)
+    rear = sstep(0.0, 0.3, along)
+    C = C + (WHITE - C) * (sstep(0.74, 0.8, edge) * rear)[:, None]
+    C = C + (TAILC - C) * (sstep(0.84, 0.9, edge) * rear)[:, None]
+    return C, np.full(len(P), 0.5)
 
 
 # ---------- skeleton ----------
@@ -338,12 +458,22 @@ def sdf_mesh(name, fn, lo, hi, h, target, protect=None):
 
 def build(budget):
     out = []
-    P, T = sdf_mesh('duck', plumage_sdf, (-0.11, -0.22, -0.045), (0.11, 0.3, 0.24), 0.0022, budget['plumage'])
-    out.append(Part(P, T, plumage_colour(P), chain_weights(P), reach=0.07))
+    hi = 0.24 if KIND == 'duck' else 0.26
+    P, T = sdf_mesh(KIND, plumage_sdf, (-0.11, -0.22, -0.045), (0.11, 0.3, hi), 0.0022, budget['plumage'])
+    W = chain_weights(P)
+    if KIND != 'duck':
+        # the crest, reaching back over the nape, goes with the head
+        k = sstep(0.178, 0.195, P[:, 2]) * sstep(-0.05, -0.08, P[:, 1])
+        W = {b: w * (1 - k) + (k if b == 'head' else 0) for b, w in W.items()}
+    out.append(Part(P, T, plumage_colour(P), W, reach=0.07))
     P, T = sdf_mesh('duck_fold', fold_sdf, (0.02, -0.12, 0.03), (0.11, 0.24, 0.125), 0.002, budget['fold'])
     fold = Part(P, T, fold_colour(P), {'fold_L': np.ones(len(P))}, reach=0.04)
     out += [fold, fold.mirrored()]
-    P, T = sdf_mesh('duck_bill', bill_sdf, (-0.016, -0.272, 0.172), (0.016, -0.2, 0.212), 0.0008, budget['bill'])
+    if KIND == 'oshidori_m':
+        P, T = sdf_mesh('duck_sail', sail_sdf, (0.025, 0.06, 0.095), (0.08, 0.16, 0.185), 0.0012, budget['sail'])
+        sail = Part(P, T, sail_colour(P), {'fold_L': np.ones(len(P))}, reach=0.03)
+        out += [sail, sail.mirrored()]
+    P, T = sdf_mesh('duck_bill', bill_sdf, (-0.016, -0.272, 0.172), (0.016, -0.2, 0.216), 0.0008, budget['bill'])
     out.append(Part(P, T, bill_colour(P), {'head': np.ones(len(P))}, reach=0.02))
     P, T = sdf_mesh('duck_foot', foot_sdf, (0.015, 0.02, -0.085), (0.085, 0.09, 0.0), 0.0012, budget['foot'])
     k = sstep(ANKLE[1] - 0.002, ANKLE[1] - 0.012, P[:, 1]) * sstep(-0.058, -0.068, P[:, 2])  # the toes and the web
@@ -743,18 +873,21 @@ def key_clips(rig):
         b.scale = (1, 1, 1)
 
 
-BUDGET = dict(plumage=4200, fold=420, bill=280, foot=180, far=1100)
+BUDGET = dict(plumage=4200, fold=420, sail=200, bill=280, foot=180, far=1100)
 
 
 def main(out):
+    global KIND
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.render.fps = FPS
-    m = join(build(BUDGET))
-    bake_ao(m)
-    far = far_model('duck_far', m, BUDGET['far'])
     rig = make_rig()
-    bind(rig, 'duck', m)
-    bind(rig, 'duck_far', far)
+    for KIND in ('duck', 'oshidori_m', 'oshidori_f'):
+        m = join(build(BUDGET))
+        bake_ao(m)
+        far = far_model(KIND + '_far', m, BUDGET['far'])
+        bind(rig, KIND, m)
+        bind(rig, KIND + '_far', far)
+    KIND = 'duck'
     key_clips(rig)
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_materials='NONE', export_vertex_color='ACTIVE',
                               export_texcoords=False, export_normals=True, export_yup=True, export_skins=True,

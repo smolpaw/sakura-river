@@ -1,16 +1,18 @@
-// A pair of spot-billed ducks (karugamo) on the river: paddling the slack water along the banks of their stretch
-// (HOME), the drake keeping a little behind the duck, now and then stopping to up-end and feed (head under, tail and
-// orange feet up), to preen, or to rise on the water and beat their wings; each paddle, up-ending and wing beat
-// leaving rings on the water (touches.js). When the walker comes within FLUSH m (the camera within CAMERA_FLUSH) they
-// spring off the water with a splash, fly off low along the river away from them, land 40-60 m on and, once all is
-// quiet, paddle slowly home. After dark they doze by the bank, heads laid back on their shoulders.
-// Model: tools/duck.py (Blender, `node tools/blender.mjs duck`), src/models/duck.glb, inlined: the duck (a lighter
-// model beyond FAR m) with clips: float (the base: breathing, looking about), paddle (the feet alone, weighted by the
-// speed), fly (one wing beat, played at BEAT a second), doze, and the one-shots dabble, preen and flap. Each frame
-// sets the clips' weights (summing to 1, so the spread wings, hidden in every clip but fly and flap, never show their
-// bind pose). Lit by the herons' material (heron.js); the feathers' pale edges, the dark crown, the stripes through
-// the eye and under it, and the eye are drawn over the vertex colours from the bind pose. In the river's reflection;
-// no shadows cast.
+// Two pairs of ducks on the river (PAIRS): spot-billed ducks (karugamo) on the stretch by the cherry tree, and mandarin
+// ducks (oshidori: the drake orange-sailed, the duck grey with white spectacles) upstream of the bridge, under the
+// temple woods. Each pair paddles the slack water along the banks of its stretch (home), the drake keeping a little
+// behind the duck, now and then stopping to up-end and feed (head under, tail and feet up), to preen, or to rise on
+// the water and beat their wings; each paddle, up-ending and wing beat leaving rings on the water (touches.js). When
+// the walker comes within FLUSH m (the camera within CAMERA_FLUSH) a pair springs off the water with a splash, flies
+// off low along the river away from them, lands 40-60 m on and, once all is quiet, paddles slowly home. After dark
+// they doze by the bank, heads laid back on their shoulders.
+// Model: tools/duck.py (Blender, `node tools/blender.mjs duck`), src/models/duck.glb, inlined: each kind's meshes
+// (a lighter model beyond FAR m) on one rig, with clips: float (the base: breathing, looking about), paddle (the feet
+// alone, weighted by the speed), fly (one wing beat, played at BEAT a second), doze, and the one-shots dabble, preen
+// and flap. Each frame sets the clips' weights (summing to 1, so the spread wings, hidden in every clip but fly and
+// flap, never show their bind pose). Lit by the herons' material (heron.js); the fine marks (MARKS: the feathers'
+// pale edges, the stripes on the head, the eye) are drawn over the vertex colours from the bind pose. In the river's
+// reflection; no shadows cast.
 import * as THREE from 'three/webgpu';
 import { Fn, vec2, vec3, mix, abs, atan, floor, fract, length, max, attribute, uniform, positionGeometry, normalGeometry } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -22,8 +24,13 @@ import { mulberry32 } from './noise.js';
 // ?url&inline: vite does not take .glb for an asset on its own; inlined, the page stays one file
 import duckUrl from './models/duck.glb?url&inline';
 
-const SIZE = 1.3; // against life (57 cm bill to tail): large, as the scene's birds are
-const HOME = [-46, 24]; // the stretch they keep to (z)
+// kinds: the duck's then the drake's model; size: against life (the spot-billed duck 57 cm bill to tail, the
+// mandarin 45: large, as the scene's birds are); home: the stretch they keep to (z); start: where they are first
+// (z); call: their call for the sound (audio.js; the mandarins are quiet)
+const PAIRS = [
+  { kinds: ['duck', 'duck'], size: 1.3, home: [-46, 24], start: [-20, 10], call: 'karugamo' },
+  { kinds: ['oshidori_f', 'oshidori_m'], size: 1.05, home: [-92, -66], start: [-86, -70], call: null },
+];
 const FLUSH = 10, CAMERA_FLUSH = 2.5; // m
 const QUIET = 40; // s before they head home after a flight
 const SWIM = 0.32, FLY = 9; // m/s
@@ -32,15 +39,24 @@ const BEAT = 5.2; // wing beats a second in flight (the fly clip is one beat lon
 const FAR = 22; // m: the lighter model beyond
 const SHOTS = { dabble: 0.5, preen: 0.8, flap: 1 }; // the one-shots' shares (cumulative) when one is due
 
-// the marks over the vertex colours, from the bind pose in metres (glTF axes: y up, facing +z; the waterline y = 0)
-function duckColor(at) {
-  return Fn(() => {
-    const c4 = attribute('color', 'vec4');
-    const c = c4.rgb.toVar();
-    const p = positionGeometry.mul(at.scale).add(at.offset);
-    const body = sstep(0.75, 0.9, c4.a), feather = sstep(0.25, 0.4, c4.a);
-    // the head (above the neck, forward of it): the dark crown down to the eye stripe, the stripe from the bill
-    // through the eye to the nape, a fainter one from the gape back under the eye, the eye itself
+// the body's feathers: in rows round it (about 15 round the body, 3 cm long); the fringe at each one's tip (towards
+// the tail), the middle of each row (the fringe's middle: a drop), and how much is flank (bolder there and on the
+// breast, faint over the back)
+function featherRows(p) {
+  const a = atan(p.y.sub(0.035), p.x).mul(2.4), row = floor(a), fa = fract(a).sub(0.5);
+  const e = fract(p.z.mul(-32.0).add(row.mul(0.5))).add(fa.mul(fa).mul(1.4));
+  const fringe = sstep(0.68, 0.8, e).mul(sstep(1.02, 0.9, e));
+  const flank = sstep(0.1, 0.075, p.y).mul(sstep(0.13, 0.11, p.z.add(p.y.mul(0.4))));
+  return { fringe, flank, mid: sstep(0.3, 0.12, abs(fa)) };
+}
+
+// each kind's marks over its vertex colours c (a variable), from the bind pose p in metres (glTF axes: y up, facing
+// +z; the waterline y = 0); body: 1 on the plumage, feather: 1 on the wings
+const MARKS = {
+  // the head (above the neck, forward of it): the dark crown down to the eye stripe, the stripe from the bill through
+  // the eye to the nape, a fainter one from the gape back under the eye, the eye itself; each body feather dark
+  // brown with a pale buff fringe
+  duck(c, p, body) {
     const head = body.mul(sstep(0.155, 0.17, p.y)).mul(sstep(0.115, 0.13, p.z));
     const dark = vec3(0.075, 0.056, 0.04);
     const eyeY = 0.207, eyeZ = 0.186;
@@ -49,17 +65,59 @@ function duckColor(at) {
     const cheek = sstep(0.0022, 0.0008, abs(p.y.sub(0.195).add(p.z.sub(0.19).mul(0.1)))).mul(sstep(0.16, 0.175, p.z)).mul(sstep(0.207, 0.198, p.z));
     c.assign(mix(c, dark, crown.mul(head).mul(0.85)));
     c.assign(mix(c, dark, max(stripe, cheek.mul(0.6)).mul(head)));
-    const d = length(vec2(p.y.sub(eyeY), p.z.sub(eyeZ))), side = sstep(0.3, 0.6, abs(normalGeometry.x)).mul(head);
-    c.assign(mix(c, vec3(0.012, 0.009, 0.007), sstep(0.0036, 0.0028, d).mul(side)));
-    c.assign(mix(c, vec3(0.3, 0.27, 0.22), sstep(0.0011, 0.0005, length(vec2(p.y.sub(eyeY + 0.0012), p.z.sub(eyeZ + 0.0008)))).mul(side)));
-    // the body's feathers: in rows round it (about 15 round the body, 3 cm long), each dark brown with a pale buff
-    // fringe at its tip (towards the tail); bolder on the flanks and the breast, faint over the back; the folded
-    // wings' feathers in finer rows
-    const a = atan(p.y.sub(0.035), p.x).mul(2.4), row = floor(a), fa = fract(a).sub(0.5);
-    const e = fract(p.z.mul(-32.0).add(row.mul(0.5))).add(fa.mul(fa).mul(1.4));
-    const fringe = sstep(0.68, 0.8, e).mul(sstep(1.02, 0.9, e));
-    const flank = sstep(0.1, 0.075, p.y).mul(sstep(0.13, 0.11, p.z.add(p.y.mul(0.4))));
+    eye(c, p, head, eyeY, eyeZ);
+    const { fringe, flank } = featherRows(p);
     c.assign(mix(c, vec3(0.32, 0.25, 0.16), fringe.mul(body.sub(head).max(0.0)).mul(flank.mul(0.4).add(0.1))));
+  },
+  // the drake: the broad white crescent from the eye back to the crest, between the dark crown and the orange ruff;
+  // on the breast's side, in front of the wing, two white bars each edged black behind
+  oshidori_m(c, p, body) {
+    const head = body.mul(sstep(0.15, 0.165, p.y));
+    const eyeY = 0.212, eyeZ = 0.181;
+    const t = p.z.sub(eyeZ).negate().div(0.075);
+    const cy = p.y.sub(eyeY).sub(t.mul(0.007)).add(t.mul(t).mul(0.02));
+    const hw = t.mul(0.01).add(0.004).sub(t.mul(t).mul(0.004));
+    const brow = sstep(hw, hw.sub(0.002), abs(cy)).mul(sstep(-0.1, -0.02, t)).mul(sstep(1.4, 1.1, t));
+    c.assign(mix(c, vec3(0.86, 0.85, 0.82), brow.mul(head).mul(sstep(0.2, 0.45, abs(normalGeometry.x)))));
+    eye(c, p, head, eyeY, eyeZ);
+    const s = p.z.add(p.y.sub(0.06).mul(0.3));
+    const side = body.mul(sstep(0.03, 0.05, abs(p.x))).mul(sstep(0.0, 0.015, p.y)).mul(sstep(0.115, 0.095, p.y));
+    const bar = (z0, w) => sstep(w, w - 0.0012, abs(s.sub(z0)));
+    c.assign(mix(c, vec3(0.8, 0.79, 0.76), max(bar(0.058, 0.0034), bar(0.04, 0.003)).mul(side)));
+    c.assign(mix(c, vec3(0.01, 0.01, 0.012), max(bar(0.05, 0.0034), bar(0.032, 0.003)).mul(side)));
+    const { fringe, flank } = featherRows(p);
+    c.assign(mix(c, c.mul(1.3), fringe.mul(body.sub(head).max(0.0)).mul(flank.mul(0.15))));
+  },
+  // the duck: the white ring round the eye and the line back from it (her spectacles); pale drops over the breast and
+  // the flanks
+  oshidori_f(c, p, body) {
+    const head = body.mul(sstep(0.15, 0.165, p.y));
+    const eyeY = 0.212, eyeZ = 0.181;
+    const d = length(vec2(p.y.sub(eyeY), p.z.sub(eyeZ)));
+    const back = sstep(0.0018, 0.0006, abs(p.y.sub(eyeY).add(0.0015).sub(p.z.sub(eyeZ).mul(0.16)))).mul(sstep(eyeZ - 0.002, eyeZ - 0.006, p.z)).mul(sstep(eyeZ - 0.04, eyeZ - 0.03, p.z));
+    const white = max(sstep(0.0018, 0.0008, abs(d.sub(0.0052))), back).mul(head).mul(sstep(0.2, 0.45, abs(normalGeometry.x)));
+    c.assign(mix(c, vec3(0.8, 0.79, 0.76), white));
+    eye(c, p, head, eyeY, eyeZ);
+    const { fringe, flank, mid } = featherRows(p);
+    c.assign(mix(c, vec3(0.4, 0.36, 0.3), fringe.mul(mid).mul(body.sub(head).max(0.0)).mul(flank.mul(0.6).add(0.2))));
+  },
+};
+
+// the eye: dark with a glint, on the side of the head
+function eye(c, p, head, eyeY, eyeZ) {
+  const d = length(vec2(p.y.sub(eyeY), p.z.sub(eyeZ))), side = sstep(0.3, 0.6, abs(normalGeometry.x)).mul(head);
+  c.assign(mix(c, vec3(0.012, 0.009, 0.007), sstep(0.0036, 0.0028, d).mul(side)));
+  c.assign(mix(c, vec3(0.3, 0.27, 0.22), sstep(0.0011, 0.0005, length(vec2(p.y.sub(eyeY + 0.0012), p.z.sub(eyeZ + 0.0008)))).mul(side)));
+}
+
+function duckColor(kind, at) {
+  return Fn(() => {
+    const c4 = attribute('color', 'vec4');
+    const c = c4.rgb.toVar();
+    const p = positionGeometry.mul(at.scale).add(at.offset);
+    const body = sstep(0.75, 0.9, c4.a), feather = sstep(0.25, 0.4, c4.a);
+    MARKS[kind](c, p, body);
+    // the folded wings' feathers in finer rows, their edges pale
     const wa = fract(p.z.mul(-46.0).add(floor(p.y.mul(70.0)).mul(0.5)));
     c.assign(mix(c, c.mul(1.6).add(0.012), sstep(0.8, 0.95, wa).mul(feather).mul(0.3)));
     return c;
@@ -70,8 +128,7 @@ export async function makeDucks(world, rocksInWater) {
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(duckUrl);
   const src = gltf.scene;
   src.updateMatrixWorld(true);
-  let mat = null;
-  const spheres = {};
+  const mats = {}, spheres = {};
   src.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     // the clips reach beyond the bind pose (up-ending, rising to flap)
@@ -79,14 +136,13 @@ export async function makeDucks(world, rocksInWater) {
     o.computeBoundingSphere();
     spheres[o.name] = o.boundingSphere.clone();
     spheres[o.name].radius += 0.25;
-    if (!mat) {
-      // the positions are quantized (meshopt): back to metres in the bind pose for the marks (the far model's box is
-      // the same duck's)
-      const q = o.geometry.boundingBox || (o.geometry.computeBoundingBox(), o.geometry.boundingBox);
-      const w = new THREE.Box3().setFromObject(o, true);
-      const scale = (w.max.y - w.min.y) / (q.max.y - q.min.y);
-      mat = birdMaterial(duckColor({ scale: uniform(scale), offset: uniform(w.min.clone().sub(q.min.clone().multiplyScalar(scale))) }));
-    }
+    if (o.name.endsWith('_far')) return;
+    // the positions are quantized (meshopt): back to metres in the bind pose for the marks (the far model's box is
+    // the same duck's)
+    const q = o.geometry.boundingBox || (o.geometry.computeBoundingBox(), o.geometry.boundingBox);
+    const w = new THREE.Box3().setFromObject(o, true);
+    const scale = (w.max.y - w.min.y) / (q.max.y - q.min.y);
+    mats[o.name] = birdMaterial(duckColor(o.name, { scale: uniform(scale), offset: uniform(w.min.clone().sub(q.min.clone().multiplyScalar(scale))) }));
   });
   const clip = (n) => gltf.animations.find((a) => a.name === n);
   const rng = mulberry32(73);
@@ -94,7 +150,7 @@ export async function makeDucks(world, rocksInWater) {
 
   // ---------- where they go ----------
   const water = (x, z) => world.height(x, z) < -0.25 && rocksInWater.every((r) => Math.hypot(r.x - x, r.z - z) > r.r + 0.4);
-  // a spot near one bank of their stretch (or anywhere on the river: a flight's landing), clear of rocks
+  // a spot near one bank of the stretch z0..z1 (or anywhere on the river: a flight's landing), clear of rocks
   const near = (z0, z1) => {
     for (let k = 0; k < 40; k++) {
       const z = rand(z0, z1), rx = world.riverX(z), hw = world.riverHW(z), x = rx + (rng() < 0.5 ? -1 : 1) * hw * rand(0.35, 0.75);
@@ -104,18 +160,26 @@ export async function makeDucks(world, rocksInWater) {
   };
   const group = new THREE.Group();
   group.name = 'ducks';
-  const ducks = [0, 1].map((k) => {
+  const splashes = [], events = [];
+  const walkerAt = new THREE.Vector3(), tmp = new THREE.Vector3();
+  let calm = false, now = 0;
+
+  // one duck of a kind: its own copy of the model with that kind's meshes alone
+  const makeDuck = (kind, k, size) => {
     const root = cloneSkinned(src);
     let nearM = null, farM = null;
+    const drop = [];
     root.traverse((o) => {
       if (!o.isSkinnedMesh) return;
-      o.material = mat;
+      if (o.name !== kind && o.name !== kind + '_far') { drop.push(o); return; }
+      o.material = mats[kind];
       o.receiveShadow = true;
       o.boundingSphere = spheres[o.name].clone();
       if (o.name.endsWith('_far')) farM = o; else nearM = o;
-      o.name = o.name.replace('duck', 'ducks');
+      o.name = 'ducks' + (o === farM ? '_far' : '');
     });
-    root.scale.setScalar(SIZE * (k ? 1.04 : 0.97));
+    for (const o of drop) o.removeFromParent();
+    root.scale.setScalar(size * (k ? 1.04 : 0.97));
     group.add(root);
     const mixer = new THREE.AnimationMixer(root);
     const A = {};
@@ -127,17 +191,8 @@ export async function makeDucks(world, rocksInWater) {
     }
     A.float.timeScale = 0.9 + rng() * 0.2;
     A.fly.timeScale = BEAT;
-    return { k, root, nearM, farM, mixer, A, w: { fly: 0, doze: 0 }, shot: null, x: 0, z: 0, y: 0, yaw: rng() * Math.PI * 2, v: 0, goal: null, state: 'swim', next: rand(10, 40), paddle: 0, flight: null, beats: 0 };
-  });
-  const [hen, drake] = ducks;
-  {
-    const [x, z] = near(-20, 10);
-    hen.x = x; hen.z = z; drake.x = x + 0.8; drake.z = z - 1.2;
-  }
-  const splashes = [], events = [];
-  let quack = rand(10, 40); // the duck's next quack
-  const walkerAt = new THREE.Vector3(), tmp = new THREE.Vector3();
-  let calm = false, away = 0, now = 0;
+    return { k, kind, root, nearM, farM, mixer, A, w: { fly: 0, doze: 0 }, shot: null, x: 0, z: 0, y: 0, yaw: rng() * Math.PI * 2, v: 0, goal: null, state: 'swim', next: rand(10, 40), paddle: 0, flight: null, beats: 0 };
+  };
 
   const startShot = (d, name) => {
     d.shot = name; d.state = name; d.beats = 0;
@@ -150,24 +205,6 @@ export async function makeDucks(world, rocksInWater) {
     d.A[d.shot].stop();
     d.shot = null;
     if (d.state !== 'fly') d.state = 'swim';
-  };
-
-  // a flight: up off the water, low along the river away from `from`, down 40-60 m on
-  const takeOff = (from) => {
-    const down = Math.sign(hen.z - from.z) || 1, dist = rand(40, 60);
-    let z1 = THREE.MathUtils.clamp(hen.z + down * dist, -90, 60);
-    if (Math.abs(z1 - hen.z) < 20) z1 = THREE.MathUtils.clamp(hen.z - down * dist, -90, 60);
-    const [lx, lz] = near(z1 - 4, z1 + 4);
-    for (const d of ducks) {
-      const off = d === hen ? 0 : 1;
-      endShot(d);
-      d.flight = { t0: now + off * 0.25, from: new THREE.Vector3(d.x, 0, d.z), to: new THREE.Vector3(lx + off * 0.9, 0, lz - off * 1.4), up: rand(2.5, 4) };
-      d.flight.len = d.flight.from.distanceTo(d.flight.to);
-      d.state = 'fly'; d.goal = null;
-      splashes.push({ x: d.x, z: d.z, amp: 1, r: 0.1 });
-    }
-    events.push({ kind: 'karugamo', x: hen.x, y: 0.3, z: hen.z }); // quacking as they go
-    away = now + QUIET;
   };
 
   // the clips' weights: flight, dozing and a one-shot over the float, which takes the rest; the feet paddle with
@@ -193,19 +230,39 @@ export async function makeDucks(world, rocksInWater) {
     d.mixer.update(dt);
   };
 
-  return {
-    group, splashes, events, // events: calls for the sound (audio.js call), taken each frame
-    // ctx: { hour, rain, camera, walker ({x, y, z} or null), warming }
-    update(dt, ctx) {
-      dt = Math.min(dt, 0.1);
-      now += dt;
-      const night = ctx.hour > NIGHT[0] || ctx.hour < NIGHT[1];
-      if (ctx.walker) walkerAt.set(ctx.walker.x, ctx.walker.y + 1, ctx.walker.z);
+  // ---------- a pair ----------
+  const makePair = (cfg) => {
+    const [hen, drake] = cfg.kinds.map((kind, k) => makeDuck(kind, k, cfg.size));
+    const ducks = [hen, drake], HOME = cfg.home;
+    let quack = rand(10, 40); // the duck's next call
+    let away = 0;
+    const put = (x, z) => { hen.x = x; hen.z = z; drake.x = x + 0.8; drake.z = z - 1.2; };
+    put(...near(...cfg.start));
+
+    // a flight: up off the water, low along the river away from `from`, down 40-60 m on
+    const takeOff = (from) => {
+      const down = Math.sign(hen.z - from.z) || 1, dist = rand(40, 60);
+      let z1 = THREE.MathUtils.clamp(hen.z + down * dist, -90, 60);
+      if (Math.abs(z1 - hen.z) < 20) z1 = THREE.MathUtils.clamp(hen.z - down * dist, -90, 60);
+      const [lx, lz] = near(z1 - 4, z1 + 4);
+      for (const d of ducks) {
+        const off = d === hen ? 0 : 1;
+        endShot(d);
+        d.flight = { t0: now + off * 0.25, from: new THREE.Vector3(d.x, 0, d.z), to: new THREE.Vector3(lx + off * 0.9, 0, lz - off * 1.4), up: rand(2.5, 4) };
+        d.flight.len = d.flight.from.distanceTo(d.flight.to);
+        d.state = 'fly'; d.goal = null;
+        splashes.push({ x: d.x, z: d.z, amp: 1, r: 0.1 });
+      }
+      if (cfg.call) events.push({ kind: cfg.call, x: hen.x, y: 0.3, z: hen.z }); // calling as they go
+      away = now + QUIET;
+    };
+
+    const update = (dt, ctx, night) => {
       const dist = (x, z) => Math.min(ctx.walker ? Math.hypot(walkerAt.x - x, walkerAt.z - z) / FLUSH : Infinity, Math.hypot(ctx.camera.position.x - x, ctx.camera.position.z - z) / CAMERA_FLUSH);
       const from = ctx.walker && Math.hypot(walkerAt.x - hen.x, walkerAt.z - hen.z) / FLUSH < 1 ? walkerAt : ctx.camera.position;
       if (!calm && !ctx.warming && hen.state !== 'fly' && drake.state !== 'fly' && Math.min(dist(hen.x, hen.z), dist(drake.x, drake.z)) < 1) takeOff(from);
-      // the duck quacks now and then by day
-      if (!night && hen.state !== 'fly' && (quack -= dt) <= 0) { quack = rand(25, 70); events.push({ kind: 'karugamo', x: hen.x, y: 0.3, z: hen.z }); }
+      // the duck calls now and then by day
+      if (cfg.call && !night && hen.state !== 'fly' && (quack -= dt) <= 0) { quack = rand(25, 70); events.push({ kind: cfg.call, x: hen.x, y: 0.3, z: hen.z }); }
       for (const d of ducks) {
         if (d.state === 'fly') {
           const f = d.flight, u = Math.max(0, (now - f.t0) * FLY / f.len);
@@ -220,11 +277,12 @@ export async function makeDucks(world, rocksInWater) {
           continue;
         }
         d.y = Math.max(0, d.y - dt * 2);
-        // where to: the duck wanders its stretch (home after a flight); the drake keeps behind her
+        // where to: the duck wanders her stretch (home after a flight); the drake keeps behind her
         if (d === hen) {
           if (!d.goal || Math.hypot(d.goal[0] - d.x, d.goal[1] - d.z) < 0.6) {
             const home = now > away && (d.z < HOME[0] || d.z > HOME[1]);
-            d.goal = home ? near(Math.max(HOME[0], Math.min(HOME[1], d.z)) - 6, Math.max(HOME[0], Math.min(HOME[1], d.z)) + 6) : near(Math.max(HOME[0], d.z - 12), Math.min(HOME[1], d.z + 12));
+            const zc = Math.max(HOME[0], Math.min(HOME[1], d.z));
+            d.goal = home ? near(zc - 6, zc + 6) : near(Math.max(HOME[0], d.z - 12), Math.min(HOME[1], d.z + 12));
             if (now < away) d.goal = [d.x + Math.sin(d.yaw) * 2, d.z + Math.cos(d.yaw) * 2];
           }
         } else d.goal = [hen.x - Math.sin(hen.yaw) * 1.3 + Math.cos(hen.yaw) * 0.5, hen.z - Math.cos(hen.yaw) * 1.3 - Math.sin(hen.yaw) * 0.5];
@@ -262,7 +320,7 @@ export async function makeDucks(world, rocksInWater) {
       }
       for (const d of ducks) {
         // afloat: the model's waterline on the water, bobbing a little
-        const bob = d.state === 'fly' ? 0 : Math.sin(now * 1.7 + d.k * 2) * 0.004;
+        const bob = d.state === 'fly' ? 0 : Math.sin(now * 1.7 + d.k * 2 + HOME[0]) * 0.004;
         d.root.position.set(d.x, d.y + bob, d.z);
         d.root.rotation.set(0, d.yaw, 0);
         const far = ctx.camera.position.distanceTo(d.root.position) > FAR;
@@ -270,18 +328,37 @@ export async function makeDucks(world, rocksInWater) {
         d.farM.visible = ctx.warming || far;
         pose(d, dt, night);
       }
-    },
-    // debug: each duck's state and place; calm: they mind no one; at: [x, z, yaw]: the pair put there, the duck facing
-    // yaw; fly: take off now as if startled; act: the duck starts that one-shot now (dabble, preen, flap)
-    info(o = {}) {
-      if (o.calm !== undefined) calm = !!o.calm;
+    };
+
+    const info = (o) => {
       if (o.at) {
         for (const d of ducks) { endShot(d); d.state = 'swim'; d.goal = null; d.v = 0; d.y = 0; d.w.fly = 0; d.yaw = o.at[2] ?? 0; d.next = rand(20, 40); }
-        hen.x = o.at[0]; hen.z = o.at[1]; drake.x = o.at[0] + 0.8; drake.z = o.at[1] - 1.2;
+        put(o.at[0], o.at[1]);
       }
       if (o.fly) takeOff(new THREE.Vector3(hen.x, 0, hen.z + 5));
       if (o.act && hen.state !== 'fly') { endShot(hen); startShot(hen, o.act); }
-      return ducks.map((d) => ({ state: d.state, x: +d.x.toFixed(2), y: +d.y.toFixed(2), z: +d.z.toFixed(2), yaw: +d.yaw.toFixed(2), v: +d.v.toFixed(2) }));
+    };
+    return { ducks, update, info };
+  };
+  const pairs = PAIRS.map(makePair);
+
+  return {
+    group, splashes, events, // events: calls for the sound (audio.js call), taken each frame
+    // ctx: { hour, rain, camera, walker ({x, y, z} or null), warming }
+    update(dt, ctx) {
+      dt = Math.min(dt, 0.1);
+      now += dt;
+      const night = ctx.hour > NIGHT[0] || ctx.hour < NIGHT[1];
+      if (ctx.walker) walkerAt.set(ctx.walker.x, ctx.walker.y + 1, ctx.walker.z);
+      for (const p of pairs) p.update(dt, ctx, night);
+    },
+    // debug: each duck's kind, state and place; calm: they mind no one; pair: which pair (PAIRS, default 0) the
+    // rest is for: at: [x, z, yaw]: the pair put there, the duck facing yaw; fly: take off now as if startled; act:
+    // the duck starts that one-shot now (dabble, preen, flap)
+    info(o = {}) {
+      if (o.calm !== undefined) calm = !!o.calm;
+      pairs[o.pair ?? 0].info(o);
+      return pairs.flatMap((p) => p.ducks).map((d) => ({ kind: d.kind, state: d.state, x: +d.x.toFixed(2), y: +d.y.toFixed(2), z: +d.z.toFixed(2), yaw: +d.yaw.toFixed(2), v: +d.v.toFixed(2) }));
     },
   };
 }

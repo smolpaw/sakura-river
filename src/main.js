@@ -627,7 +627,7 @@ export async function create(canvas, opts = {}) {
   scene.add(dropped.mesh);
   const turtles = makeTurtles(world, riverRocks); // basking on a rock in the river
   scene.add(turtles.mesh);
-  const ducks = await makeDucks(world, G.rocks.rocksInWater); // a pair of spot-billed ducks on the river
+  const ducks = await makeDucks(world, G.rocks.rocksInWater); // a pair of spot-billed ducks and a pair of mandarins on the river
   scene.add(ducks.group);
   const frogs = makeFrogs(world); // on the paddies' edges beside the lanes
   scene.add(frogs.mesh);
@@ -1390,7 +1390,7 @@ export async function create(canvas, opts = {}) {
     deerInfo(o) { return deer.info(o); }, // each deer: where, heading, speed, what it is doing, how alarmed; the herd's plan; { calm: true } keeps them from minding the observer
     tanukiInfo(o) { return tanuki.info(o); }, // the tanuki: where it is, what it is doing; { calm: true }: it minds no one, { at: [x, z] }: put it there
     frogInfo() { return frogs.info(); }, // the frogs by the lanes: each one's place, state, kind
-    duckInfo(o) { return ducks.info(o); }, // the ducks: each one's state, place, heading, speed; { calm: true }: they mind no one, { at: [x, z, yaw] }: put the pair there, { fly: true }: off now, { act: 'dabble' | 'preen' | 'flap' }: the duck does that now
+    duckInfo(o) { return ducks.info(o); }, // the ducks: each one's kind, state, place, heading, speed; { calm: true }: they mind no one; for pair o.pair (0 the spot-billed, 1 the mandarins): { at: [x, z, yaw] }: put the pair there, { fly: true }: off now, { act: 'dabble' | 'preen' | 'flap' }: the duck does that now
     turtleInfo(o) { return turtles.info(o); }, // the basking turtles: their rock, each one's state; { calm: true }: they mind no one, { out: true }: all out now
     heronInfo(o) { return herons.info(o); }, // the heron and the egrets: where each stands, its heading, its clip, the heron in flight; { calm: true }: the heron minds no one, { fly: true }: off now
     figureInfo() { return figures.info(); }, figureAct(name) { figures.act(name); }, // the fisherman and the planter; start one's second clip (lift, stretch)
