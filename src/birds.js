@@ -1,8 +1,9 @@
 // Birds in flight, in the background: swallows hunting over the river by day (high in fair weather, skimming the
 // water under heavy cloud and in drizzle, as the saying has it before rain; gone in heavy rain), black kites circling
 // high on clear days and drifting downwind, and crows flying home to the temple woods at dusk (out again at dawn, the
-// odd pair by day); bats jinking low over the river from dusk into the night and before dawn; and the grey heron when
-// heron.js sends it off its stretch of shallows. Lightning scatters them for a while. Paths run on the CPU (a few
+// odd pair by day); bats jinking low over the river from dusk into the night and before dawn; skylarks going up from
+// the fields to hang high over them singing, then dropping back into the grass; and the grey heron when heron.js sends
+// it off its stretch of shallows. Lightning scatters them for a while. Paths run on the CPU (a few
 // dozen birds); the vertex stage flaps the wings.
 import * as THREE from 'three/webgpu';
 import { vec3, sin, cos, abs, sign, min, max, mix, attribute, positionGeometry, normalGeometry, transformNormalToView, faceDirection } from 'three/tsl';
@@ -56,7 +57,16 @@ SPECIES.bat = {
   wing: [[0.06, 0.1, -0.12], [0.24, 0.08, -0.26], [0.38, 0.12, -0.2], [0.5, 0.08, -0.06]],
   flap: { hz: 11, o1: 0.15, a1: 0.7, o2: -0.1, a2: 0.5, lag: 0.5, glide: [0.2, -0.1], on: [10, 20], off: [0.01, 0.02] },
 };
-const COUNT = { swallow: 10, kite: 3, crow: 22, heron: 1, bat: 8 };
+// skylarks (hibari): stocky, broad rounded wings, a short tail; hanging in the air on quick fluttering beats with
+// short pauses
+SPECIES.lark = {
+  span: 0.45, elbow: 0.2, top: [0.17, 0.12, 0.07], belly: [0.5, 0.45, 0.37],
+  body: [[0.2, 0, 0], [0.15, 0.04, 0.045], [0.06, 0.07, 0.07], [-0.06, 0.055, 0.05], [-0.14, 0.02, 0.02], [-0.16, 0, 0]],
+  tail: [[0.03, -0.12], [0.08, -0.36], [0.03, -0.34], [0, -0.32]],
+  wing: [[0.04, 0.09, -0.12], [0.2, 0.1, -0.16], [0.38, 0.08, -0.14], [0.5, 0.02, -0.08]],
+  flap: { hz: 12, o1: 0.25, a1: 0.65, o2: 0.05, a2: 0.4, lag: 0.8, glide: [0.35, -0.15], on: [0.7, 1.8], off: [0.08, 0.3] },
+};
+const COUNT = { swallow: 10, kite: 3, crow: 22, heron: 1, bat: 8, lark: 2 };
 
 function birdGeometry(sp) {
   const P = [], N = [], C = [], W = [], I = [], S = sp.span;
@@ -325,6 +335,60 @@ export function makeBirds(world, tree) {
     }
   }
 
+  // ---------- skylarks: up from the fields singing, hanging high over them a few minutes, then back down ----------
+  // a lark goes up from a field (not the village's) ahead of the camera, 40-220 m off
+  const fields = world.ZONES.filter((Z) => !Z.village);
+  const larkSpot = () => {
+    let best = null;
+    for (let k = 0; k < 40; k++) {
+      const B = fields[Math.floor(rng() * fields.length)].box, x = rand(B[0], B[2]), z = rand(B[1], B[3]);
+      const dx = x - cam.x, dz = z - cam.z, d = Math.hypot(dx, dz);
+      if (d < 40 || d > 220) continue;
+      best = [x, z];
+      if ((dx * fwd.x + dz * fwd.z) / d > 0.3) break;
+    }
+    return best;
+  };
+  function larks(dt, presence, t) {
+    const { birds } = kinds.lark, n = birds.length;
+    for (const b of birds) {
+      const want = presence > (b.i + 0.5) / n;
+      if (b.state === 'away') {
+        // on the ground a while between songs
+        b.wait = (b.wait ?? (env.first ? 0 : rand(10, 60))) - dt;
+        const at = want && b.wait <= 0 && larkSpot();
+        if (!at) continue;
+        [b.ax, b.az] = at;
+        b.gy = ground(b.ax, b.az);
+        b.top = b.gy + rand(35, 65); b.hang = rand(100, 240); b.r = 0;
+        b.y = env.first ? b.top : b.gy + 0.3;
+        b.state = env.first ? 'hover' : 'rise';
+      }
+      // rising in widening circles; hanging in one place, drifting a little downwind; down by stages, the last stretch
+      // a plunge with the wings closed
+      let vy = 0;
+      if (b.state === 'rise') { vy = 1.3; b.r = Math.min(4, b.r + dt * 0.25); if (b.y >= b.top) b.state = 'hover'; }
+      else if (b.state === 'hover') {
+        b.r = Math.max(1, b.r - dt * 0.3);
+        b.ax += env.wind.x * 0.3 * dt; b.az += env.wind.y * 0.3 * dt;
+        if (!want || (b.hang -= dt) <= 0) b.state = 'drop';
+      } else if (b.state === 'drop') {
+        const left = b.y - b.gy;
+        vy = left > 12 ? -2.2 * smoothstep(-0.3, 0.6, Math.sin(t * 0.8 + b.i * 3)) : -11;
+        if (left <= 12) { b.beat = false; b.beatT = 1; }
+        if (left < 0.4) { away(b); b.wait = rand(40, 150); continue; }
+      }
+      b.y += vy * dt;
+      const a = t * 0.35 + b.i * 2;
+      b.x = b.ax + Math.sin(a) * b.r; b.z = b.az + Math.cos(a) * b.r * 0.7;
+      // into the wind, or turning slowly in still air; nose up as it hangs, down as it drops
+      const into = env.wind.lengthSq() > 0.01 ? Math.atan2(-env.wind.x, -env.wind.y) : a * 0.4;
+      b.yaw = into + Math.sin(t * 0.7 + b.i) * 0.3;
+      b.pitch = b.state === 'drop' && b.y - b.gy < 12 ? -0.7 : 0.55;
+      b.bank = Math.sin(t * 1.3 + b.i) * 0.15;
+    }
+  }
+
   // ---------- the heron, sent off from where it stood: up and along, then gliding down to where it lands ----------
   let heronTrip = null;
   function heronFlight(dt) {
@@ -382,6 +446,9 @@ export function makeBirds(world, tree) {
       // bats: out as the light goes until well into the night, and again before dawn; not in rain or a gale
       const batTime = smoothstep(18.2, 18.8, h) * (1 - smoothstep(21.5, 22.5, h)) + smoothstep(3.6, 4.0, h) * (1 - smoothstep(4.8, 5.3, h));
       bats(dt, batTime * (1 - smoothstep(0.15, 0.4, ctx.rain)) * (1 - gale));
+      // skylarks: up singing from mid-morning to late afternoon, not in rain, fewer under cloud, none in a gale
+      const larkTime = smoothstep(6.5, 7.5, h) * (1 - smoothstep(16.5, 17.5, h));
+      larks(dt, larkTime * (1 - smoothstep(0.05, 0.25, ctx.rain)) * (1 - 0.5 * smoothstep(0.5, 0.9, ctx.clouds)) * (1 - gale) * calm, ctx.t);
       heronFlight(dt);
       for (const name in kinds) write(kinds[name], dt);
       env.first = false;
@@ -392,6 +459,16 @@ export function makeBirds(world, tree) {
       b.x = from.x; b.y = from.y + 0.6; b.z = from.z; b.yaw = Math.atan2(to.x - from.x, to.z - from.z);
       b.pitch = 0.3; b.bank = 0; b.v = 3; b.state = 'in'; b.beat = true; b.A = 1;
       heronTrip = { from: from.clone(), to: to.clone(), landed };
+    },
+    // the nearest skylark singing (going up, hanging or coming down by stages; its plunge is silent) to `at`, or null
+    lark(at) {
+      let best = null, bd = Infinity;
+      for (const b of kinds.lark.birds) {
+        if (b.state === 'away' || (b.state === 'drop' && b.y - b.gy < 12)) continue;
+        const d = Math.hypot(b.x - at.x, b.y - at.y, b.z - at.z);
+        if (d < bd) { bd = d; best = b; }
+      }
+      return best && { x: best.x, y: best.y, z: best.z };
     },
     // debug: the birds in the air, per species [x, y, z]
     info() {

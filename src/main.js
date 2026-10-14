@@ -1075,7 +1075,7 @@ export async function create(canvas, opts = {}) {
       for (const e of s.events) sound.call(e.kind, e.x, e.y, e.z, camera);
       s.events.length = 0;
     }
-    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera, fisher: figures.voice() });
+    sound.update(dt, { wind: S.wind / 1.6, river: S.river / 2.2, rain: S.rain, lightning: S.lightning, hour: clockH, lights: U.uLights.value, camera, fisher: figures.voice(), lark: birds.lark(camera.position) });
 
     // camera
     walk.update(dt, walking && !tween); // (the body waits for the flight into its eye)

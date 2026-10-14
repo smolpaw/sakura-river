@@ -2,7 +2,7 @@
 //   node tools/audio.mjs [name ...]
 // Needs ffmpeg with libmp3lame. Sources are downloaded once into tools/.audio-cache/. Given names, it builds only the
 // outputs whose names start with one of them (`node tools/audio.mjs step- frogs`) and leaves the other files as they are.
-// - Beds (river, wind, rain, birds, lapping, waterwheel, frogs, bamboo) become seamless loops: the segment's tail is
+// - Beds (river, wind, rain, birds, lapping, waterwheel, frogs, bamboo, the skylark's song) become seamless loops: the segment's tail is
 //   crossfaded into its head, and the file carries PAD seconds of the loop's own end before it and of its start after
 //   it, so the page can loop [PAD, PAD + length] and stay seamless whatever the MP3 decoder does with encoder delay and
 //   padding.
@@ -31,6 +31,7 @@ const SRC = {
   rain: 'https://opengameart.org/sites/default/files/amb_rain2.flac',
   birds: 'https://archive.org/download/aporee_68851_79871/LDoltonKamikosawaForestBirdsQuiet250612.wav',
   uguisu: 'https://xeno-canto.org/993079/download',
+  hibari: 'https://xeno-canto.org/283467/download',
   // the animals (src/audio.js CALLS): sika deer alarm whistles, grey heron croaks, kingfisher calls, Japanese wagtail
   // flight calls, spot-billed duck quacks, white-eye song, and a lure's plop into water for whatever goes in
   sika1: 'https://xeno-canto.org/961992/download',
@@ -73,6 +74,8 @@ const BEDS = [
   { out: 'frogs', src: 'frogs', at: 300, len: 40, af: 'highpass=f=300' },
   // a gusty stretch of wind in the leaves, a culm's knock or two; loud traffic rumble under 250 Hz (a steep cut)
   { out: 'bamboo', src: 'bamboo', at: 140, len: 40, af: 'highpass=f=300,highpass=f=300,highpass=f=280' },
+  // a skylark's unbroken song (the recording is cut below 1.8 kHz already)
+  { out: 'hibari', src: 'hibari', at: 10, len: 50, af: 'highpass=f=1500' },
 ];
 const XF = 3;
 

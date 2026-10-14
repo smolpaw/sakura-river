@@ -2,7 +2,7 @@
 
 [![A cherry tree in bloom by a river, a red drum bridge, a pagoda and a snow-capped mountain](docs/screenshot.jpg)](https://smolpaw.github.io/sakura-river/)
 
-A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Sika deer keep their day's round on the far bank and watch whoever comes near, a heron fishes the shallows, ducks, turtles, a kingfisher and wagtails live along the river, white-eyes work the blossom, a fisherman and a rice planter work, and birds, butterflies, bats, frogs, a tanuki, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
+A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, a drum bridge, a farming village and rice terraces, a temple on a knoll. Sika deer keep their day's round on the far bank and watch whoever comes near, a heron fishes the shallows, ducks, turtles, a kingfisher and wagtails live along the river, white-eyes work the blossom, a fisherman and a rice planter work, skylarks sing high over the fields, and birds, butterflies, bats, frogs, a tanuki, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
 Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the boulders (scanned rocks, simplified in Blender), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel), and the sound (recordings); all are credited below.
 
@@ -93,6 +93,7 @@ Animals (xeno-canto recordings are CC BY-NC-SA 4.0):
 - Grey heron's croaks: XC998335 and XC1102109, Grey Heron (*Ardea cinerea*), Ireland, by Paul Kelly, xeno-canto. https://xeno-canto.org/998335 https://xeno-canto.org/1102109
 - Kingfisher's calls: XC785257, Common Kingfisher (*Alcedo atthis*), Sweden, by Teet Sirotkin, xeno-canto. https://xeno-canto.org/785257
 - Japanese wagtail's flight calls: XC527476, Japanese Wagtail (*Motacilla grandis*), Japan, by Markus Jacobs, xeno-canto. https://xeno-canto.org/527476
+- Skylark's song: XC283467, Eurasian Skylark (*Alauda arvensis japonica*), Erimo, Hokkaidō, by Antony Schubert, xeno-canto. https://xeno-canto.org/283467
 - Spot-billed duck's quacks: XC858061, Eastern Spot-billed Duck (*Anas zonorhyncha*), Japan, by Joshua Chong, xeno-canto. https://xeno-canto.org/858061
 - White-eye's song: XC993083, Warbling White-eye (*Zosterops japonicus*), Japan, by Xavier Riera, xeno-canto. https://xeno-canto.org/993083
 - The plop into water: "Fishing Lure Plop Water - Game SFX (2 or 2)" by el_boss, Freesound, CC0. https://freesound.org/people/el_boss/sounds/853279/

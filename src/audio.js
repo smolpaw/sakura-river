@@ -1,11 +1,12 @@
 // Sound: Japanese background music and the scene's ambience, mixed from the weather, the clock and the camera.
 // Loops (river, wind, rain, birds by day, water lapping under the bridge; close by: the waterwheel, frogs in the
-// paddies at night, wind in the bamboo groves) play from decoded buffers, loaded when first heard and dropped after a
-// minute unheard; thunder follows each lightning strike after the sound's travel time; bush warblers sing in short
-// bouts by day; the temple's bell tolls as the lanterns come on at dusk; the fisherman hums or whistles his tune to
-// himself, heard only close to him; the walker's geta sound on the ground under them; the animals' calls (call())
-// come from where each animal is, as it calls. Music streams through a media
-// element. Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or created until sound is turned on.
+// paddies at night, wind in the bamboo groves; the skylark's song from where it hangs over the fields) play from
+// decoded buffers, loaded when first heard and dropped after a minute unheard; thunder follows each lightning strike
+// after the sound's travel time; bush warblers sing in short bouts by day; the temple's bell tolls as the lanterns come
+// on at dusk; the fisherman hums or whistles his tune to himself, heard only close to him; the walker's geta sound on
+// the ground under them; the animals' calls (call()) come from where each animal is, as it calls. Music streams through
+// a media element. Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or created until sound is turned
+// on.
 import { clamp, lerp, smoothstep } from './noise.js';
 
 // loudness of each track (tools/audio.mjs prints it); music plays at MUSIC_LUFS at full volume, the loops are
@@ -36,7 +37,7 @@ export function createSound(world, bridge) {
   const base = new URL('audio/', document.baseURI);
   const url = (name) => new URL(name + '.mp3', base).href;
   let ctx = null, on = false;
-  let master, natureBus, musicBus, trackGain, el, riverLP, riverPan, lapLP, lapPan, wheelLP, wheelPan, frogPan, bambooPan;
+  let master, natureBus, musicBus, trackGain, el, riverLP, riverPan, lapLP, lapPan, wheelLP, wheelPan, frogPan, bambooPan, larkPan;
   let voiceGain, voiceLP, voicePan;
   const vol = { music: 0.75, nature: 0.4 };
   let order = [], ti = 0, nextTimer = 0;
@@ -152,6 +153,8 @@ export function createSound(world, bridge) {
     bed('frogs', [frogPan]);
     bambooPan = new StereoPannerNode(ctx);
     bed('bamboo', [bambooPan]);
+    larkPan = new StereoPannerNode(ctx);
+    bed('hibari', [larkPan]);
     voiceLP = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 16000, Q: 0.5 });
     voicePan = new StereoPannerNode(ctx);
     voiceGain = new GainNode(ctx, { gain: 0 });
@@ -297,6 +300,10 @@ export function createSound(world, bridge) {
     const bp = bambooPlace(st.camera), bnear = Math.max(0, 1 / (1 + (bp.d / 12) ** 2) - 0.03) / 0.97;
     setBed(beds.bamboo, 1.4 * bnear * (0.3 + 0.9 * smoothstep(0.05, 0.8, wind)) * (1 - 0.5 * gale));
     bambooPan.pan.setTargetAtTime(clamp(panTo(st.camera, bp.x, bp.z) * 0.6 * (1 - bnear * 0.6), -0.6, 0.6), ctx.currentTime, 0.3);
+    // the skylark singing high over the fields (birds.js lark()), carrying a long way
+    const lk = st.lark, ld = lk ? st.camera.position.distanceTo(lk) : Infinity;
+    setBed(beds.hibari, 0.9 / (1 + (ld / 50) ** 2));
+    if (lk) larkPan.pan.setTargetAtTime(clamp(panTo(st.camera, lk.x, lk.z) * 0.6, -0.6, 0.6), ctx.currentTime, 0.3);
     // the footsteps stay loaded while the walk goes on (and drop a minute after it stops)
     const walking = performance.now() - walked < 5000;
     for (const set of Object.values(shots.steps)) keepShots(set, walking);
