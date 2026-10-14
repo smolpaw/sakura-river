@@ -138,8 +138,8 @@ Close up, these surfaces are photographed texture sets from Poly Haven (https://
 - Timber (the houses, the temple, the bridge, the lamp posts, the boats; under the vermilion lacquer too): "Weathered Planks" by Dario Barresi and Dimitrios Savva.
 - The storehouse's and the temple's plaster: "Grey Plaster 02" by Rob Tuytel.
 - Roof tiles: "Grey Roof Tiles" by Rob Tuytel.
-- Built stone (foundations, the temple's base, the bridge's abutments): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
-- Carved stone (the Jizō, the stone lanterns, the lamps' feet): "Rock Surface" by Amal Kumar.
+- Built stone (foundations, the temple's terrace walls and steps, the bridge's abutments): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
+- Carved and dressed stone (the Jizō, the stone lanterns, the lamps' feet, the temple buildings' platforms): "Rock Surface" by Amal Kumar.
 - The woods' bark: "Japanese Cedar Bark" by Charlotte Baglioni.
 - The temple's gravel courtyard: "Gravel Ground 01" by Rob Tuytel.
 - The ground under the grass and the green yards: "Forest Ground 01" by Rob Tuytel.

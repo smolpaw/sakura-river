@@ -1,7 +1,9 @@
 // Old temple on the knoll across the river (world.temple): a stone-walled terrace with a five-storey pagoda, a main
 // hall under a hip-and-gable (irimoya) roof, a bell tower, ochre boundary walls with five white lines, and stone
-// lanterns along the approach. Weathered bengara wood (the pagoda lacquered vermilion), white plaster, ribbed grey
-// tile, verdigris bronze; the sky light each part sees past the others is baked into the colours (skyLight). After dusk
+// lanterns along the approach. The buildings stand on dressed-stone platforms (kidan); their roofs sweep up to the
+// corners (sori) over double rafters and stepped bracket sets (roof). Weathered bengara wood (the pagoda lacquered
+// vermilion), white plaster, ribbed grey tile, verdigris bronze; the sky light each part sees past the others is baked
+// into the colours (skyLight). After dusk
 // the hall's lattice doors and the lanterns' fireboxes glow (aGlow), and floodlights hidden in the gravel light the
 // pagoda from below, as at a temple's spring light-up (materials.js templeMaterial, fx.js makeGlows).
 // Generation only (runs in a worker).
@@ -13,6 +15,7 @@ import { KIND, tagKinds } from './kinds.js';
 const V = THREE.Vector3;
 const WOOD = [0.27, 0.1, 0.06], WOOD_D = [0.1, 0.07, 0.05], PLASTER = [0.8, 0.77, 0.7], TILE = [0.2, 0.21, 0.22], TILE_D = [0.11, 0.115, 0.12];
 const ENDS = [0.8, 0.74, 0.58], BRONZE = [0.22, 0.36, 0.3], BRONZE_D = [0.16, 0.2, 0.15], STONE = [0.43, 0.41, 0.38], GRAVEL = [0.6, 0.58, 0.53];
+const STONE_D = [0.19, 0.18, 0.17]; // the joints between cut stones
 const OCHRE = [0.62, 0.45, 0.22], PAPER = [0.86, 0.8, 0.66], FIREBOX = [0.5, 0.45, 0.38];
 const SHU = [0.56, 0.07, 0.03], SHU_D = [0.3, 0.05, 0.03]; // the pagoda's vermilion lacquer (the bridge's, weathered)
 // the photographed textures the parts take, by colour (kinds.js)
@@ -22,8 +25,9 @@ const KINDS = [[WOOD, KIND.WOOD], [WOOD_D, KIND.WOOD], [SHU, KIND.PAINT], [SHU_D
 // parts in a local frame; at() places what its callback adds (lamps too)
 export function kit() {
   const parts = [], lamps = [];
-  // indexed (a box is 24 vertices, not 36): one colour and glow per part
-  const add = (g, c, glow = 0) => {
+  // indexed (a box is 24 vertices, not 36): one colour and glow per part; `kind` sets its surface kind where its colour
+  // is not one of the palette's (tagKinds)
+  const add = (g, c, glow = 0, kind) => {
     g.deleteAttribute('uv');
     const n = g.attributes.position.count, col = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) col.set(c, i * 3);
@@ -31,9 +35,10 @@ export function kit() {
     g.setAttribute('aGlow', new THREE.BufferAttribute(new Float32Array(n).fill(glow), 1));
     if (!g.index) g.setIndex([...Array(n).keys()]);
     if (!g.attributes.normal) g.computeVertexNormals();
+    if (kind !== undefined) g.userData.kind = kind;
     parts.push(g);
   };
-  const box = (w, h, d, x, y, z, c, ry = 0, glow = 0) => add(new THREE.BoxGeometry(w, h, d).rotateY(ry).translate(x, y, z), c, glow);
+  const box = (w, h, d, x, y, z, c, ry = 0, glow = 0, kind) => add(new THREE.BoxGeometry(w, h, d).rotateY(ry).translate(x, y, z), c, glow, kind);
   const beam = (a, b, w, h, c) => {
     const d = new V().subVectors(b, a);
     const g = new THREE.BoxGeometry(w, h, d.length());
@@ -61,74 +66,125 @@ export function kit() {
   return { parts, lamps, add, box, beam, lathe, at, paint };
 }
 
-// A roof face: f(u, t) is the tiled surface for u 0 (eave) .. 1 (top) and t 0..1 along the eave. Rows of round tiles
-// run down the slope as ribs; soff(p) is the soffit's height under p, and a fascia closes the eave.
-function face(k, f, K, M, rib, soff) {
-  const T = [], B = [];
-  for (let i = 0; i <= K; i++) for (let m = 0; m <= M; m++) {
-    const p = f(i / K, m / M);
-    T.push(p.x, p.y + (m % 2) * rib, p.z);
-    B.push(p.x, soff(p, i / K), p.z);
+// A sheet over the (K+1)×(M+1) grid of points p(i, m), shaded smooth, facing up (or down)
+function sheet(k, p, K, M, c, up) {
+  const P = [];
+  for (let i = 0; i <= K; i++) for (let m = 0; m <= M; m++) P.push(...p(i, m).toArray());
+  const q = (i) => new V(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
+  const flip = (new V().subVectors(q(1), q(0)).cross(new V().subVectors(q(M + 1), q(0))).y > 0) !== up;
+  const I = [];
+  for (let i = 0; i < K; i++) for (let m = 0; m < M; m++) {
+    const a = i * (M + 1) + m, b = a + 1, c2 = a + M + 1, d = c2 + 1;
+    if (flip) I.push(a, c2, b, b, c2, d); else I.push(a, b, c2, b, d, c2);
   }
-  const grid = (P, up) => {
-    const q = (i) => new V(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
-    const flip = (new V().subVectors(q(1), q(0)).cross(new V().subVectors(q(M + 1), q(0))).y > 0) !== up;
-    const I = [];
-    for (let i = 0; i < K; i++) for (let m = 0; m < M; m++) {
-      const a = i * (M + 1) + m, b = a + 1, c = a + M + 1, d = c + 1;
-      if (flip) I.push(a, c, b, b, c, d); else I.push(a, b, c, b, d, c);
-    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setIndex(I);
+  g.computeVertexNormals();
+  k.add(g, c);
+}
+
+// Flat quads gathered into one part: q(a, b, c, d, out) adds the quad a b c d (in order round it) facing `out`;
+// bar(A, B, w, h) a timber hanging under the line A → B (its top's middle): its two sides and underside (its top lies
+// against boards), and with `end` the quad closing it at A.
+function quads() {
+  const P = [], I = [];
+  const q = (a, b, c, d, out) => {
+    const o = P.length / 3;
+    P.push(...a.toArray(), ...b.toArray(), ...c.toArray(), ...d.toArray());
+    if (new V().subVectors(b, a).cross(new V().subVectors(d, a)).dot(out) >= 0) I.push(o, o + 1, o + 2, o, o + 2, o + 3);
+    else I.push(o, o + 2, o + 1, o, o + 3, o + 2);
+  };
+  const bar = (A, B, w, h, end) => {
+    const s = new V(B.z - A.z, 0, A.x - B.x).normalize().multiplyScalar(w / 2), dn = new V(0, -h, 0);
+    const al = A.clone().add(s), ar = A.clone().sub(s), bl = B.clone().add(s), br = B.clone().sub(s);
+    const [alb, arb, blb, brb] = [al, ar, bl, br].map((p) => p.clone().add(dn));
+    q(al, bl, blb, alb, s); q(ar, arb, brb, br, s.clone().negate()); q(alb, blb, brb, arb, new V(0, -1, 0));
+    if (end) end.q(al, ar, arb, alb, new V().subVectors(A, B));
+  };
+  const add = (k, c) => {
+    if (!P.length) return;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
     g.setIndex(I);
     g.computeVertexNormals();
-    return g;
+    k.add(g, c);
   };
-  k.add(grid(T, true), TILE);
-  k.add(grid(B, false), WOOD);
-  const F = [], I = [];
-  for (let m = 0; m <= M; m++) F.push(T[m * 3], T[m * 3 + 1], T[m * 3 + 2], B[m * 3], B[m * 3 + 1], B[m * 3 + 2]);
-  for (let m = 0; m < M; m++) I.push(m * 2, m * 2 + 1, m * 2 + 2, m * 2 + 1, m * 2 + 3, m * 2 + 2);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(F, 3));
-  g.setIndex(I);
-  g.computeVertexNormals();
-  k.add(g, WOOD_D);
+  return { q, bar, add };
 }
 
-// Hip roof over the eave rectangle ±a × ±b from height y0, rising H with a concave sweep and kicked-up corners.
-// ridge: half-length of the top ridge (0: pyramid). gable: above that fraction of the slope the roof turns into
-// an irimoya gable. Returns the height of the top.
-function hipRoof(k, { y0, a, b, H, kick, ridge = 0, gable = 0, rib = 0.09, pitch = 0.5, thick = 0.4 }) {
+// The eaves from the tiles' edge in (metres below the edge; slopes per metre in): the flying rafters (hiendaruki)
+// under their boards, a step up at their feet (the kioi, where they rest on the base rafters' boards), the base rafters
+// (jidaruki) under theirs, resting on the eave purlin over the bracket sets and running on in to the wall.
+const EAVE = { edge: 0.3, fly: 0.13, kioi: 0.1, base: 0.15, pF: 0.18, pB: 0.3, purlin: 0.2, w: 0.13, gap: 0.42 };
+// the bracket sets' courses: the large bearing block on the post, then per step an arm and the small blocks on it
+const TOKYO = { daito: 0.22, step: 0.28, arm: 0.15 };
+
+// A roof's shape over the eave rectangle ±a × ±b, in each face's own terms: d metres in from its eave (D to its top),
+// s along it (its half-length L(d) shrinks to the hips; ridge: half-length of the top ridge, 0 a pyramid). The tiles
+// rise H to the top along a concave sweep (u = d / D; sweep: how much of the rise is in the curve, so the eaves run
+// out flatter than the roof near its top) and the corners lift `kick` (sori): the lift rises with the square of the
+// way along the eave from its middle and dies away up the slope, so the hips curve up at their feet. The eaves'
+// underside lifts as much at the edge and none at the purlin (dP in), where the bracket sets carry it level.
+function roofShape({ y0, a, b, H, kick, ridge = 0, sweep = 0.6, dP = 1 }) {
   const C = [[-a, b], [a, b], [a, -b], [-a, -b]];
-  const R = (c) => [Math.sign(c[0]) * ridge, 0];
+  const faces = [0, 1, 2, 3].map((fi) => {
+    const c0 = C[fi], c1 = C[(fi + 1) % 4], side = fi % 2;
+    const L0 = side ? b : a, Lr = side ? 0 : ridge, D = side ? a - ridge : b;
+    const tx = Math.sign(c1[0] - c0[0]), tz = Math.sign(c1[1] - c0[1]), nx = -tz, nz = tx, mx = (c0[0] + c1[0]) / 2, mz = (c0[1] + c1[1]) / 2;
+    const L = (d) => L0 + ((Lr - L0) * d) / D;
+    return { L0, D, nx, nz, L, M: 2 * Math.max(3, Math.round((2 * L0) / 0.5)), P: (s, d, y) => new V(mx + tx * s - nx * d, y, mz + tz * s - nz * d) };
+  });
+  const rise = (u) => H * ((1 - sweep) * u + sweep * u * u);
+  const lift = (e, u) => kick * e * e * Math.pow(Math.max(0, 1 - u), 2.5);
+  const liftUnder = (e, d) => (d < dP ? kick * e * e * (1 - d / dP) ** 2 : 0);
+  // a point of the tiles (u up the face, t along it)
+  const tile = (f, u, t) => { const d = u * f.D, e = 2 * t - 1; return f.P(e * f.L(d), d, y0 + rise(u) + lift(Math.abs(e), u)); };
+  return { y0, H, faces, rise, lift, liftUnder, tile };
+}
+
+// The tiles of a hipped roof (roofShape), a fascia under their edge EAVE.edge deep, the hip ridges and the ridge-end
+// tiles; above the fraction `gable` of the slope the roof turns into an irimoya gable. Returns the height of the top.
+function hipRoof(k, R, { gable = 0, rib = 0.09 } = {}) {
   const uTop = gable || 1;
-  const yAt = (u) => y0 + H * (1 - Math.pow(1 - u, 2.2));
-  const lift = (t, u) => kick * Math.pow(Math.abs(2 * t - 1), 3.5) * Math.pow(1 - u, 3);
-  const soff = (p) => y0 - thick + (p.y - y0) * 0.45;
-  for (let e = 0; e < 4; e++) {
-    const c0 = C[e], c1 = C[(e + 1) % 4], r0 = R(c0), r1 = R(c1);
-    const M = 2 * Math.max(3, Math.round(Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / pitch));
-    const f = (v, t) => {
-      const u = v * uTop;
-      return new V(lerp(lerp(c0[0], c1[0], t), lerp(r0[0], r1[0], t), u), yAt(u) + lift(t, u), lerp(lerp(c0[1], c1[1], t), lerp(r0[1], r1[1], t), u));
-    };
-    face(k, f, Math.max(4, Math.round(10 * uTop)), M, rib, soff);
-    // hip ridge up the corner line, a ridge-end tile at the eave
-    const n = 6;
-    for (let i = 0; i < n; i++) k.beam(f(i / n, 0).add(new V(0, rib + 0.12, 0)), f((i + 1) / n, 0).add(new V(0, rib + 0.12, 0)), 0.3, 0.3, TILE_D);
-    const c = f(0, 0);
+  for (const f of R.faces) {
+    const K = Math.max(4, Math.round(10 * uTop)), M = f.M;
+    sheet(k, (i, m) => R.tile(f, (i / K) * uTop, m / M).add(new V(0, (m % 2) * rib, 0)), K, M, TILE, true);
+    const F = quads(), out = new V(f.nx, 0, f.nz);
+    for (let m = 0; m < M; m++) {
+      const a = R.tile(f, 0, m / M), b = R.tile(f, 0, (m + 1) / M);
+      F.q(a.clone().setY(a.y + (m % 2) * rib), b.clone().setY(b.y + ((m + 1) % 2) * rib), b.clone().setY(b.y - EAVE.edge), a.clone().setY(a.y - EAVE.edge), out);
+    }
+    F.add(k, WOOD_D);
+    // the hip ridge up the corner line (closer pieces where it curves up at its foot), a ridge-end tile at the eave
+    const n = 8, hip = (i) => R.tile(f, Math.pow(i / n, 1.4) * uTop, 0).add(new V(0, rib + 0.12, 0));
+    for (let i = 0; i < n; i++) k.beam(hip(i), hip(i + 1), 0.3, 0.3, TILE_D);
+    const c = R.tile(f, 0, 0);
     k.box(0.45, 0.5, 0.45, c.x * 0.99, c.y + 0.3, c.z * 0.99, TILE_D, Math.atan2(c.x, c.z));
   }
-  if (!gable) {
-    if (ridge > 0) k.box(2 * ridge + 0.6, 0.6, 0.5, 0, y0 + H + 0.25, 0, TILE_D);
-    return y0 + H;
+  if (!gable) return R.y0 + R.H;
+  // irimoya: a gable over the hipped skirt (its slope running on up to the ridge), a plastered gable wall with struts,
+  // bargeboards and a main ridge with shibi
+  const f0 = R.faces[0], ax = f0.L(gable * f0.D), bz = f0.D * (1 - gable), yg = R.y0 + R.rise(gable), top = R.y0 + R.H;
+  const gy = (v) => R.y0 + R.rise(gable + (1 - gable) * v);
+  // its tiles run on from the skirt's top row (the same ribs, the corners' lift dying away up it) and reach out over the
+  // gable ends, where a fascia closes them
+  const sp = (2 * ax) / f0.M, nx = 2 * Math.max(1, Math.round(0.25 / sp)), X = ax + nx * sp, M = f0.M + 2 * nx;
+  for (const s of [1, -1]) {
+    const at = (v, t) => {
+      const x = lerp(-X, X, t), u = gable + (1 - gable) * v;
+      return new V(x, gy(v) + R.lift(Math.min(1, Math.abs(x) / ax), u), s * bz * (1 - v));
+    };
+    sheet(k, (i, m) => at(i / 6, m / M).add(new V(0, (m % 2) * 0.09, 0)), 6, M, TILE, true);
+    sheet(k, (i, m) => at(i / 6, m / M).add(new V(0, -0.3, 0)), 6, M, WOOD, false);
+    const F = quads();
+    for (let m = 0; m < M; m++) {
+      if (m >= nx && m < M - nx) continue;
+      const a = at(0, m / M), b = at(0, (m + 1) / M);
+      F.q(a.clone().setY(a.y + (m % 2) * 0.09), b.clone().setY(b.y + ((m + 1) % 2) * 0.09), b.clone().setY(b.y - 0.3), a.clone().setY(a.y - 0.3), new V(0, 0, s));
+    }
+    F.add(k, WOOD_D);
   }
-  // irimoya: a gable over the hipped skirt, a plastered gable wall with struts, bargeboards and a main ridge with shibi
-  const yg = yAt(gable), ax = lerp(a, ridge, gable), bz = b * (1 - gable);
-  const X = ax + 0.5, rise = bz * 0.95, prof = (v) => 1 - Math.pow(1 - v, 1.3), top = yg + rise;
-  const M = 2 * Math.round((2 * X) / 0.5);
-  for (const s of [1, -1]) face(k, (v, t) => new V(lerp(-X, X, t), yg + rise * prof(v), s * bz * (1 - v)), 6, M, 0.09, (p) => p.y - 0.3);
   for (const s of [1, -1]) {
     const xw = s * (ax - 0.4);
     const tri = new THREE.BufferGeometry();
@@ -136,9 +192,9 @@ function hipRoof(k, { y0, a, b, H, kick, ridge = 0, gable = 0, rib = 0.09, pitch
     tri.computeVertexNormals();
     k.add(tri, PLASTER);
     k.box(0.16, 0.22, 2 * bz, xw + s * 0.06, yg + 0.3, 0, WOOD);
-    for (const zz of [-0.6, -0.3, 0, 0.3, 0.6]) k.beam(new V(xw + s * 0.06, yg, zz * bz), new V(xw + s * 0.06, yg + rise * prof(1 - Math.abs(zz)) - 0.15, zz * bz), 0.12, 0.12, WOOD);
+    for (const zz of [-0.6, -0.3, 0, 0.3, 0.6]) k.beam(new V(xw + s * 0.06, yg, zz * bz), new V(xw + s * 0.06, gy(1 - Math.abs(zz)) - 0.15, zz * bz), 0.12, 0.12, WOOD);
     // bargeboards along both gable edges, the pendant (gegyo) at the peak, descending ridges on top
-    const edge = (v, sz, dx, dy) => new V(s * (X + dx), yg + rise * prof(v) + dy, sz * bz * (1 - v));
+    const edge = (v, sz, dx, dy) => new V(s * (X + dx), gy(v) + dy, sz * bz * (1 - v));
     for (const sz of [1, -1]) for (let i = 0; i < 5; i++) {
       k.beam(edge(i / 5, sz, 0, -0.2), edge((i + 1) / 5, sz, 0, -0.2), 0.18, 0.55, WOOD_D);
       k.beam(edge(i / 5, sz, -0.35, 0.3), edge((i + 1) / 5, sz, -0.35, 0.3), 0.32, 0.32, TILE_D);
@@ -157,38 +213,109 @@ function hipRoof(k, { y0, a, b, H, kick, ridge = 0, gable = 0, rib = 0.09, pitch
   return top;
 }
 
-// rafters under the eaves, their ends painted white
-function rafters(k, a, b, y0, kick, thick = 0.4, spacing = 0.55) {
-  const C = [[-a, b], [a, b], [a, -b], [-a, -b]];
-  for (let e = 0; e < 4; e++) {
-    const c0 = C[e], c1 = C[(e + 1) % 4];
-    const L = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]);
-    const tx = (c1[0] - c0[0]) / L, tz = (c1[1] - c0[1]) / L, nx = -tz, nz = tx; // outward
-    const n = Math.floor((L - 1.2) / spacing);
+// The eaves' underside (EAVE) of roof R: the flying and the base rafters' boards (the base ones on in to dIn, inside the
+// walls), the kioi's step between them, the double rafters with their ends painted, the eave purlin at dP, and at each
+// corner the hip rafters (sumigi), tipped in bronze; `bells`: a wind bell hung from each tip. The faces' undersides
+// meet on the diagonals (s = L0 - d), under the hips (which run off them where the faces' pitches differ).
+function eaves(k, R, { dF, dP, dIn, bells = false }) {
+  const E = EAVE, wood = quads(), ends = quads(), caps = quads();
+  const fly = (d) => R.y0 - E.edge + d * E.pF; // the boards' undersides, without the lift
+  const base = (d) => fly(dF) - E.fly - E.kioi + (d - dF) * E.pB;
+  for (const f of R.faces) {
+    // (every other column of the tiles' grid, and rows where the lift bends: it runs straight on from the purlin)
+    const M = f.M / 2, out = new V(f.nx, 0, f.nz);
+    const L = (d) => f.L0 - d, e = (s, d) => Math.min(1, Math.abs(s) / L(d));
+    const at = (s, d, y) => f.P(s, d, y(d) + R.liftUnder(e(s, d), d));
+    const boards = (D, y) => sheet(k, (i, m) => { const s = (2 * m / M - 1) * L(D[i]); return at(s, D[i], y); }, D.length - 1, M, WOOD, false);
+    boards([0, dF / 2, dF], fly);
+    boards([dF, (dF + dP) / 2, dP, dIn], base);
+    for (let m = 0; m < M; m++) {
+      const s0 = (2 * m / M - 1) * L(dF), s1 = (2 * (m + 1) / M - 1) * L(dF);
+      wood.q(at(s0, dF, fly), at(s1, dF, fly), at(s1, dF, base), at(s0, dF, base), out);
+    }
+    // the rafters, square to the eave, the ones near a corner stopping at the hip rafter (dh: where s meets it)
+    const n = Math.floor((2 * f.L0) / E.gap);
     for (let j = 0; j <= n; j++) {
-      const s = 0.6 + (j * (L - 1.2)) / n, t = s / L;
-      const y = y0 - thick - 0.1 + kick * Math.pow(Math.abs(2 * t - 1), 3.5) * 0.45;
-      const px = c0[0] + tx * s, pz = c0[1] + tz * s;
-      k.beam(new V(px - nx * 1.6, y + 0.1, pz - nz * 1.6), new V(px - nx * 0.2, y, pz - nz * 0.2), 0.15, 0.17, WOOD);
-      k.add(new THREE.PlaneGeometry(0.16, 0.18).rotateY(Math.atan2(nx, nz)).translate(px - nx * 0.19, y - 0.005, pz - nz * 0.19), ENDS);
+      const s = -f.L0 + ((j + 0.5) * 2 * f.L0) / (n + 1), dh = f.L0 - Math.abs(s);
+      // (straight pieces between the depths D, enough to follow the lift: it curves most near the corners, and the
+      // base rafters run straight on from the purlin, where it ends)
+      const run = (D, y, h) => {
+        if (D[D.length - 1] - D[0] < 0.12) return;
+        for (let i = 0; i + 1 < D.length; i++) wood.bar(at(s, D[i], y), at(s, D[i + 1], y), E.w, h, i ? null : ends);
+      };
+      const lift = R.liftUnder(Math.abs(s) / f.L0, 0), d0 = dF - 0.06, d1 = Math.min(dIn, dh - 0.16);
+      run([0.04, Math.min(dF, dh - 0.14)], fly, E.fly);
+      run([d0, ...(lift > 0.25 && d1 > dP ? [(d0 + dP) / 2] : []), ...(lift > 0.03 && d1 > dP + 0.2 ? [dP] : []), d1], base, E.base);
+    }
+    // the eave purlin, level, carrying the base rafters
+    const yp = base(dP) - E.base - E.purlin / 2, Lp = L(dP);
+    k.beam(f.P(-Lp, dP, yp), f.P(Lp, dP, yp), 0.2, E.purlin, WOOD);
+    // the hip rafter at the face's +s end, in two tiers as the rafters
+    const hip = (d, y, drop) => f.P(L(d), d, y(d) + R.liftUnder(1, d) + drop);
+    const tier = (d0, d1, y, h, segs, cap) => {
+      const P = Array.from({ length: segs + 1 }, (_, i) => hip(lerp(d0, d1, i / segs), y, 0.04));
+      for (let i = 0; i < segs; i++) wood.bar(P[i], P[i + 1], 0.22, h, i ? null : cap);
+    };
+    tier(-0.32, dF, fly, E.fly + 0.12, 3, caps);
+    tier(dF - 0.12, dIn, base, E.base + 0.14, 3, ends);
+    if (bells) {
+      const p = hip(-0.26, fly, 0.04 - E.fly - 0.12);
+      k.at(p.x, p.y, p.z, 0, () => k.lathe([[0, -0.5], [0.12, -0.5], [0.13, -0.45], [0.1, -0.2], [0.03, -0.15], [0.02, 0], [0, 0]], 6, BRONZE));
+    }
+  }
+  // a ceiling over what the boards leave open inside them (seen in the open belfry)
+  const cx = R.faces[0].L0 - dIn, cz = R.faces[1].L0 - dIn, yc = base(dIn);
+  if (cx > 0 && cz > 0) wood.q(new V(-cx, yc, -cz), new V(cx, yc, -cz), new V(cx, yc, cz), new V(-cx, yc, cz), new V(0, -1, 0));
+  wood.add(k, WOOD); ends.add(k, ENDS); caps.add(k, BRONZE);
+}
+
+// A bracket set (tokyō) on a post at the origin, its arms stepping out `steps` times `st` along +z, each step an arm
+// carrying a crosswise arm with three blocks; on a corner post (the walls running along +x and -z) the arms step out
+// along the diagonal and the crosswise ones run along both walls.
+function tokyo(k, steps, st, corner) {
+  const T = TOKYO, bh = T.step - T.arm;
+  k.box(0.56, T.daito, 0.56, 0, T.daito / 2, 0, WOOD);
+  for (let j = 1; j <= steps; j++) {
+    const y = T.daito + (j - 1) * T.step, ya = y + T.arm / 2, yb = y + T.arm + bh / 2, o = j * st;
+    const block = (x, z) => k.box(0.2, bh, 0.2, x, yb, z, WOOD);
+    if (!corner) {
+      k.box(0.15, T.arm, o + 0.45, 0, ya, (o - 0.15) / 2, WOOD);
+      k.box(1.0, T.arm, 0.14, 0, ya, o, WOOD);
+      for (const x of [-0.4, 0, 0.4]) block(x, o);
+    } else {
+      k.beam(new V(0.2, ya, -0.2), new V(-o - 0.12, ya, o + 0.12), 0.16, T.arm, WOOD);
+      k.box(o + 0.65, T.arm, 0.14, (0.5 - o - 0.15) / 2, ya, o, WOOD);
+      k.box(0.14, T.arm, o + 0.65, -o, ya, (o + 0.15 - 0.5) / 2, WOOD);
+      block(-o, o); block(0.4, o); block(-o, -0.4);
     }
   }
 }
 
-// three stepped courses of brackets (tokyō) over plaster, their block ends painted white
-function brackets(k, hx, hz, y, n = 3) {
-  k.box(2 * hx + 0.2, 0.3 * n, 2 * hz + 0.2, 0, y + 0.15 * n, 0, PLASTER);
-  for (let j = 0; j < n; j++) {
-    const ox = hx + 0.25 * (j + 1), oz = hz + 0.25 * (j + 1), yy = y + 0.3 * j + 0.17;
-    k.box(2 * ox + 0.3, 0.14, 0.3, 0, yy, oz, WOOD); k.box(2 * ox + 0.3, 0.14, 0.3, 0, yy, -oz, WOOD);
-    k.box(0.3, 0.14, 2 * oz, ox, yy, 0, WOOD); k.box(0.3, 0.14, 2 * oz, -ox, yy, 0, WOOD);
-    if (j === n - 1) {
-      for (let i = -2; i <= 2; i++) for (const s of [1, -1]) {
-        k.box(0.22, 0.16, 0.22, (i * ox) / 2.2, yy - 0.15, s * (oz + 0.12), ENDS);
-        k.box(0.22, 0.16, 0.22, s * (ox + 0.12), yy - 0.15, (i * oz) / 2.2, ENDS);
+// A hipped roof on bracket sets over walls ±hx × ±hz topped at Y, bx × bz bays (a set on every bay line; corner sets
+// on the corners): `steps` courses of brackets each `st` further out, carrying the eave purlin and the double rafters;
+// the eaves `over` beyond the walls, the flying rafters the outer dF of it; H, kick, sweep, ridge, gable as roofShape's
+// and hipRoof's. The tiles' edge comes out where the courses and the rafters put it. Returns { y0: that edge, top,
+// R: the roof's shape, under(d): the rafters' underside d in from the eave's middle }.
+function roof(k, { Y, hx, hz, bx, bz, steps, st, over, dF, H, kick, sweep, ridge = 0, gable = 0, bells = false }) {
+  const E = EAVE, dP = over - steps * st;
+  const y0 = Y + TOKYO.daito + steps * TOKYO.step + E.purlin + E.edge - dF * E.pF + E.fly + E.kioi - (dP - dF) * E.pB + E.base;
+  const sides = [[-hx, hz, 1, 0, 2 * hx, bx], [hx, hz, 0, -1, 2 * hz, bz], [hx, -hz, -1, 0, 2 * hx, bx], [-hx, -hz, 0, 1, 2 * hz, bz]];
+  for (const [ox, oz, tx, tz, L, nb] of sides) {
+    for (let j = 0; j < nb; j++) k.at(ox + (tx * L * j) / nb, Y, oz + (tz * L * j) / nb, Math.atan2(-tz, tx), () => tokyo(k, steps, st, j === 0));
+    // in the wall's plane, an arm along the whole side at every course, a block on it in the middle of each bay
+    k.at(ox + (tx * L) / 2, Y, oz + (tz * L) / 2, Math.atan2(-tz, tx), () => {
+      for (let j = 0; j < steps; j++) {
+        const y = TOKYO.daito + j * TOKYO.step;
+        k.box(L + 0.3, TOKYO.arm, 0.14, 0, y + TOKYO.arm / 2, 0, WOOD);
+        for (let i = 0; i < nb; i++) k.box(0.2, TOKYO.step - TOKYO.arm, 0.2, ((i + 0.5) / nb - 0.5) * L, y + (TOKYO.step + TOKYO.arm) / 2, 0, WOOD);
       }
-    }
+    });
   }
+  const R = roofShape({ y0, a: hx + over, b: hz + over, H, kick, ridge, sweep, dP });
+  eaves(k, R, { dF, dP, dIn: over + 0.4, bells });
+  const top = hipRoof(k, R, { gable });
+  const under = (d) => (d <= dF ? y0 - E.edge + d * E.pF - E.fly : y0 - E.edge + dF * E.pF - E.fly - E.kioi + (d - dF) * E.pB - E.base);
+  return { y0, top, R, under };
 }
 
 // Timber-framed walls ±hx × ±hz from y, h tall: posts on the bay lines, plaster between, tie beams. fill(side, bay)
@@ -236,31 +363,50 @@ function balcony(k, s, y) {
   }
 }
 
-// wind bells hung from the four corners of an eave
-function bells(k, a, y) {
-  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-    k.at(sx * a * 0.97, y, sz * a * 0.97, 0, () => k.lathe([[0, -0.5], [0.12, -0.5], [0.13, -0.45], [0.1, -0.2], [0.03, -0.15], [0.02, 0], [0, 0]], 6, BRONZE));
+// stone's colour a shade lighter or darker, by between lo and lo + span (one draw: the hue stays)
+const toned = (rng, lo, span) => { const t = lo + rng() * span; return STONE.map((v) => v * t); };
+// a cut stone in its own tone, tagged by hand (its colour is not the palette's): dressed (CARVED) or built stone
+const stone = (k, rng, w, h, d, x, y, z, ry = 0, m = 1, kind = KIND.CARVED) => k.box(w, h, d, x, y, z, toned(rng, 0.86 * m, 0.26 * m), ry, 0, kind);
+
+// A platform of dressed stone (kidan) ±w × ±d, its top at h: a dark core showing in the joints, face slabs set back
+// between posts, a coping overhanging the face, and the top paved in squares outside ±pw × ±pd (where nothing stands
+// on it).
+function kidan(k, rng, w, d, h, pw = 0, pd = 0) {
+  k.box(2 * w - 0.1, h - 0.02, 2 * d - 0.1, 0, (h - 0.02) / 2, 0, STONE_D, 0, 0, KIND.CARVED);
+  const cap = Math.min(0.22, h * 0.25), hs = h - cap;
+  const sides = [[-w, d, 1, 0, 2 * w], [w, d, 0, -1, 2 * d], [w, -d, -1, 0, 2 * w], [-w, -d, 0, 1, 2 * d]];
+  for (const [ox, oz, tx, tz, L] of sides) {
+    const nx = -tz, nz = tx, ry = Math.atan2(nx, nz);
+    // a stone along the face from s0 to s1, its front o out from the face, bd deep, its top at y
+    const put = (s0, s1, o, bh, bd, y, m) => { const c = (s0 + s1) / 2, oc = o - bd / 2; stone(k, rng, s1 - s0 - 0.03, bh, bd, ox + tx * c + nx * oc, y - bh / 2, oz + tz * c + nz * oc, ry, m); };
+    const n = Math.max(1, Math.round(L / 1.8));
+    const post = (i) => [Math.max(0, (L * i) / n - 0.14 - (i === n) * 0.16), Math.min(L, (L * i) / n + 0.14 + !i * 0.16)];
+    for (let i = 0; i <= n; i++) put(...post(i), 0, hs, 0.24, h - cap, 1.04);
+    for (let i = 0; i < n; i++) put(post(i)[1], post(i + 1)[0], -0.025, hs - 0.02, 0.2, h - cap - 0.01, 0.97);
+    for (let s = -0.07; s < L - 0.05;) { const e = Math.min(L, s + 0.9 + rng() * 0.9); put(s, e, 0.07, cap, 0.55, h, 1.12); s = e; }
+  }
+  const q = 0.9, x0 = w - 0.48, z0 = d - 0.48, nx = Math.round((2 * x0) / q), nz = Math.round((2 * z0) / q);
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    const x = -x0 + ((i + 0.5) * 2 * x0) / nx, z = -z0 + ((j + 0.5) * 2 * z0) / nz;
+    if (Math.abs(x) < pw && Math.abs(z) < pd) continue;
+    k.add(new THREE.PlaneGeometry((2 * x0) / nx - 0.04, (2 * z0) / nz - 0.04).rotateX(-Math.PI / 2).translate(x, h - 0.01, z), toned(rng, 0.95, 0.22), 0, KIND.CARVED);
   }
 }
 
 function pagoda(k) {
-  k.box(11.6, 1.0, 11.6, 0, 0.5, 0, STONE);
-  for (let j = 0; j < 3; j++) k.box(2.8, 0.75 - 0.25 * j, 0.4, 0, (0.75 - 0.25 * j) / 2, 6.0 + 0.4 * j, STONE);
+  const rng = mulberry32(5);
+  kidan(k, rng, 5.8, 5.8, 1.0, 3.3, 3.3);
+  for (let j = 0; j < 3; j++) { const hh = 0.75 - 0.25 * j; stone(k, rng, 2.8, hh, 0.4, 0, hh / 2, 6.0 + 0.4 * j); }
+  // storeys diminishing upwards, each on three stepped bracket courses (mitesaki) under double-raftered eaves
   const S = [3.4, 3.1, 2.8, 2.5, 2.2];
   let y = 1.0;
   for (let i = 0; i < 5; i++) {
-    const s = S[i], h = i ? 2.5 : 3.4;
+    const s = S[i], h = i ? 1.9 : 3.0, a = s + 2.5, last = i === 4;
     if (i) balcony(k, s, y);
-    body(k, s, s, y, h, 3, 3, (side, j) => (j === 1 ? 'door' : i === 0 ? 'window' : 'wall'), 1.2);
-    brackets(k, s, s, y + h);
-    const a = s + 2.5, y0 = y + h + 0.45, kick = 1.05;
-    rafters(k, a, a, y0, kick);
-    bells(k, a, y0 + kick * 0.45 - 0.45);
-    if (i < 4) {
-      const H = 2.2, u = 1 - (S[i + 1] + 0.85) / a;
-      hipRoof(k, { y0, a, b: a, H, kick });
-      y = y0 + H * (1 - Math.pow(1 - u, 2.2)) + 0.12;
-    } else sorin(k, hipRoof(k, { y0, a, b: a, H: 2.9, kick }) - 0.3);
+    const r = roof(k, { Y: y + h, hx: s, hz: s, bx: 3, bz: 3, steps: 3, st: 0.35, over: 2.5, dF: 0.65, H: last ? 3.2 : (5.8 * a) / 5.9, sweep: last ? 0.4 : 0.69, kick: 0.18 * a, bells: true });
+    body(k, s, s, y, h, 3, 3, (side, j) => (j === 1 ? 'door' : i === 0 ? 'window' : 'wall'), r.y0 - y - h + 0.5);
+    if (!last) y = r.y0 + r.R.rise(1 - (S[i + 1] + 0.85) / a) + 0.12;
+    else sorin(k, r.top - 0.3);
   }
 }
 
@@ -311,18 +457,21 @@ export function toro(k, x, y, z, ry = 0) {
 
 function hall(k) {
   // stone podium with a landing and steps at the front, raised floor with a veranda, wooden steps up to it
-  k.box(16, 0.8, 12.8, 0, 0.4, 0, STONE);
-  k.box(4.4, 0.8, 1.2, 0, 0.4, 7.0, STONE);
-  for (let j = 0; j < 2; j++) { const hh = (0.8 * (2 - j)) / 3; k.box(4.4, hh, 0.45, 0, hh / 2, 7.82 + 0.45 * j, STONE); }
-  const y0 = 1.5;
+  const rng = mulberry32(6);
+  kidan(k, rng, 8, 6.4, 0.8, 7.2, 5.6);
+  stone(k, rng, 4.4, 0.8, 1.2, 0, 0.4, 7.0);
+  for (let j = 0; j < 2; j++) { const hh = (0.8 * (2 - j)) / 3; stone(k, rng, 4.4, hh, 0.45, 0, hh / 2, 7.82 + 0.45 * j); }
+  const y0 = 1.5, h = 3.6;
   k.box(14.4, 0.7, 11.2, 0, 1.15, 0, WOOD_D);
   k.box(15.2, 0.16, 12.0, 0, y0 - 0.08, 0, WOOD);
   for (let j = 0; j < 3; j++) { const t = y0 - 0.18 * (j + 1); k.box(3.6, t - 0.8, 0.3, 0, (t + 0.8) / 2, 6.15 + 0.3 * j, WOOD); }
-  body(k, 6.2, 4.4, y0, 4.0, 5, 4, (side, j) => {
+  // two stepped bracket courses (futatesaki) under double-raftered eaves
+  const r = roof(k, { Y: y0 + h, hx: 6.2, hz: 4.4, bx: 5, bz: 4, steps: 2, st: 0.4, over: 3.0, dF: 0.8, H: 6.8, sweep: 0.55, kick: 0.9, ridge: 2.0, gable: 0.55 });
+  body(k, 6.2, 4.4, y0, h, 5, 4, (side, j) => {
     if (side === 0) return j >= 1 && j <= 3 ? 'glow' : 'window';
     if ((side === 1 && j === 0) || (side === 3 && j === 3)) return 'glow';
     return side === 2 && j === 2 ? 'door' : 'wall';
-  }, 2.2);
+  }, r.y0 - y0 - h + 0.5);
   // veranda railing, open at the front steps
   for (const s of [1, -1]) {
     k.box(5.6, 0.08, 0.08, s * 4.8, y0 + 0.75, 5.95, WOOD);
@@ -330,16 +479,12 @@ function hall(k) {
     for (let i = 0; i <= 4; i++) k.box(0.1, 0.8, 0.1, s * (2.0 + i * 1.39), y0 + 0.4, 5.95, WOOD);
     for (let i = 0; i <= 6; i++) k.box(0.1, 0.8, 0.1, s * 7.55, y0 + 0.4, -5.95 + i * 1.98, WOOD);
   }
-  brackets(k, 6.2, 4.4, y0 + 4.0);
-  const r0 = y0 + 4.0 + 0.45;
-  rafters(k, 9.2, 7.4, r0, 0.9);
-  hipRoof(k, { y0: r0, a: 9.2, b: 7.4, H: 5.4, kick: 0.9, ridge: 2.0, gable: 0.55 });
-  for (const x of [-2.6, 2.6]) tsuri(k, x, r0 + 0.75, 5.5);
+  for (const x of [-2.6, 2.6]) tsuri(k, x, r.under(7.4 - 5.5), 5.5);
 }
 
 // bell tower: boarded splayed skirt, open upper storey with the bell and its striking log
 function belfry(k) {
-  k.box(5.6, 0.8, 5.6, 0, 0.4, 0, STONE);
+  kidan(k, mulberry32(7), 2.8, 2.8, 0.8, 2.35, 2.35);
   k.lathe([[0, 0.8], [2.35 * Math.SQRT2, 0.8], [1.95 * Math.SQRT2, 3.0], [0, 3.0]], 4, WOOD, 0, Math.PI / 4);
   for (let i = 0; i < 9; i++) for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const t = (i / 8 - 0.5) * 3.8;
@@ -354,10 +499,8 @@ function belfry(k) {
   k.lathe([[0, 0], [0.72, 0], [0.7, 0.15], [0.62, 0.4], [0.6, 1.2], [0.55, 1.45], [0.3, 1.6], [0.12, 1.65], [0.12, 1.85], [0, 1.85]], 16, BRONZE_D, 4.25);
   k.beam(new V(0.85, 4.95, 0), new V(2.5, 4.95, 0), 0.24, 0.24, WOOD);
   for (const x of [1.2, 2.2]) k.box(0.03, 1.2, 0.03, x, 5.6, 0, ENDS);
-  brackets(k, 1.75, 1.75, 6.4, 2);
-  const r0 = 6.4 + 0.6 + 0.3;
-  rafters(k, 3.9, 3.9, r0, 0.6);
-  hipRoof(k, { y0: r0, a: 3.9, b: 3.9, H: 2.6, kick: 0.6, ridge: 1.2, gable: 0.5 });
+  // one bracket course (demitsudo) on the posts and between them, double-raftered eaves
+  roof(k, { Y: 6.4, hx: 1.75, hz: 1.75, bx: 2, bz: 2, steps: 1, st: 0.35, over: 2.15, dF: 0.6, H: 3.9, sweep: 0.55, kick: 0.6, ridge: 1.2, gable: 0.5 });
 }
 
 // earthen boundary wall (tsuiji): ochre with five white lines, tiled coping
@@ -381,13 +524,13 @@ export const SITES = { hall: [-7, 0, -4], pagoda: [8.5, 0, 3], belfry: [-13.5, 0
 // The compound in the temple's frame (+z faces the river side, y = 0 is the terrace top); ground(x, z) is the terrain
 // height in that frame. The terrace's stone walls (ishigaki) and the steps down from it run to the ground.
 function compound(k, T, ground) {
-  const rng = mulberry32(88);
+  const rng = mulberry32(88), shade = mulberry32(89);
   const W = T.hw, D = T.hd;
   k.box(2 * W - 0.4, 0.4, 2 * D - 0.4, 0, -0.2, 0, GRAVEL);
   const sides = [[-W, D, 1, 0, 2 * W], [W, D, 0, -1, 2 * D], [W, -D, -1, 0, 2 * W], [-W, -D, 0, 1, 2 * D]];
   for (const [ox, oz, tx, tz, L] of sides) {
     const nx = -tz, nz = tx, ry = Math.atan2(nx, nz); // outward
-    for (let s = 0; s < L;) { const w = Math.min(1.6 + rng() * 0.8, L - s); const c = s + w / 2; k.box(w - 0.04, 0.35, 0.8, ox + tx * c - nx * 0.35, -0.175, oz + tz * c - nz * 0.35, STONE.map((v) => v * 1.12), ry); s += w; }
+    for (let s = 0; s < L;) { const w = Math.min(1.6 + rng() * 0.8, L - s); const c = s + w / 2; stone(k, shade, w - 0.05, 0.35, 0.8, ox + tx * c - nx * 0.35, -0.175, oz + tz * c - nz * 0.35, ry, 1.12, KIND.STONE); s += w; }
     // courses of rough blocks of uneven size down to the ground, battered in a curve that steepens towards the top,
     // each block set a little proud or back, mossier low down
     for (let r = 1, top = -0.35; r < 24; r++) {
@@ -402,7 +545,7 @@ function compound(k, T, ground) {
         const tone = 0.72 + rng() * 0.45, warm = (rng() - 0.5) * 0.04, moss = rng() * 0.1 + Math.min(0.12, d * 0.012);
         // leaning back with the batter, so the face runs on up the wall instead of stepping out in ledges
         k.add(new THREE.BoxGeometry(ww - 0.05, ch - 0.04 - rng() * 0.07, 0.9).rotateX(-Math.atan(0.1 + 0.024 * d)).rotateY(ry + (rng() - 0.5) * 0.06)
-          .translate(px, top - ch / 2 + (rng() - 0.5) * 0.05, pz), [STONE[0] * tone + warm - moss * 0.3, STONE[1] * tone, STONE[2] * tone - warm - moss * 0.5]);
+          .translate(px, top - ch / 2 + (rng() - 0.5) * 0.05, pz), [STONE[0] * tone + warm - moss * 0.3, STONE[1] * tone, STONE[2] * tone - warm - moss * 0.5], 0, KIND.STONE);
       }
       top -= ch;
       if (!any) break;
@@ -413,15 +556,15 @@ function compound(k, T, ground) {
   let zf = D + 0.4;
   for (let j = 0; j < 60; j++) {
     const z = D + first + run * (j + 0.5), y = -rise * (j + 1), g = Math.min(ground(sx, z), y) - 0.4;
-    k.box(2 * STAIR.hw, y - g, run + 0.04, sx, (y + g) / 2, z, STONE.map((v) => v * (0.95 + rng() * 0.15)));
+    k.box(2 * STAIR.hw, y - g, run + 0.04, sx, (y + g) / 2, z, toned(rng, 0.95, 0.15), 0, 0, KIND.STONE);
     for (const s of [1, -1]) k.box(0.45, y - g + 0.25, run + 0.04, sx + s * STAIR.wall, (y + g + 0.25) / 2, z, STONE);
     zf = z + run / 2;
     if (ground(sx, z + run) >= y - rise) break;
   }
   for (const s of [1, -1]) toro(k, sx + s * 2.6, ground(sx + s * 2.6, zf + 0.9) - 0.05, zf + 0.9);
   // flagstone paths to the hall and to the pagoda
-  for (let z = D - 0.6; z > 4.8; z -= 0.95) k.box(2.8, 0.1, 0.88, sx, 0.02, z, STONE.map((v) => v * (1.05 + rng() * 0.1)), (rng() - 0.5) * 0.03);
-  for (let x = sx + 2.2; x < 8.5; x += 0.95) k.box(0.88, 0.1, 1.6, x, 0.02, 10.8, STONE.map((v) => v * (1.05 + rng() * 0.1)), (rng() - 0.5) * 0.03);
+  for (let z = D - 0.6; z > 4.8; z -= 0.95) k.box(2.8, 0.1, 0.88, sx, 0.02, z, toned(rng, 1.05, 0.1), (rng() - 0.5) * 0.03, 0, KIND.STONE);
+  for (let x = sx + 2.2; x < 8.5; x += 0.95) k.box(0.88, 0.1, 1.6, x, 0.02, 10.8, toned(rng, 1.05, 0.1), (rng() - 0.5) * 0.03, 0, KIND.STONE);
   for (const s of [1, -1]) { toro(k, sx + s * 2.6, 0, 8.2); toro(k, sx + s * 2.6, 0, 4.8); toro(k, 8.5 + s * 3.2, 0, 9.4); }
   k.at(...SITES.hall, 0, () => hall(k));
   k.at(...SITES.pagoda, 0, () => k.paint([[WOOD, SHU], [WOOD_D, SHU_D]], () => pagoda(k)));
