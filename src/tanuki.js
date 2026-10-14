@@ -3,9 +3,10 @@
 // to sniff at the ground. When the walker comes within WARY m it freezes and stares, as tanuki do, then trots off
 // 20 m or so and goes on with its night. Built here: a round grizzled body, short black legs, the dark mask round the
 // eyes with the pale muzzle and cheeks, small rounded ears, a bushy tail; the legs swing about the hips in a walk (a
-// trot when it hurries), the head drops to sniff. One mesh; per-object uniforms carry the gait.
+// trot when it hurries), the head drops to sniff. One mesh; per-object uniforms carry the gait. After dark its eyes
+// shine back pale green-gold when they face the viewer, as a tanuki's do in a light (often all one sees of it).
 import * as THREE from 'three/webgpu';
-import { Fn, vec3, float, sin, cos, abs, mix, attribute, uniform, positionGeometry, normalGeometry, transformNormalToView } from 'three/tsl';
+import { Fn, vec3, float, sin, cos, abs, mix, max, dot, pow, normalize, attribute, uniform, positionGeometry, normalGeometry, positionWorld, normalWorld, cameraPosition, transformNormalToView } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LitMaterial, U, sstep, SHADOW_NORMAL_BIAS } from './tsl.js';
 import { mulberry32 } from './noise.js';
@@ -72,6 +73,8 @@ export function makeTanuki(world) {
   p = p.add(vec3(0.0, sin(uPhase.mul(Math.PI * 4)).mul(0.006).mul(uSwing).mul(is(0.0).add(hd).add(is(3.0))), 0.0));
   p = p.add(vec3(sin(uPhase.mul(Math.PI * 2)).mul(0.03).mul(uSwing).mul(is(3.0)).mul(sstep(-0.2, -0.36, q.z)), 0.0, 0.0));
 
+  // the eyes, in the mask (life size, on the head's surface)
+  const eye = sstep(0.0075, 0.0055, vec3(abs(q.x).sub(0.032), q.y.sub(0.276), q.z.sub(0.305)).length()).mul(is(1.0));
   // coat: grizzled grey-brown, darker along the back and the shoulders' band, black legs; the face's dark mask round
   // the eyes and down the cheeks, the pale muzzle and brows, the ears edged dark; the tail tipped dark
   const color = Fn(() => {
@@ -89,12 +92,16 @@ export function makeTanuki(world) {
     f = mix(f, vec3(0.03, 0.025, 0.02), sstep(0.022, 0.014, abs(fy.sub(0.008).add(fz.mul(0.15)))).mul(sstep(-0.01, 0.01, fz)).mul(sstep(0.065, 0.045, fz)).mul(sstep(0.012, 0.022, ax)));
     f = mix(f, vec3(0.03, 0.025, 0.02), sstep(0.095, 0.105, fz));
     c = mix(c, f, face);
+    c = mix(c, vec3(0.02, 0.018, 0.015), eye);
     c = mix(c, mix(vec3(0.3, 0.25, 0.2), vec3(0.04, 0.03, 0.03), sstep(0.3, 0.335, q.y)), is(2.0));
     c = mix(c, mix(c, vec3(0.05, 0.04, 0.03), sstep(-0.3, -0.36, q.z)), is(3.0));
     c = mix(c, vec3(0.035, 0.03, 0.025), is(4.0).add(is(5.0)).add(is(6.0)).add(is(7.0)));
     return c;
   })();
-  const mat = new LitMaterial({ roughness: 0.95, metalness: 0, colorNode: color });
+  // the eyeshine: light thrown back by the eyes towards the viewer, strongest looked at square on; with the lamps lit
+  const facing = pow(max(dot(normalWorld, normalize(cameraPosition.sub(positionWorld))), 0.0), 6.0);
+  const shine = vec3(0.5, 0.62, 0.28).mul(eye.mul(facing).mul(U.uLights).mul(2.5));
+  const mat = new LitMaterial({ roughness: 0.95, metalness: 0, colorNode: color }, (o) => o.add(shine));
   mat.positionNode = p;
   mat.receivedShadowPositionNode = p.add(normalGeometry.mul(SHADOW_NORMAL_BIAS));
   mat.normalNode = transformNormalToView(normalGeometry).normalize();
