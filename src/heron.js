@@ -93,7 +93,9 @@ function heronColor(at) {
   })();
 }
 
-const birdMaterial = (colorNode) => new LitMaterial({ roughness: 0.85, metalness: 0, colorNode }, (out) => Fn(() => {
+// the Blender birds' material (the herons', the egrets', the ducks' in ducks.js): the scene's lighting, the lamps' light,
+// the ground's bounce
+export const birdMaterial = (colorNode) => new LitMaterial({ roughness: 0.85, metalness: 0, colorNode }, (out) => Fn(() => {
   // the feathers' edges catch the sun, most against it
   const v = normalize(cameraPosition.sub(positionWorld));
   const edge = pow(float(1.0).sub(max(dot(normalWorld, v), 0.0)), 3.0);
