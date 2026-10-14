@@ -36,6 +36,7 @@ There are no automated tests: look at the scene with `pnpm dev`, or capture it h
 - Within one `look.mjs` run, the river can reflect the previous capture (a night after day times, or a pale or green sheet). Re-capture that view in its own run before calling it a regression.
 - Feature-specific capture scripts (each documents its usage at its top): `bench/walk-look.mjs`, `bench/figures-look.mjs`, `bench/perched-look.mjs`, `bench/birds-look.mjs`, `bench/fauna-look.mjs`, `bench/clocks-look.mjs`. The engine handle's debug hooks (`setView`, `tick`, `simulate`, `*Info()`, `walkTo`, …) are commented where `src/main.js` returns it. `create(canvas, { manual: true })` disables the RAF loop.
 - Skinned meshes (the traveller, the people, the deer) update their bones once per browser frame. Headless, render one frame per `requestAnimationFrame` before capturing them; otherwise the frames of one `tick(n)` pose them where the first frame had them.
+- The page's own behaviour (links, photo mode, the time slider, reduced motion, a change of the device pixel ratio): `pnpm build && BENCH_HEADLESS=1 node bench/page-check.mjs`.
 - Start-up on weaker devices: `pnpm build && BENCH_HEADLESS=1 node bench/device-probe.mjs <webgl|webgl-soft|gpu|compat|soft> [quality] [--cpu 4]`. Headless WebGPU loses its device within seconds, so run `gpu` and `compat` headed, without `BENCH_HEADLESS`, under `bench/gpu.sh`.
 
 ## Publishing
