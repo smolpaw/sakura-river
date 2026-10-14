@@ -307,6 +307,9 @@ function perchedMaterial(sc, uAmount) {
   const ax = abs(bp.x), by = bp.y, bz = bp.z, wu = inf.y, wv = inf.z;
   const far = sstep(3.0, 9.0, length(positionWorld.sub(cameraPosition))); // fine marks give way to their average
   const paint = Fn(() => {
+    // (the part taken first, out here: built inside a species' branch below, it stayed there, and the wing's normal,
+    // read after the branches, found it unset for every other species)
+    const pt = part.toVar();
     // body: brown streaked back, buff-grey breast, the head's chestnut crown, white cheek with its black spot, black
     // bib and eye stripe, a pale half collar
     // (the mantle's black streaks run along the body, the rump plain grey-brown)
@@ -332,7 +335,7 @@ function perchedMaterial(sc, uAmount) {
     w = mix(w, vec3(0.86, 0.84, 0.78), max(bar(0.17), bar(0.3)).mul(mix(float(1.0), float(0.5), far)));
     const tail = mix(vec3(0.3, 0.2, 0.12), vec3(0.42, 0.32, 0.22), sstep(0.35, 0.5, abs(wv.sub(0.5))));
     const legs = vec3(0.52, 0.4, 0.33);
-    const spc = select(part.equal(1.0), w, select(part.equal(2.0), tail, select(part.equal(3.0), legs, select(part.greaterThan(3.5), vec3(0.13, 0.12, 0.11), c))));
+    const spc = select(pt.equal(1.0), w, select(pt.equal(2.0), tail, select(pt.equal(3.0), legs, select(pt.greaterThan(3.5), vec3(0.13, 0.12, 0.11), c))));
     const eyeD = length(vec3(ax.sub(0.0128), by.sub(0.0158), bz.sub(0.0455)));
     // the white-eye: olive-green above, a yellow throat, a pale grey-white belly washed brown at the flanks, the white
     // ring round the eye; darker wings and tail; grey legs, a dark bill
@@ -342,7 +345,7 @@ function perchedMaterial(sc, uAmount) {
     mb = mix(mb, vec3(0.92, 0.92, 0.88), sstep(0.0019, 0.0011, abs(eyeD.sub(0.0048))));
     mb = mix(mb, vec3(0.01), sstep(0.0034, 0.0026, eyeD));
     const mw = mix(vec3(0.17, 0.23, 0.05), vec3(0.08, 0.1, 0.04), max(feather.mul(0.6), sstep(0.45, 0.6, wu)));
-    const mej = select(part.equal(1.0), mw, select(part.equal(2.0), vec3(0.1, 0.13, 0.05), select(part.equal(3.0), vec3(0.28, 0.29, 0.32), select(part.greaterThan(3.5), vec3(0.06, 0.06, 0.07), mb))));
+    const mej = select(pt.equal(1.0), mw, select(pt.equal(2.0), vec3(0.1, 0.13, 0.05), select(pt.equal(3.0), vec3(0.28, 0.29, 0.32), select(pt.greaterThan(3.5), vec3(0.06, 0.06, 0.07), mb))));
     // the wagtail: black above and on the breast, the white forehead and brow, a white belly; a broad white panel on
     // the black wing, the tail black with white edges; black bill and legs
     let wb = mix(vec3(0.85, 0.85, 0.83), vec3(0.02, 0.02, 0.022), max(sstep(-0.004, 0.006, by.sub(ringY)), sstep(0.0, 0.012, bz)));
@@ -351,7 +354,7 @@ function perchedMaterial(sc, uAmount) {
     wb = mix(wb, vec3(0.01), sstep(0.0034, 0.0026, eyeD));
     const ww = mix(vec3(0.02, 0.02, 0.022), vec3(0.85, 0.85, 0.83), sstep(0.42, 0.32, wu).mul(sstep(0.2, 0.35, wv)));
     const wt = mix(vec3(0.02, 0.02, 0.022), vec3(0.85, 0.85, 0.83), sstep(0.38, 0.45, abs(wv.sub(0.5))));
-    const wgt = select(part.equal(1.0), ww, select(part.equal(2.0), wt, select(part.greaterThan(2.5), vec3(0.02, 0.02, 0.02), wb)));
+    const wgt = select(pt.equal(1.0), ww, select(pt.equal(2.0), wt, select(pt.greaterThan(2.5), vec3(0.02, 0.02, 0.02), wb)));
     // the kingfisher: shining blue above with a paler turquoise streak down the back, the crown barred, orange below and
     // behind the eye, a white throat and neck patch; the bill black, the feet red
     let kb = mix(vec3(0.62, 0.22, 0.03), vec3(0.0, 0.2, 0.38), sstep(-0.006, 0.004, by.sub(ringY)));
@@ -361,10 +364,10 @@ function perchedMaterial(sc, uAmount) {
     kb = mix(kb, vec3(0.86, 0.85, 0.8), sstep(0.004, 0.0015, length(vec2(by.sub(0.009), bz.sub(0.03)))).mul(sstep(0.008, 0.012, ax)));
     kb = mix(kb, vec3(0.01), sstep(0.0034, 0.0026, eyeD));
     const kw = mix(vec3(0.0, 0.22, 0.32), vec3(0.02, 0.32, 0.42), feather.mul(0.5));
-    const kfc = select(part.equal(1.0), kw, select(part.equal(2.0), vec3(0.0, 0.25, 0.42), select(part.equal(3.0), vec3(0.6, 0.08, 0.04), select(part.greaterThan(3.5), vec3(0.02), kb))));
+    const kfc = select(pt.equal(1.0), kw, select(pt.equal(2.0), vec3(0.0, 0.25, 0.42), select(pt.equal(3.0), vec3(0.6, 0.08, 0.04), select(pt.greaterThan(3.5), vec3(0.02), kb))));
     const small = select(species.equal(2.0), mej, select(species.equal(3.0), wgt, select(species.equal(4.0), kfc, spc)));
     // the crow: black all over, the eye and the bill a shade apart
-    const crow = mix(vec3(0.045, 0.045, 0.055), vec3(0.06, 0.055, 0.055), part.greaterThan(3.5).select(1.0, 0.0));
+    const crow = mix(vec3(0.045, 0.045, 0.055), vec3(0.06, 0.055, 0.055), pt.greaterThan(3.5).select(1.0, 0.0));
     return mix(small, crow, kind);
   });
 
