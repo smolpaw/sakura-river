@@ -1,4 +1,4 @@
-// pnpm bench -- --a <build> --b <build> [--workload hero|1080p|stress] [--backend webgl|webgpu] [--runs 5]
+// pnpm bench --a <build> --b <build> [--workload hero|1080p|stress] [--backend webgl|webgpu] [--runs 5]
 //   [--frames 300] [--warmup 120] [--views hero,cine000] [--out <name>] [--seed 1]
 // Interleaves runs of builds A and B in random order (A/A when a == b), rejects frames with unstable or
 // throttled GPU clocks, and reports B/A ratios with two-level bootstrap 95% CIs.
