@@ -26,7 +26,7 @@ const lyingAlbedo = (alb, tint, t) => mix(alb.mul(vec3(0.75, 0.5, 0.42)), vec3(0
 // instanced petal: attributes iPos (vec3), iRot (yaw, pitch, roll, scale), iTint, iLie; or those as nodes (`src`: pos,
 // rot, tint, lie), e.g. read from the GPU simulation's buffers (petalsgpu.js). A petal in the air is lit as the
 // blossom it left; one that has landed (iLie 1) as lyingPetalMaterial lights the fallen ones, without the canopy's
-// glow, so the petals on the ground don't shine at night.
+// glow.
 export function petalMaterial(src = null) {
   const iPos = src ? src.pos : attribute('iPos', 'vec3'), iRot = src ? src.rot : attribute('iRot', 'vec4');
   const vTint = (src ? src.tint : attribute('iTint', 'float')).toVarying('vPetalTint');
@@ -46,9 +46,9 @@ export function petalMaterial(src = null) {
     const trans = pow(max(dot(V.negate(), U.uSunDir), 0.0), 3.0).mul(1.3).add(0.12);
     const sun = U.uSunColor.mul(U.uSunVis).mul(sunShadow);
     const lamps = lanternLight(positionWorld);
-    // the canopy's own glow (blossomMaterial's floor) so a falling petal matches the flowers it left: without it
-    // petals away from the lanterns turn into dark blue flecks at night
-    const air = alb.mul(U.uSkyAmb.mul(0.9).add(sun.mul(diff.add(trans)).mul(0.9)).add(lamps.mul(1.4)).add(vec3(0.16).add(U.uSkyAmb.mul(0.1))));
+    // by day the light scattered in the canopy (blossomLight's glow), so a falling petal matches the flowers it left;
+    // it goes with the sun, so at night a petal takes only the sky's light and the lamps' and doesn't shine
+    const air = alb.mul(U.uSkyAmb.mul(0.9).add(sun.mul(diff.add(trans)).mul(0.9)).add(lamps.mul(1.4)).add(vec3(0.16).add(U.uSkyAmb.mul(0.1)).mul(U.uSunVis)));
     // landed: the sky's and the sun's light as the lit materials take them (matched by eye to lyingPetalMaterial)
     const ground = lyingAlbedo(alb, vTint, t).mul(U.uSkyAmb.mul(LIE_SKY).add(sun.mul(max(ndl, 0.0)).mul(LIE_SUN)).add(lamps.mul(0.5)));
     return vec4(applyFog(mix(air, ground, vLie), positionWorld), 1.0);
