@@ -8,13 +8,14 @@
 // boards creaking under some steps; the animals' calls and the moored boat's knocks and creaks (call()) come from where
 // each is, as it happens; an owl calls from the woods at night; a dog, an axe and a cock are heard from the villages by
 // day. Distant sounds also go through a valley reverb (a generated impulse response: the slopes' reflections and a
-// diffuse tail). Music streams through two media elements that crossfade, each track chosen for the scene's mood.
+// diffuse tail). Music streams through two media elements that hand over at a phrase's end, each track chosen for the
+// scene's mood.
 // Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or created until sound is turned on.
 import { clamp, lerp, smoothstep } from './noise.js';
 import { assetUrl } from './assets.js';
 
 // the music (tools/audio.mjs prints each track's loudness and seams): loudness (LUFS) and seams (s, where a phrase
-// ends and a change of mood may crossfade); it plays at MUSIC_LUFS at full volume, the loops are levelled to -24 LUFS.
+// ends and a change of mood may hand over); it plays at MUSIC_LUFS at full volume, the loops are levelled to -24 LUFS.
 // Measured (2-s RMS, bands, onsets): Sakuya3 has a bass line and a beat (below 250 Hz 3.6 dB under its whole, 73
 // onsets a minute): the clear day's; Oboro has almost no bass (18 dB under) and few onsets (28 a minute), soft and
 // floating: night and haze; Shizima4 is the quietest and steadiest (loudness range 3.6 LU against 6-12), sparse (31
@@ -26,9 +27,11 @@ const TRACKS = [
 ];
 const SAKUYA = 0, OBORO = 1, SHIZIMA = 2;
 const MUSIC_LUFS = -20;
-// crossfades (s): a track's last seconds under the next one's start; a change of mood's fade out of the playing track
-// from a seam, and the next track's fade in
-const XF_END = 8, XF_MOOD = 6, FADE_IN = 3;
+// the hand-over to the next track (s), two tracks never heard at once: a change of mood fades the playing track out
+// over the XF_MOOD s before a seam and starts the next at the seam; at a track's end the next starts TAIL s before it,
+// where the last chord has died away (35 dB or more under the track's level), cued AHEAD s before; the music's first
+// start fades in over FADE_IN
+const XF_MOOD = 2, TAIL = 3.5, AHEAD = 15, FADE_IN = 3;
 const PAD = 0.5; // each loop file carries PAD s of wrap-around on both ends (tools/audio.mjs)
 const THUNDER_NEAR = 4, THUNDER_FAR = 3, SONGS = 4;
 // footsteps: variants per surface, and each surface's gain: a walk comes to about -28 LUFS (-30 on grass), a little
@@ -281,11 +284,13 @@ export function createSound(world, bridge) {
     shots.village = Object.fromEntries(Object.entries(VILLAGE).map(([k, [n]]) => [k, shotSet(variants(k, n))]));
   }
 
-  // ---------- music: two decks crossfading, the track chosen for the mood ----------
+  // ---------- music: two decks handing over, the track chosen for the mood ----------
   const decks = [];
   let cur = null; // the deck playing the current track
   let run = { track: -1, n: 0 }; // the track played last and how many times running
-  let misfit = 0, swap = null; // how long the track has not fitted the mood (s); a change waiting for a seam: { at, track }
+  // how long the track has not fitted the mood (s); the change to come: the next track starts when the playing one is
+  // at `at` (s), which starts fading out at `out`; `end` at the track's end
+  let misfit = 0, swap = null;
   function deck() {
     const el = new Audio();
     el.preload = 'auto';
@@ -345,33 +350,35 @@ export function createSound(world, bridge) {
     return w.findIndex((x) => x > 0);
   }
   function music(st) {
-    for (const d of decks) if (d.state === 'out' && ctx.currentTime >= d.until) { d.el.pause(); d.state = 'idle'; }
+    for (const d of decks) if (d !== cur && d.state === 'out' && ctx.currentTime >= d.until) { d.el.pause(); d.state = 'idle'; }
     const fit = (lv.fit = moods(st));
     if (vol.music <= 0) return;
     if (!cur) { start(pick(fit), FADE_IN); misfit = 0; swap = null; return; }
     const el = cur.el, t = el.currentTime, dur = el.duration, best = fit.indexOf(Math.max(...fit));
+    const fading = cur.state === 'out';
+    // the next seam far enough ahead for the fade out, and early enough to change before the track's end
+    const seam = () => TRACKS[cur.track].seams.find((s) => s > t + XF_MOOD + 0.3 && !(s > dur - AHEAD));
+    const ahead = (k) => { if (decks.some((d) => d !== cur && d.state === 'idle')) cue(k); }; // (the free deck, if free)
     // a track that no longer fits the mood gives way at its next seam, once the mood has held for 3 s
     misfit = fit[cur.track] < fit[best] - 0.35 ? misfit + TICK : 0;
-    if (!misfit) swap = null;
+    if (!misfit && swap && !swap.end && !fading) swap = null;
     else if (misfit >= 3 && !swap) {
-      const at = TRACKS[cur.track].seams.find((s) => s > t + 0.3 && !(s > dur - XF_END - 4));
-      // (the next track loaded ahead in the free deck, if it is free)
-      if (at !== undefined) { swap = { at, track: pick(fit, cur.track) }; if (decks.some((d) => d !== cur && d.state === 'idle')) cue(swap.track); }
+      const at = seam();
+      if (at !== undefined) { swap = { at, out: at - XF_MOOD, track: pick(fit, cur.track) }; ahead(swap.track); }
     }
+    if (!swap && dur > 0 && t >= dur - AHEAD) { swap = { at: dur - TAIL, out: dur - TAIL, track: pick(fit), end: true }; ahead(swap.track); }
     // (while the last track is still fading out, the change waits for the seam after)
-    if (swap && t >= swap.at && decks.some((d) => d.state === 'out')) {
-      const at = TRACKS[cur.track].seams.find((s) => s > t + 0.3 && !(s > dur - XF_END - 4));
-      if (at === undefined) swap = null; else swap.at = at;
+    if (swap && !swap.end && !fading && t >= swap.out && decks.some((d) => d !== cur && d.state === 'out')) {
+      const at = seam();
+      swap = at === undefined ? null : { ...swap, at, out: at - XF_MOOD };
     }
-    if (swap && t >= swap.at) {
+    if (!swap) return;
+    if (!fading && t >= swap.out) retire(cur, swap.end ? TAIL : Math.max(0.1, swap.at - t));
+    // (or once faded out, should the track's clock lag the context's)
+    if (t >= swap.at || (cur.state === 'out' && ctx.currentTime >= cur.until)) {
       const k = swap.track;
       swap = null; misfit = 0;
-      retire(cur, XF_MOOD);
-      start(k, FADE_IN);
-    } else if (dur > 0 && t >= dur - XF_END) {
-      swap = null; misfit = 0;
-      retire(cur, XF_END);
-      start(pick(fit), XF_END * 0.75);
+      start(k, 0.05); // (the track's own start)
     }
   }
   function playDecks() {
@@ -796,7 +803,7 @@ export function createSound(world, bridge) {
         state: ctx ? ctx.state : 'none', on, waiting: this.waiting, time: ctx ? +ctx.currentTime.toFixed(2) : 0, master: ctx ? +master.gain.value.toFixed(3) : 0,
         beds: Object.fromEntries(Object.values(beds).map((b) => [b.name, { state: b.state, target: +b.target.toFixed(3), gain: +b.gain.gain.value.toFixed(3) }])),
         music: {
-          current: cur ? TRACKS[cur.track].name : null, run, swap: swap && { at: swap.at, track: TRACKS[swap.track].name }, misfit: +misfit.toFixed(1),
+          current: cur ? TRACKS[cur.track].name : null, run, swap: swap && { at: swap.at, out: swap.out, track: TRACKS[swap.track].name }, misfit: +misfit.toFixed(1),
           fit: Object.fromEntries(TRACKS.map((tr, i) => [tr.name, +lv.fit[i].toFixed(2)])), duck: +lv.duck.toFixed(3),
           decks: decks.map((d) => ({ track: d.track >= 0 ? TRACKS[d.track].name : null, state: d.state, paused: d.el.paused, t: +d.el.currentTime.toFixed(2), dur: +(d.el.duration || 0).toFixed(1), gain: +d.gain.gain.value.toFixed(3) })),
         },

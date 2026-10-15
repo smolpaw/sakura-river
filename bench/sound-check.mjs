@@ -1,5 +1,5 @@
 // The sound's behaviour, checked headless through the engine's debug hooks (soundInfo, soundDebug): the music's
-// track by mood, a change of mood crossfading at a seam, the end-of-track crossfade, ducking under a near thunderclap,
+// track by mood, a change of mood handing over at a seam, the hand-over at a track's end, ducking under a near thunderclap,
 // a delayed thunderclap dropped after a hidden tab, mute and tab-hide fading out before the music pauses, the bell only
 // on a time-lapse through dusk or dawn, the owl only at night, the village by day, rain off the eaves only near a roof
 // in the rain, rain on the water near the river, the moored boat, the mandarins, the bridge's creaks, that the walker
@@ -59,18 +59,18 @@ try {
   }
 
   if (want('seam')) {
-    // the playing track no longer fits (a downpour): after 3 s a change waits for the next seam, then crossfades
+    // the playing track no longer fits (a downpour): after 3 s a change waits for the next seam, then hands over
     i = await info();
     say('seam: before:', music(i));
     await call('setWeather', 'downpour', 0);
-    await run(3.5);
+    await run(4);
     i = await info();
-    say('  downpour after 3.5 s:', music(i));
+    say('  downpour after 4 s:', music(i));
     if (i.music.swap) {
       const playing = i.music.decks.find((d) => d.state === 'on');
-      await call('soundDebug', { seek: Math.max(0, i.music.swap.at - 1.5) });
-      say('  seek to 1.5 s before the seam', i.music.swap.at, 'from', playing && playing.t);
-      for (let k = 0; k < 9; k++) { await run(1); i = await info(); say(`  +${k + 1}s:`, music(i)); }
+      await call('soundDebug', { seek: Math.max(0, i.music.swap.out - 1.5) });
+      say('  seek to 1.5 s before the fade out to the seam', i.music.swap.at, 'from', playing && playing.t);
+      for (let k = 1; k <= 14; k++) { await run(0.5); i = await info(); say(`  +${k / 2}s:`, music(i)); }
     }
   }
 
