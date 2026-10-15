@@ -85,6 +85,23 @@ export const vnoise = Fn(([p]) => {
   return mix(mix(hash12(i), hash12(i10), u.x), mix(hash12(i01), hash12(i11), u.x), u.y);
 }).setLayout({ name: 'vnoise', type: 'float', inputs: [{ name: 'p', type: 'vec2' }] });
 
+// four hashes at once (0..1), one per lane of the points (X, Y, Z): the 3D form of hash12, on vec4s
+export const hash4 = (X, Y, Z) => {
+  const x = fract(X.mul(0.1031)), y = fract(Y.mul(0.1031)), z = fract(Z.mul(0.1031));
+  const d = x.mul(z.add(31.32)).add(y.mul(y.add(31.32))).add(z.mul(x.add(31.32)));
+  return fract(x.add(y).add(d.mul(2.0)).mul(z.add(d)));
+};
+// the lattice points round `x` (lanes: x, x+1 across the four; y, y+1 in pairs), as exact floor() results (as vnoise's)
+export const corners = (x) => [floor(vec4(x.x).add(vec4(0, 1, 0, 1))), floor(vec4(x.y).add(vec4(0, 0, 1, 1))), floor(x.z), floor(x.z.add(1.0))];
+// value noise in 3D (0..1)
+export const vnoise3 = Fn(([x]) => {
+  const [X, Y, z0, z1] = corners(x);
+  const w = fract(x), u = w.mul(w).mul(w.mul(-2.0).add(3.0)).toVar();
+  const h = mix(hash4(X, Y, vec4(z0)), hash4(X, Y, vec4(z1)), u.z);
+  const e = mix(h.xz, h.yw, u.x);
+  return mix(e.x, e.y, u.y);
+}).setLayout({ name: 'vnoise3', type: 'float', inputs: [{ name: 'x', type: 'vec3' }] });
+
 // ---------- the running clocks' loops ----------
 // main.js keeps the clocks in doubles and gives the shaders uTime wrapped every LOOP s, uFlow every FLOW_LOOP and
 // uWindRun every RUN_LOOP, so they never grow past what a float holds to a fraction of a frame however long the scene

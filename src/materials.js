@@ -6,7 +6,7 @@ import {
   cameraPosition, cameraViewMatrix, positionWorld, positionView, normalView, normalWorld, normalLocal, diffuseColor, sin,
   transformNormalToView, faceDirection, exp, sign, normalWorldGeometry, step, Loop, abs, dFdx, dFdy, int, uniformArray, uniform, log2, fwidth, color,
 } from 'three/tsl';
-import { U, vnoise, vnoiseLoop, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight, loopDrift } from './tsl.js';
+import { U, vnoise, vnoiseLoop, vnoise3, hash4, corners, hash12, sstep, LitMaterial, windPosition, treeWindPosition, windShadowPosition, lanternLight, loopDrift } from './tsl.js';
 import { grassColor, grassWave, patchFrom } from './grass.js';
 import { sunShadow } from './sunshadow.js';
 import { KIND } from './kinds.js';
@@ -639,22 +639,7 @@ export function flowerMaterial() {
 // STONE_NEAR, beyond which the stone is drawn exactly as without it. The noise is 3D, as the stones face every way.
 const STONE_NEAR = 40;
 const PIXEL = 0.0012; // the angle one pixel spans (radians, about 1080p at the scene's field of view)
-// four hashes at once (0..1), one per lane of the points (X, Y, Z): the 3D form of hash12, on vec4s
-const hash4 = (X, Y, Z) => {
-  const x = fract(X.mul(0.1031)), y = fract(Y.mul(0.1031)), z = fract(Z.mul(0.1031));
-  const d = x.mul(z.add(31.32)).add(y.mul(y.add(31.32))).add(z.mul(x.add(31.32)));
-  return fract(x.add(y).add(d.mul(2.0)).mul(z.add(d)));
-};
-// the lattice points round `x` (lanes: x, x+1 across the four; y, y+1 in pairs), as exact floor() results (as vnoise's)
-const corners = (x) => [floor(vec4(x.x).add(vec4(0, 1, 0, 1))), floor(vec4(x.y).add(vec4(0, 0, 1, 1))), floor(x.z), floor(x.z.add(1.0))];
-// value noise in 3D (0..1); `vnoise3g`: x its value, yzw its gradient
-const vnoise3 = Fn(([x]) => {
-  const [X, Y, z0, z1] = corners(x);
-  const w = fract(x), u = w.mul(w).mul(w.mul(-2.0).add(3.0)).toVar();
-  const h = mix(hash4(X, Y, vec4(z0)), hash4(X, Y, vec4(z1)), u.z);
-  const e = mix(h.xz, h.yw, u.x);
-  return mix(e.x, e.y, u.y);
-}).setLayout({ name: 'vnoise3', type: 'float', inputs: [{ name: 'x', type: 'vec3' }] });
+// tsl.js's vnoise3 with its gradient: x its value, yzw its gradient
 const vnoise3g = Fn(([x]) => {
   const [X, Y, z0, z1] = corners(x);
   const w = fract(x).toVar(), u = w.mul(w).mul(w.mul(-2.0).add(3.0)).toVar(), du = w.mul(w.oneMinus()).mul(6.0);

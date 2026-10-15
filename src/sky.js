@@ -1,7 +1,7 @@
 // Sky dome with sun, a crescent moon, stars, shooting stars, glow and drifting procedural clouds + time-of-day palette
 import * as THREE from 'three/webgpu';
-import { Fn, float, vec2, vec3, vec4, uniform, mix, max, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If } from 'three/tsl';
-import { U, vnoise, hashSin, hash12, sstep, loopW } from './tsl.js';
+import { Fn, float, vec2, vec3, vec4, uniform, mix, max, min, pow, dot, normalize, clamp, cross, sqrt, length, exp, atan, asin, floor, fract, fwidth, abs, sin, sign, step, select, positionWorld, cameraPosition, If } from 'three/tsl';
+import { U, vnoise, vnoise3, hashSin, hash12, sstep, loopW } from './tsl.js';
 import { clamp as clampJS, lerp, smoothstep, mulberry32 } from './noise.js';
 
 const cfbm = Fn(([p0]) => {
@@ -23,35 +23,110 @@ const MOON_R = Math.tan(THREE.MathUtils.degToRad(1.15)); // drawn about 4x its r
 const CUT_R = 1.35, CUT_K = 0.9; // the circle that cuts the crescent, in moon radii
 const MOON_COS = [Math.cos(THREE.MathUtils.degToRad(1.4)), Math.cos(THREE.MathUtils.degToRad(1.1))]; // stars hidden behind it
 
-// Stars: a cube map of cells around the sky, STAR_N cells per unit of face coordinate, one star in STAR_P of them,
-// kept off the cell edges so a star is never cut. The sky turns about the celestial pole (north is +z, Japan's
-// latitude) with the clock hour.
-const STAR_N = 70, STAR_P = 0.45;
-const POLE = new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(35)), Math.cos(THREE.MathUtils.degToRad(35)));
-// the galactic plane in the stars' frame: in April it stands low in the west after dusk (the winter Milky Way)
-const MILKY_N = new THREE.Vector3(0.62, 0.55, -0.56).normalize();
-const MILKY_U = new THREE.Vector3(0, 1, 0).cross(MILKY_N).normalize(), MILKY_V = MILKY_N.clone().cross(MILKY_U);
+// Stars: a cube map of cells around the sky, STAR_N cells per unit of face coordinate, a star in about STAR_P of them,
+// kept off the cell edges (a bright one further, for its halo) so that none is cut. The sky turns about the celestial pole (north is +z,
+// Japan's latitude) with the clock hour: the stars' frame is the world's at midnight.
+const STAR_N = 70, STAR_P = 0.5;
+const LAT = THREE.MathUtils.degToRad(35);
+const POLE = new THREE.Vector3(0, Math.sin(LAT), Math.cos(LAT));
+// a direction in the stars' frame from right ascension (hours) and declination (degrees): at midnight in mid-April the
+// sidereal time is about 13.3 h, so a star's hour angle then is 13.3 h less its right ascension
+const equatorial = (ra, dec) => {
+  const h = THREE.MathUtils.degToRad((13.3 - ra) * 15), d = THREE.MathUtils.degToRad(dec);
+  const south = new THREE.Vector3(0, Math.cos(LAT), -Math.sin(LAT)), west = new THREE.Vector3(-1, 0, 0);
+  return south.multiplyScalar(Math.cos(d) * Math.cos(h)).addScaledVector(POLE, Math.sin(d)).addScaledVector(west, Math.cos(d) * Math.sin(h));
+};
+// the galaxy: its north pole, its centre (in Sagittarius) and longitude 90° (in Cygnus). In April the winter Milky Way
+// stands in the west after dusk, and the centre rises in the south-east after midnight and stands low in the south
+// before dawn.
+const GAL_N = equatorial(12.857, 27.13), GAL_C = equatorial(17.761, -28.94), GAL_L90 = equatorial(21.2, 48.33);
 // the scene pass's pixels per output pixel each way (above 1 when supersampled, main.js): a star keeps its size on
 // screen instead of shrinking into the downsample
 export const uStarPx = uniform(1);
-const starField = Fn(([s]) => {
+// the cube map's cell round direction s at n cells per unit of face coordinate: its id (unique over the faces) in xy,
+// where s falls in it (0..1) in zw
+const cubeCell = Fn(([s, n]) => {
   const a = abs(s).toVar();
-  const m = max(a.x, max(a.y, a.z)).toVar();
+  const m = max(a.x, max(a.y, a.z));
   const ax = step(vec3(m), a); // the major axis
-  const q = select(ax.x.greaterThan(0.5), s.yz, select(ax.y.greaterThan(0.5), s.xz, s.xy)).div(m).mul(STAR_N).toVar();
-  const c = floor(q).add(dot(ax.mul(sign(s)), vec3(1000.0, 2000.0, 3000.0))).toVar(); // cell id, per face
-  const o = vec2(hash12(c.add(17.3)), hash12(c.add(41.7))).mul(0.5).add(0.25);
-  // distance in pixels: the pixel's angle from fwidth of the direction (continuous across the cube's seams)
-  const px = length(fwidth(s)).div(m).mul(STAR_N * 0.6).mul(uStarPx);
-  const r = length(fract(q).sub(o)).div(px);
+  const q = select(ax.x.greaterThan(0.5), s.yz, select(ax.y.greaterThan(0.5), s.xz, s.xy)).div(m).mul(n).toVar();
+  return vec4(floor(q).add(dot(ax.mul(sign(s)), vec3(1000.0, 2000.0, 3000.0))), fract(q));
+}).setLayout({ name: 'cubeCell', type: 'vec4', inputs: [{ name: 's', type: 'vec3' }, { name: 'n', type: 'float' }] });
+// The stars at direction s (the stars' frame); px: STAR_N's cells per output pixel; h: the sine of the altitude;
+// time: U.uTime.
+// Their light follows a power law, as star counts do (about 2.5 times as many stars per magnitude fainter): a star's
+// light is STAR_L0 × u^-0.77 for a uniform u, so of the few thousand stars in a view's sky a few are bright, a few
+// dozen moderate and most at or below what can be seen. They gather in loose clumps and towards the galactic plane
+// rather than on a grid. Each is nearly a point: its core grows only slightly with its light, which is held under the
+// bloom's threshold (2.2, post.js) at its twinkle's peak so none blooms; the brightest get a small, soft halo of their
+// own instead. Colour by temperature, from blue-white to orange, fading to white in the faint ones (the eye sees no
+// colour there). Twinkle mostly in the faint stars and low in the sky.
+const STAR_L0 = 0.0047;
+const starField = Fn(([s, px, h, time]) => {
+  const cell = cubeCell(s, STAR_N).toVar();
+  const c = cell.xy;
+  const L = pow(max(hash12(c.add(9.7)), 1e-4), -0.77).mul(STAR_L0).toVar();
+  // a faint star anywhere in its cell but near the edges, a bright one far enough from them for its halo
+  const edge = mix(float(0.25), float(0.1), sstep(0.3, 0.05, L));
+  const o = vec2(hash12(c.add(17.3)), hash12(c.add(41.7))).mul(float(1.0).sub(edge.mul(2.0))).add(edge);
+  const dc = length(cell.zw.sub(o)).toVar(); // from the star, in cells
+  const r = dc.div(px).toVar(); // in output pixels
   const k = hash12(c.add(5.1)).toVar();
-  // many faint stars, a few bright ones, all below the bloom's threshold (2.2, post.js) at their twinkle's peak, so
-  // none blooms
-  const b = pow(hash12(c.add(9.7)), 14.0).mul(3.2).min(2.0).add(0.004);
-  const twinkle = sin(U.uTime.mul(loopW(k.mul(5.0).add(2.0))).add(k.mul(60.0))).mul(0.22).add(0.85);
-  const tint = mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.68), hash12(c.add(3.3)));
-  return tint.mul(b.mul(twinkle).mul(exp(r.mul(r).mul(-1.0))).mul(step(k, STAR_P)));
-});
+  const gz = dot(s, GAL_N);
+  const clump = vnoise3(s.mul(6.0)).mul(0.9).add(0.55).mul(exp(gz.mul(gz).mul(-16.0)).mul(0.6).add(0.75));
+  // the core: sigma 0.6 px for the faint, 0.85 for the brightest
+  const sg = sstep(0.03, 2.0, L).mul(0.25).add(0.6);
+  const core = exp(r.mul(r).div(sg.mul(sg).mul(-2.0))).mul(min(L, 1.5));
+  const halo = exp(r.div(-1.4)).mul(sstep(0.2, 2.5, L)).mul(min(L, 3.0)).mul(0.05);
+  // twinkle: two sines at the star's own rates (whole turns over the clock's loop)
+  const a = mix(float(0.08), float(0.45), sstep(0.15, 0.012, L)).add(sstep(0.45, 0.05, h).mul(0.35)).min(0.75);
+  const w = sin(time.mul(loopW(k.mul(12.0).add(3.0))).add(k.mul(60.0))).mul(0.6).add(sin(time.mul(loopW(k.mul(17.0).add(9.0))).add(k.mul(97.0))).mul(0.4));
+  const lum = core.add(halo).mul(w.mul(a).add(1.0)).mul(sstep(0.25, 0.17, dc)).min(2.0);
+  const t = hash12(c.add(3.3));
+  const warm = mix(mix(vec3(0.74, 0.83, 1.0), vec3(1.0, 0.97, 0.93), sstep(0.0, 0.3, t)), vec3(1.0, 0.88, 0.72), sstep(0.5, 0.78, t));
+  const tint = mix(vec3(0.93, 0.95, 1.0), mix(warm, vec3(1.0, 0.75, 0.52), sstep(0.86, 0.97, t)), sstep(0.02, 0.25, L));
+  return tint.mul(lum).mul(step(k, clump.mul(STAR_P)));
+}).setLayout({ name: 'starField', type: 'vec3', inputs: [{ name: 's', type: 'vec3' }, { name: 'px', type: 'float' }, { name: 'h', type: 'float' }, { name: 'time', type: 'float' }] });
+
+// The Milky Way at direction s (the stars' frame); px as starField's. A soft band along the galactic plane, wider and
+// brighter towards the centre and in its great star clouds (Scutum, Cygnus), mottled with star clouds and dust, split
+// from Cygnus to Sagittarius by the dark lane of the Great Rift, and grained with the faint stars no eye resolves (a
+// finer cube map of them, as many as the band is dense).
+const MILKY = 0.022;
+const milkyWay = Fn(([s, px]) => {
+  const gx = dot(s, GAL_C), gy = dot(s, GAL_L90), gz = dot(s, GAL_N);
+  // near the plane gx and gy are about the cosine and sine of the longitude: exp((cos(l - l0) - 1) k) peaks at l0
+  const deg = Math.PI / 180;
+  const near = (l0, k) => exp(gx.mul(Math.cos(l0 * deg)).add(gy.mul(Math.sin(l0 * deg))).sub(1.0).mul(k));
+  const core = near(0, 4.0).toVar();
+  const along = core.mul(1.8).add(0.28).add(near(28, 30.0).mul(0.35)).add(near(75, 14.0).mul(0.3)).add(near(-75, 12.0).mul(0.25));
+  const p = vec3(gx, gy, gz.mul(1.5)).toVar(); // features a little drawn out along the plane
+  const wob = vnoise3(p.mul(3.0).add(11.0)).sub(0.5).toVar();
+  // the bulge round the centre stands out of the plane
+  const wid = core.mul(0.09).add(0.08);
+  const y = gz.sub(wob.mul(0.03)).div(wid);
+  const band = exp(y.mul(y).mul(-0.5)).toVar();
+  const col = vec3(0).toVar();
+  If(band.greaterThan(0.004), () => {
+    const cl = vnoise3(p.mul(5.0)).mul(0.5).add(vnoise3(p.mul(11.0).add(3.1)).mul(0.3)).add(vnoise3(p.mul(23.0).add(7.3)).mul(0.2)).toVar();
+    const dens = band.mul(along).mul(sstep(0.32, 0.74, cl).mul(1.2).add(0.3)).toVar();
+    // the Great Rift, wandering about the plane from longitude -20° to 90°, ragged with the star clouds; dark dust in
+    // patches all along
+    const rift = sstep(0.55, 0.85, gx.mul(Math.cos(35 * deg)).add(gy.mul(Math.sin(35 * deg))));
+    const z = gz.sub(wob.mul(0.025).add(0.012)).div(core.mul(0.03).add(0.045));
+    const lane = exp(z.mul(z).negate()).mul(rift).mul(sstep(0.3, 0.7, cl).mul(0.35).add(0.45));
+    const dust = sstep(0.56, 0.8, vnoise3(p.mul(4.0).add(19.0))).mul(0.5);
+    dens.mulAssign(float(1.0).sub(lane).mul(float(1.0).sub(dust)));
+    col.assign(mix(vec3(0.8, 0.82, 0.86), vec3(0.95, 0.86, 0.72), core).mul(dens.mul(MILKY)));
+    // the unresolved stars: one in up to 60% of the cells of a cube map three times as fine, by the band's density
+    const f = cubeCell(s, STAR_N * 3).toVar();
+    const o = vec2(hash12(f.xy.add(7.7)), hash12(f.xy.add(23.1))).mul(0.5).add(0.25);
+    const r = length(f.zw.sub(o)).div(px.mul(3.0));
+    const lit = hash12(f.xy.add(13.3)).mul(0.02).add(0.005).mul(step(hash12(f.xy.add(2.9)), dens.mul(0.5).min(0.6)));
+    col.addAssign(vec3(0.9, 0.9, 0.95).mul(exp(r.mul(r).mul(-1.4))).mul(lit));
+  });
+  return col;
+}).setLayout({ name: 'milkyWay', type: 'vec3', inputs: [{ name: 's', type: 'vec3' }, { name: 'px', type: 'float' }] });
 
 // one crater per cell at most: a darker floor inside a bright rim
 const crater = Fn(([q]) => {
@@ -107,20 +182,21 @@ export function makeSky() {
     const hidden = float(1.0).sub(sstep(0.5, 0.9, uCover));
     col.addAssign(U.uSunColor.mul(pow(g, 40.0).mul(0.1).add(pow(g, 400.0).mul(0.45)).add(pow(g, 3000.0).mul(1.2).mul(hidden))).mul(U.uSunVis));
     col.addAssign(U.uSunColor.mul(sstep(0.99962, 0.99978, mu)).mul(5.0).mul(U.uSunVis).mul(hidden));
-    // stars, dimmed towards the horizon and hidden behind the moon's disc (its dark side included)
+    // stars and the Milky Way, dimmed and reddened low down by the air they shine through (about 0.3 magnitudes per
+    // air mass), hidden behind the moon's disc (its dark side included); the Milky Way washed out by the moon while it
+    // is up
     If(uStarVis.greaterThan(0.0), () => {
       const behindMoon = sstep(MOON_COS[0], MOON_COS[1], dot(d, uMoonDir));
       const sd = uStarRot.mul(d).toVar();
-      col.addAssign(starField(sd).mul(uStarVis).mul(sstep(-0.01, 0.3, h)).mul(float(1.0).sub(behindMoon)));
-      // the Milky Way: a faint, mottled band along its great circle, split by its dark lane, washed out low down
-      const x = dot(sd, MILKY_N);
-      const band = exp(x.mul(x).mul(-1.0 / (0.16 * 0.16))).toVar();
-      If(band.greaterThan(0.01), () => {
-        const q = vec2(dot(sd, MILKY_U), dot(sd, MILKY_V)).mul(3.0);
-        const cloud = cfbm(q.add(vec2(x.mul(9.0), 0.0))).toVar();
-        const lane = float(1.0).sub(sstep(0.05, 0.0, x.add(cloud.sub(0.5).mul(0.08)).abs()).mul(0.6));
-        col.addAssign(vec3(0.62, 0.66, 0.8).mul(band.mul(sstep(0.3, 0.75, cloud)).mul(lane).mul(0.05)).mul(uStarVis).mul(sstep(0.02, 0.35, h)));
-      });
+      const a = abs(sd);
+      // STAR_N's cells per output pixel, from fwidth of the direction (continuous across the cube's seams); taken here,
+      // in uniform control flow, as WGSL wants derivatives
+      const px = length(fwidth(sd)).div(max(a.x, max(a.y, a.z))).mul(STAR_N * 0.6).mul(uStarPx).toVar();
+      const air = exp(float(1.0).div(max(h, 0.0).add(0.025)).sub(1.0).max(0.0).mul(-0.28)).toVar();
+      const redden = mix(vec3(1.0), vec3(1.0, 0.8, 0.6), sstep(0.35, 0.04, h)).toVar();
+      col.addAssign(starField(sd, px, h, U.uTime).mul(redden).mul(air.mul(sstep(-0.005, 0.02, h))).mul(uStarVis).mul(float(1.0).sub(behindMoon)));
+      const moonUp = uMoonVis.mul(sstep(-0.03, 0.1, uMoonDir.y));
+      col.addAssign(milkyWay(sd, px).mul(redden).mul(air.mul(sstep(0.02, 0.25, h))).mul(uStarVis).mul(float(1.0).sub(moonUp.mul(0.5))));
     });
     // a shooting star: a streak along a great circle, brightest at its head, its trail fading behind
     If(uMeteor.greaterThan(0.0), () => {
