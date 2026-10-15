@@ -2,7 +2,7 @@
 
 [![A cherry tree in bloom by a river, a red drum bridge, a pagoda and a snow-capped mountain](docs/screenshot.jpg)](https://smolpaw.github.io/sakura-river/)
 
-A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, rapeseed flowering yellow across the meadow and along the bank, a drum bridge, a farming village and rice terraces, a temple on a knoll, and wooded hills round the valley: dark cedar and cypress among oak, zelkova and maples in new leaf, with wild cherries in bloom. Sika deer keep their day's round on the far bank and watch whoever comes near, a heron fishes the shallows, spot-billed and mandarin ducks, turtles, a kingfisher and wagtails live along the river, white-eyes work the blossom, swallows build their mud nests at the farmhouses, a fisherman and a rice planter work, skylarks sing high over the fields, and birds, butterflies, bats, frogs, a tanuki, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
+A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, rapeseed flowering yellow across the meadow and along the bank, a drum bridge, a farming village on dry-stone terraces, its yards in daily use (firewood, wells, kitchen gardens, washing on the pole), rice terraces, a temple on a knoll, and wooded hills round the valley: dark cedar and cypress among oak, zelkova and maples in new leaf, with wild cherries in bloom. Sika deer keep their day's round on the far bank and watch whoever comes near, a heron fishes the shallows, spot-billed and mandarin ducks, turtles, a kingfisher and wagtails live along the river, white-eyes work the blossom, swallows build their mud nests at the farmhouses, a fisherman and a rice planter work, skylarks sing high over the fields, and birds, butterflies, bats, frogs, a tanuki, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
 Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the boulders (scanned rocks, simplified in Blender), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel), and the sound (recordings); all are credited below.
 
@@ -39,7 +39,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - `src/photos.js`, `src/photo-worker.js`, `src/kinds.js`: the photographed textures' loading, and the surface kinds that choose them. `src/groundao.js`: the ground's occlusion by the buildings.
 - `src/lods.js`, `src/impostors.js`: the instanced Blender models with their distance levels, culling and the woods' impostors.
 - `src/lights.js`, `src/sunshadow.js`, `src/post.js`: the lamps' light map, the valley and cloud shadows, light shafts and the final grade.
-- Scenery: `tree.js`, `blossoms.js`, `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.
+- Scenery: `tree.js`, `blossoms.js`, `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `yard.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.
 - Sky and water: `sky.js`, `weather.js`, `water.js`, `touches.js`, `petals.js`, `petalsgpu.js`, `fx.js`, `fireflies.js`.
 - Animals and people: `koi.js`, `deer.js`, `heron.js`, `ducks.js`, `turtles.js`, `frogs.js`, `tanuki.js`, `birds.js`, `perched.js`, `butterflies.js`, `figures.js`.
 - Walk mode: `walk.js` (the path network and the input), `walker.js` (the traveller's body).
@@ -134,11 +134,11 @@ Close up, these surfaces are photographed texture sets from Poly Haven (https://
 - The cherries' bark: "Sakura Bark" by Charlotte Baglioni.
 - The boulders, pebbles, the gorge's walls and the village's dry-stone walls: "Lichen Rock" by Rico Cilliers.
 - The lanes' earth: "Stony Dirt Path" by eye-candy.xyz.
-- The farmhouses' thatch: "Thatch Roof Angled" by Rob Tuytel and Dimitrios Savva.
-- Timber (the houses, the temple, the bridge, the lamp posts, the boats; under the vermilion lacquer too): "Weathered Planks" by Dario Barresi and Dimitrios Savva.
+- The farmhouses' thatch and the straw in their yards: "Thatch Roof Angled" by Rob Tuytel and Dimitrios Savva.
+- Timber (the houses, the temple, the bridge, the lamp posts, the boats, the yards' firewood, carts and tubs; under the vermilion lacquer too): "Weathered Planks" by Dario Barresi and Dimitrios Savva.
 - The storehouse's and the temple's plaster: "Grey Plaster 02" by Rob Tuytel.
 - Roof tiles: "Grey Roof Tiles" by Rob Tuytel.
-- Built stone (foundations, the temple's terrace walls and steps, the bridge's abutments): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
+- Built stone (foundations, the temple's terrace walls and steps, the bridge's abutments, the yards' wells and mortars): "Japanese Stone Wall" by Rico Cilliers, Charlotte Baglioni and Dario Barresi.
 - Carved and dressed stone (the Jizō, the stone lanterns, the lamps' feet, the temple buildings' platforms): "Rock Surface" by Amal Kumar.
 - The woods' bark: "Japanese Cedar Bark" by Charlotte Baglioni.
 - The temple's gravel courtyard: "Gravel Ground 01" by Rob Tuytel.

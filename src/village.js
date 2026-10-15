@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32 } from './noise.js';
 import { kit, toro } from './temple.js';
+import { yardData } from './yard.js';
 
 export const VILLAGE_KINDS = ['minka0', 'minka1', 'kura', 'koya', 'torii', 'suisha'];
 
@@ -31,7 +32,7 @@ export function villageData(world) {
     l.c.push(t, t * (0.97 + rng() * 0.05), t * (0.94 + rng() * 0.06));
   };
   // door lanterns (hang, look as lanterns.js) and the shoji's light on the yard (lights.js lamp: x, y, z, s, r)
-  const hang = [], look = [], spill = [], smoke = [], nests = [];
+  const hang = [], look = [], spill = [], smoke = [], nests = [], houses = [];
   // in each model's frame (tools/village.py, y up, its front +z): beside the door under the eave, the eave's
   // underside; the shoji's middle, the front wall's half-length
   const DOOR = { minka0: [6.7, 2.0, 2.9], minka1: [4.85, 1.85, 2.2], suisha: [-1.45, 1.8, 1.95] };
@@ -45,6 +46,7 @@ export function villageData(world) {
   for (const b of world.BUILDINGS) {
     const sc = b.kind.startsWith('minka') ? 0.95 + rng() * 0.1 : 1;
     put(b.kind, b.x, b.y - 0.05, b.z, b.yaw, sc);
+    houses.push({ b, sc });
     const at = ([px, py, pz]) => [b.x + sc * (px * b.c + pz * b.s), b.y - 0.05 + sc * py, b.z + sc * (pz * b.c - px * b.s)];
     if (DOOR[b.kind]) {
       hang.push(...at(DOOR[b.kind]));
@@ -67,6 +69,7 @@ export function villageData(world) {
     lists: lists.map((l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 })), wheel,
     lamps: { hang: new Float32Array(hang), look: new Float32Array(look), n: hang.length / 3 }, spill: new Float32Array(spill.flat()), smoke: new Float32Array(smoke), nests: new Float32Array(nests),
     toro: toroData(world),
+    yard: yardData(world, houses), // (what stands in their yards: yard.js)
   };
 }
 

@@ -67,6 +67,8 @@ import { createSound } from './audio.js';
 import { makeWalk, WALK } from './walk.js';
 import waysideUrl from './models/wayside.glb?url&inline';
 import { WAYSIDE_KINDS } from './wayside.js';
+import yardUrl from './models/yard.glb?url&inline';
+import { YARD_KINDS } from './yard.js';
 
 // pr: cap on the device pixel ratio; ss: the scene's render scale over the drawing buffer (supersampling, resolved by
 // the post chain's downsample, post.js); lodScale: the model LODs' and the impostors' switch distances multiplied
@@ -432,7 +434,8 @@ export async function create(canvas, opts = {}) {
   for (const n of ['lamps', 'rocks', 'forest', 'cliffs', 'bamboo', 'shrubs', 'village']) if (nearOf(n).nearUrl) loadModel(ultraUrl(n)).catch(() => {});
   // the lantern lines' posts, the bonbori along the banks, the fire baskets by the cherry tree; the flames, their
   // glows (from the flames' middle) and their flickering light (tsl.js lanternLight)
-  const lamps = await makeLods(lampsUrl, LAMP_KINDS, G.lanterns.lists, M.lampMaterial(), [60], { lodScale, ...nearOf('lamps') });
+  const lampMat = M.lampMaterial();
+  const lamps = await makeLods(lampsUrl, LAMP_KINDS, G.lanterns.lists, lampMat, [60], { lodScale, ...nearOf('lamps') });
   lamps.name = 'lamps';
   lamps.traverse((o) => { o.castShadow = o.isMesh; });
   scene.add(lamps);
@@ -609,6 +612,13 @@ export async function create(canvas, opts = {}) {
   wayside.traverse((o) => { o.castShadow = o.isMesh; });
   scene.add(wayside);
   lodGroups.push(wayside);
+  // what stands in the farmhouses' yards (yard.js): the lamps' material (vertex colours, the photographed timber,
+  // straw and stone), casting shadows as the wayside's stones do
+  const yard = await makeLods(yardUrl, YARD_KINDS, G.village.yard.lists, lampMat, [40], { lodScale });
+  yard.name = 'yard';
+  yard.traverse((o) => { o.castShadow = o.isMesh; });
+  scene.add(yard);
+  lodGroups.push(yard);
   const shelterRoofs = new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(G.village.waysideRoofs, 3)), new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide }));
   shelterRoofs.name = 'waysideRoofs';
   shelterRoofs.layers.set(FAR_LAYER);
@@ -785,7 +795,7 @@ export async function create(canvas, opts = {}) {
   // ---------- walking: first person along the lanes (walk.js); the walker's body (walker.js) loaded on first use ----------
   // what stands by the paths for the walker to go round: the riverside's lamps, the stone lanterns (not the temple's
   // hanging ones), the boulders, the trees' trunks (the woods' with room for their lowest boughs), the bamboo's
-  // stands, the torii's pillars (walk.js keeps those near a path)
+  // stands, the torii's pillars, what stands in the farmhouses' yards (walk.js keeps those near a path)
   const walkObstacles = [];
   const instances = (l, r) => { for (let i = 0, m = l.matrix; i < l.n; i++) walkObstacles.push({ x: m[i * 16 + 12], z: m[i * 16 + 14], r: r * Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2]) }); };
   G.lanterns.lists.forEach((l, k) => instances(l, [0.16, 0.3, 0.5][k])); // post, bonbori, kagaribi
@@ -795,7 +805,7 @@ export async function create(canvas, opts = {}) {
     if (a[i + 1] - world.heightFast(a[i], a[i + 2]) < 2.5) walkObstacles.push({ x: a[i], z: a[i + 2], r: 0.55 });
   }
   for (const b of G.rocks.blockers) if (b.sc > 0.3) walkObstacles.push({ x: b.x, z: b.z, r: b.sc * 0.9 });
-  walkObstacles.push({ x: TX, z: TZ, r: 0.8 }, ...Lay.small.map((sp) => ({ x: sp.x, z: sp.z, r: 0.6 * sp.s })));
+  walkObstacles.push({ x: TX, z: TZ, r: 0.8 }, ...Lay.small.map((sp) => ({ x: sp.x, z: sp.z, r: 0.6 * sp.s })), ...G.village.yard.posts);
   const toriiList = G.village.lists[VILLAGE_KINDS.indexOf('torii')], tm = new THREE.Matrix4();
   for (let i = 0; i < toriiList.n; i++) {
     tm.fromArray(toriiList.matrix, i * 16);
