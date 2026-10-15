@@ -180,7 +180,7 @@ def hexring(z, r):
 
 def post(level):
     far, near = level == '_far', level == '_near'
-    k = Kit(PALETTE)
+    k = Kit(PALETTE, pane=False)
     rng = random.Random(3)
     if near:
         # checks: (axis, side, across, z0, z1), z from the post's middle 1.2 m up
@@ -236,7 +236,7 @@ def washi(seed):
 
 def bonbori(level):
     far, near = level == '_far', level == '_near'
-    k = Kit(PALETTE)
+    k = Kit(PALETTE, pane=False)
     if near:
         col, disp = stone_face(5, 0.057)
         k.lattice_box((0.34, 0.34, 0.26), V((0, 0, 0.03)), (6, 6, 4), col, disp, skip=('-z',), smooth=False)
@@ -339,7 +339,7 @@ def split_log(k, p0, p1, w, h, base, rng, ember):
 
 def kagaribi(level):
     far, near = level == '_far', level == '_near'
-    k = Kit(PALETTE)
+    k = Kit(PALETTE, pane=False)
     rng = random.Random(7)
     seg = 5 if far else 10 if near else 7
     # three legs splayed on the ground, crossing under the basket

@@ -135,7 +135,7 @@ def split_log(k, a, b, r, rng, far):
 
 
 def maki(far):
-    k = Kit()
+    k = Kit(pane=False)
     rng = random.Random(11)
     L, D, H = 1.8, 0.42, 1.15
     with kind(k, K_WOOD):
@@ -169,7 +169,7 @@ def maki(far):
 
 # ---------- ido: the well ----------
 def ido(far):
-    k = Kit()
+    k = Kit(pane=False)
     rng = random.Random(12)
     R, Hc = 0.55, 0.72  # the curb's outer radius, its height
     seg = 10 if far else 20
@@ -236,7 +236,7 @@ def leaf(k, base, d, length, width, c):
 
 
 def hatake(far):
-    k = Kit()
+    k = Kit(pane=False)
     rng = random.Random(13)
     L, W, n = 3.0, 2.2, 5
     with kind(k, K_NONE):
@@ -331,7 +331,7 @@ def cloth(k, top, width, drop, c, far, sag=0.0, stripes=None):
 
 
 def hoshi(far):
-    k = Kit()
+    k = Kit(pane=False)
     L, H = 3.4, 1.85
     with kind(k, K_NONE):
         # crossed bamboo stakes at each end, the pole in their fork
@@ -369,7 +369,7 @@ def sheaf(k, a, b, r, rng, far):
 
 
 def wara(far):
-    k = Kit()
+    k = Kit(pane=False)
     rng = random.Random(15)
     with kind(k, K_WOOD):
         for x in (-0.6, 0.0, 0.6):
@@ -406,7 +406,7 @@ def woven(seed, c):
 
 
 def kago(far):
-    k = Kit()
+    k = Kit(pane=False)
     seg = 10 if far else 20
     with kind(k, K_NONE):
         # a tall basket for carrying on the back (shoi-kago), its rim bound
@@ -431,7 +431,7 @@ def kago(far):
 
 # ---------- kuruma: the handcart ----------
 def kuruma(far):
-    k = Kit()
+    k = Kit(pane=False)
     R = 0.46  # the wheels' radius; the axle across x at y = 0
     # the bed tilts down to the front, where the shafts' ends lie on the ground
     tip = V((0, -1.75, 0.04))
@@ -481,7 +481,7 @@ def kuruma(far):
 
 # ---------- usu: the stone mortar ----------
 def usu(far):
-    k = Kit()
+    k = Kit(pane=False)
     seg = 10 if far else 20
     with kind(k, K_STONE):
         # a block of granite rounded at its shoulders, the bowl worn into its top

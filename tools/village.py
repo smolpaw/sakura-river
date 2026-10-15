@@ -66,13 +66,14 @@ def surface_kind(c, glow=0.0, palette=PALETTE):
 class Kit:
     """Parts into one bmesh, each vertex its colour and glow (alpha); flat faces unless smooth."""
 
-    def __init__(self, palette=PALETTE):
+    def __init__(self, palette=PALETTE, pane=True):
         self.palette = palette  # (colour, kind) pairs surface_kind picks from
         self.bm = bmesh.new()
         self.col = self.bm.verts.layers.float_color.new('Color')
         self.kind = self.bm.verts.layers.float.new('_KIND')
-        # the shoji's paper: where on it a vertex lies, for the page's lattice and lamplight (paper(); 0 elsewhere)
-        self.pane = self.bm.verts.layers.float_vector.new('_PANE')
+        # the shoji's paper: where on it a vertex lies, for the page's lattice and lamplight (paper(); 0 elsewhere).
+        # Only the buildings, whose material (villageMaterial) reads it; models without paper pass pane=False.
+        self.pane = self.bm.verts.layers.float_vector.new('_PANE') if pane else None
         self.force = None  # a kind for the parts made meanwhile, in place of surface_kind's guess
 
     def paint(self, v, c, glow):
