@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { build } from 'vite';
 import { BENCH } from './lib/serve.mjs';
-import { noBundledTranscoder } from '../vite.config.js';
+import { noBundledTranscoder } from '../vite.plugins.mjs';
 
 const ROOT = path.resolve(BENCH, '..');
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();

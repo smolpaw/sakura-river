@@ -5,8 +5,10 @@
 // compressed in GPU memory, and nothing is decoded or mipmapped on the main thread. The surface kinds' sets (those with
 // a `layer`) come as the layers of two array textures (kinds_diff, kinds_nor), the others as single ones.
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { LoadingManager } from 'three/webgpu';
+import { assetUrl } from './assets.js';
 
-const url = (n) => new URL(`textures/${n}.ktx2`, document.baseURI).href;
+const url = (n) => assetUrl(`textures/${n}.ktx2`);
 
 // On desktop Linux, Mesa's drivers offer ETC2 and ASTC on GPUs without them and decompress such textures in the driver
 // (three's KTX2Loader avoids them there for WebGLRenderer only): where BC is offered too, the transcoder sticks to BC.
@@ -22,7 +24,9 @@ function formats(loader) {
 export function loadPhotos(renderer, meta) {
   let loader;
   try {
-    loader = new KTX2Loader().setTranscoderPath(new URL('basis/', document.baseURI).href).detectSupport(renderer);
+    // (the transcoder's two files by their versioned URLs: assets.js)
+    const manager = new LoadingManager().setURLModifier((u) => (u.includes('/basis/basis_transcoder.') ? assetUrl(`basis/${u.split('/basis/')[1]}`) : u));
+    loader = new KTX2Loader(manager).setTranscoderPath(new URL('basis/', document.baseURI).href).detectSupport(renderer);
     formats(loader);
   } catch (e) {
     console.warn('photographed textures not loaded:', e && e.message);

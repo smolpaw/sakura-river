@@ -16,6 +16,7 @@
 // straightens up (`stretch`). She is there from 08:00 to 17:30 only, and not in rain over 0.5; he sits out drizzle
 // under his sedge hat and goes home in rain over 0.5 (his lantern's light leaves the light map: onLamp, main.js).
 import * as THREE from 'three/webgpu';
+import { assetUrl } from './assets.js';
 import { Fn, float, max, pow, dot, normalize, uniform, attribute, positionWorld, normalWorld, cameraPosition, diffuseColor, vec3 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { U, LitMaterial, lanternLight, sstep } from './tsl.js';
@@ -164,7 +165,7 @@ export function makeFigures(world, { uFocal, onLamp } = {}) {
   let fisherOut = true; // (his lantern starts in the light map: main.js)
   const said = { pos: new THREE.Vector3(), busy: false }; // voice()'s answer, reused
 
-  loadModel(new URL('models/figures.glb', document.baseURI).href).then((gltf) => {
+  loadModel(assetUrl('models/figures.glb')).then((gltf) => {
     const src = gltf.scene;
     const mats = {};
     const clip = (n) => gltf.animations.find((a) => a.name === n);

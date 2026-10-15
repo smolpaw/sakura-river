@@ -14,6 +14,7 @@
 // EYE_AHEAD), looking down past 80 degrees, it sees the hem and the geta stepping out as well. The hidden part is cut level at the chest (tools/human.py Z_CUT), closed by
 // a solid inside the robe so the view down never looks into it.
 import * as THREE from 'three/webgpu';
+import { assetUrl } from './assets.js';
 import { Fn, float, vec2, vec3, mix, abs, floor, fract, max, pow, dot, normalize, length, uniform, attribute, positionGeometry, normalGeometry, positionWorld, normalWorld, cameraPosition, diffuseColor } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -82,7 +83,7 @@ function walkerMaterial(at) {
 //   camera: with it, update() picks the full or the far model by its distance (else call setLevel)
 // Resolves to { group, setPose, setMotion, update, eye, onStep, setFirstPerson, setLevel, dispose }.
 export async function loadWalker(ctx = {}) {
-  const url = ctx.url || new URL('models/human.glb', document.baseURI).href;
+  const url = ctx.url || assetUrl('models/human.glb');
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url);
   const root = gltf.scene;
   root.updateMatrixWorld(true);

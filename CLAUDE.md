@@ -16,6 +16,7 @@ Procedural Three.js scene. README.md has the commands, the file layout and the e
 - `three` is pinned. The materials subclass three internals (`PhysicalLightingModel`), `main.js` wraps `renderer._getFallback` and the backend's `createAttribute` and `updateAttribute` (`uploadBehindViews`), and `lods.js` patches `WGSLNodeBuilder.getUniformFromNode`. After any upgrade, copy its Basis transcoder (`node tools/textures.mjs --transcoder`) and check the look and `createMs`.
 - The time of day doesn't tick (owner decision): only the time-lapse to a newly picked time moves it. Don't propose a running clock.
 - `src/ui.js` is page wiring only; scene logic goes in the engine modules behind `create()`.
+- Fetch files from `public/` by `assetUrl` (`src/assets.js`): the service worker keeps only their versioned URLs, so a plain one is fetched again on every visit.
 
 ## TSL traps
 
@@ -37,6 +38,7 @@ There are no automated tests: look at the scene with `pnpm dev`, or capture it h
 - Feature-specific capture scripts (each documents its usage at its top): `bench/walk-look.mjs`, `bench/figures-look.mjs`, `bench/perched-look.mjs`, `bench/birds-look.mjs`, `bench/fauna-look.mjs`, `bench/clocks-look.mjs`; for the sound, `bench/sound-check.mjs` (the music, the one-shots and the loops through `soundInfo`). The engine handle's debug hooks (`setView`, `tick`, `simulate`, `*Info()`, `walkTo`, …) are commented where `src/main.js` returns it. `create(canvas, { manual: true })` disables the RAF loop.
 - Skinned meshes (the traveller, the people, the deer) update their bones once per browser frame. Headless, render one frame per `requestAnimationFrame` before capturing them; otherwise the frames of one `tick(n)` pose them where the first frame had them.
 - The page's own behaviour (links, photo mode, the time slider, reduced motion, a change of the device pixel ratio): `pnpm build && BENCH_HEADLESS=1 node bench/page-check.mjs`.
+- The service worker (repeat visits, a new deploy): `pnpm build && BENCH_HEADLESS=1 node bench/sw-check.mjs`.
 - Start-up on weaker devices: `pnpm build && BENCH_HEADLESS=1 node bench/device-probe.mjs <webgl|webgl-soft|gpu|compat|soft> [quality] [--cpu 4]`. Headless WebGPU loses its device within seconds, so run `gpu` and `compat` headed, without `BENCH_HEADLESS`, under `bench/gpu.sh`.
 
 ## Publishing

@@ -19,6 +19,16 @@ The page must be served over HTTP to load the sounds (`dist/audio/`), the walker
 
 Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender models; needs `blender` on the PATH or `BLENDER=`) and `node tools/audio.mjs` (the sounds; needs ffmpeg).
 
+## Repeat visits
+
+The built site registers a service worker (`src/sw.js`, written into `dist/sw.js` by the build) once the scene shows. GitHub Pages gives every file a new ETag on each deploy, so without it a returning visitor fetched everything again after any push.
+
+- The page itself always comes from the network (revalidated, so an unchanged page costs a 304); the kept copy is used only offline. A deploy is therefore seen on the next load.
+- The files from `public/` (textures, transcoder, models, the sounds fetched whole) are asked for as `<file>?v=<content hash>` (`src/assets.js`; the build puts the hashes into the page and the worker) and served from the worker's cache once fetched. The textures, the transcoder and the people's model are kept as soon as the worker installs; the rest as the page first asks for them.
+- A deploy that changes a file changes its URL, so a new page never gets an old copy, even while the previous worker still runs it. Each deploy's `sw.js` differs, so the browser installs the new worker on the next visit; it takes over at once and drops the files its build no longer lists. Unchanged files keep their URLs and stay cached across deploys.
+- The music streams through media elements with byte-range requests, which the worker leaves to the network (and the browser's cache).
+- Opened as a file, or under `pnpm dev`, the page registers no worker. `pnpm build && BENCH_HEADLESS=1 node bench/sw-check.mjs` checks a first visit, a reload, a new deploy and a reload of it.
+
 ## Controls
 
 Drag to look round, scroll or pinch to zoom, right-drag to pan. Buttons: Cinematic (a flight round the valley), Orbit, Walk and Reset view. In walk mode, W A S D or the arrow keys walk, the mouse looks (click to lock the pointer, Esc to release it), and Shift hurries. On touch screens, the left thumb walks and the right one looks.
@@ -44,6 +54,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - Animals and people: `koi.js`, `deer.js`, `heron.js`, `ducks.js`, `turtles.js`, `frogs.js`, `tanuki.js`, `birds.js`, `perched.js`, `butterflies.js`, `figures.js`.
 - Walk mode: `walk.js` (the path network and the input), `walker.js` (the traveller's body).
 - `src/audio.js`: music and ambience.
+- `src/assets.js`, `src/sw.js`: the versioned URLs of the files from `public/` and the service worker that keeps them (Repeat visits). `vite.plugins.mjs`: the build's plugins (the files' hashes, `dist/sw.js`, three's transcoder kept out of the page).
 - `src/models/`: models inlined in the page. `public/models/`: models fetched later (the traveller, the people at work, the Ultra tier's near models). `public/audio/`: sounds. `public/textures/`: photographed textures. `public/basis/`: three's Basis transcoder for them.
 - `tools/`: model, audio and texture build scripts. `bench/`: headless capture and timing scripts. `docs/performance.md`: renderer performance notes.
 

@@ -8,6 +8,7 @@
 // Each re-sort also culls the instances outside the view (makeView) for the camera's and the river reflection's
 // passes; the shadow passes still draw every instance (docs/performance.md, "Frustum culling").
 import * as THREE from 'three/webgpu';
+import { assetUrl } from './assets.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -155,7 +156,7 @@ export function loadModel(url) {
 
 // the Ultra tier's near models of tools/<name>.py: a file in public/ fetched on demand, its URL built as audio.js
 // builds the sounds' so the page's base path holds (GitHub Pages serves the page under /sakura-river/)
-export const ultraUrl = (name) => new URL(`models/${name}-ultra.glb`, document.baseURI).href;
+export const ultraUrl = (name) => assetUrl(`models/${name}-ultra.glb`);
 
 // lists[k]: the instances of kinds[k] ({ matrix, color, n }). Options:
 // - leavesMat: a kind's `<kind>_leaves` model (the woods' leaf cards) is drawn with its near and full models' instances;

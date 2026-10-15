@@ -389,6 +389,13 @@ import { WEATHERS, TIMES } from './weather.js';
   $('notice-low').addEventListener('click', function () { save('sr.autoTier', 'low'); location.reload(); });
   $('notice-close').addEventListener('click', function () { $('notice').hidden = true; });
 
+  // The service worker (src/sw.js, put into the build by vite.config.js) keeps the files from public/, so a repeat
+  // visit fetches only the page. Registered once the scene shows: its first fill comes from the browser's cache.
+  function keepFiles() {
+    if (!import.meta.env.PROD || !('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+    navigator.serviceWorker.register('sw.js').catch(function (err) { console.warn('service worker not registered:', err && err.message); });
+  }
+
   function start() {
     var fixed = quality !== 'auto';
     create($('scene'), {
@@ -431,6 +438,7 @@ import { WEATHERS, TIMES } from './weather.js';
       setInterval(function () { showTime(); watchLink(); }, 250);
       $('veil').classList.add('done');
       wake();
+      keepFiles();
     }).catch(function (err) {
       console.error(err);
       if (err && err.code === 'unsupported') {

@@ -11,6 +11,7 @@
 // diffuse tail). Music streams through two media elements that crossfade, each track chosen for the scene's mood.
 // Files: public/audio/, built by tools/audio.mjs. Nothing is fetched or created until sound is turned on.
 import { clamp, lerp, smoothstep } from './noise.js';
+import { assetUrl } from './assets.js';
 
 // the music (tools/audio.mjs prints each track's loudness and seams): loudness (LUFS) and seams (s, where a phrase
 // ends and a change of mood may crossfade); it plays at MUSIC_LUFS at full volume, the loops are levelled to -24 LUFS.
@@ -61,8 +62,7 @@ const TICK = 0.1; // mix update interval, s
 
 // world: river, temple, village and farmland (src/world.js); bridge: the bridge's centre (a Vector3)
 export function createSound(world, bridge) {
-  const base = new URL('audio/', document.baseURI);
-  const url = (name) => new URL(name + '.mp3', base).href;
+  const url = (name) => assetUrl(`audio/${name}.mp3`);
   let ctx = null, on = false, dead = false;
   let master, natureBus, musicBus, duckGain, verb, riverLP, riverPan, lapLP, lapPan, wheelLP, wheelPan, frogPan, bambooPan, larkPan;
   let roofLP, roofPan, splashLP, splashPan;
