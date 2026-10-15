@@ -1,4 +1,5 @@
-# Builds the single-file page and publishes dist/ to GitHub Pages on every push to main.
+# Builds the single-file page, checks that the scene starts in it, and publishes dist/ to GitHub Pages on every push to
+# main. A build whose scene does not start (bench/check-dist.mjs) is not published.
 name: Pages
 
 on:
@@ -29,6 +30,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # the built site headless in the runner's Chrome, on the WebGL2 fallback in SwiftShader (no GPU here: slow)
+      - name: Check that the scene starts
+        run: node bench/check-dist.mjs
+        env:
+          CHROME: /usr/bin/google-chrome
+        timeout-minutes: 20
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

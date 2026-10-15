@@ -6,7 +6,7 @@ A full-screen, interactive Three.js scene of a Japanese river valley in spring: 
 
 Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the boulders (scanned rocks, simplified in Blender), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel), and the sound (recordings); all are credited below.
 
-Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
+Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys, once a headless check finds the scene starting: `bench/check-dist.mjs`).
 
 ## Develop
 

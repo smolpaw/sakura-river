@@ -43,5 +43,5 @@ There are no automated tests: look at the scene with `pnpm dev`, or capture it h
 
 ## Publishing
 
-- Pushing to `main` publishes to https://smolpaw.github.io/sakura-river/ (`.github/workflows/pages.yml`).
+- Pushing to `main` publishes to https://smolpaw.github.io/sakura-river/ (`.github/workflows/pages.yml`) unless the scene fails to start headless on SwiftShader; run that check first: `pnpm build && node bench/check-dist.mjs` (~2 min).
 - Don't publish anything to claude.ai (owner decision).
