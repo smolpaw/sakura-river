@@ -116,6 +116,29 @@ function openingView(v) {
   if (ok(v.walk, 2)) return { walk: [v.walk[0], v.walk[1], ok(v.walk, 3) ? v.walk[2] : 0, ok(v.walk, 4) ? v.walk[3] : 0] };
   return null;
 }
+// three keeps one GPU buffer per InterleavedBuffer but records uploads per InterleavedBufferAttribute, its views of
+// it. A view made after the buffer's data changed (a shader built for a new pass, or rebuilt) finds the GPU buffer
+// there, skips the upload and is recorded as current, so a draw through it keeps the old contents until the data
+// changes again. An InstancedMesh with more matrices than a uniform buffer holds reads them through such views, one
+// set per shader build. The main cherry's flowers (blossoms.js) rewrite theirs in the frame a pass first draws them
+// (the first fill, the first approach in a bench run); with the old contents the near model's flowers were missing
+// and the cards kept the old order under the new colours, atlas cells, bends and crown light. Here a new view
+// uploads when its buffer is behind. Wraps the backend's createAttribute and updateAttribute (both backends); should
+// an upgrade upload there itself, this adds a redundant upload.
+function uploadBehindViews(renderer) {
+  const B = renderer.backend, create = B.createAttribute, update = B.updateAttribute, written = new WeakMap();
+  B.updateAttribute = function (a) {
+    update.call(this, a);
+    if (a.isInterleavedBufferAttribute) written.set(a.data, a.data.version);
+  };
+  B.createAttribute = function (a) {
+    create.call(this, a);
+    if (!a.isInterleavedBufferAttribute) return;
+    const had = written.get(a.data);
+    if (had === undefined) written.set(a.data, a.data.version);
+    else if (had !== a.data.version) B.updateAttribute(a);
+  };
+}
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export async function create(canvas, opts = {}) {
@@ -157,6 +180,7 @@ export async function create(canvas, opts = {}) {
   const backendName = backendNow = renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
   shareInstancedPipelines(renderer); // one shader build and pipeline per material for the instanced models (lods.js)
   discardMultisampleStores(renderer); // the scene pass's multisampled colour not written out after its resolve (post.js)
+  uploadBehindViews(renderer); // a shared vertex buffer uploaded when a new view of it finds it behind (three tracks views)
   // on the WebGL2 fallback the bench probe runs its own timer queries (three's cannot time nested passes)
   if (backendName === 'webgl' && opts.bench) renderer.backend.trackTimestamp = false;
   const tierName = tierNow = opts.quality || detectTier(renderer);
