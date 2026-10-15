@@ -352,13 +352,33 @@ export function createWorld(seed = 7) {
   // of a grove, a lone tree now and then out in the meadow, none on the valley floor, round the cherry tree, at the
   // temple or on the farmland
   const NG = makeNoise(31);
-  function grove(x, z, gn) {
+  // (gn, wl: the grove noise and wild() at the point, when the caller has them)
+  function grove(x, z, gn, wl) {
+    const open = wl ?? wild(x, z);
+    return open && open * Math.max(0.003, smoothstep(0.24, 0.34, gn ?? groveN(x, z)));
+  }
+  // where trees may grow at all (0..1): off the valley floor, away from the cherry tree, the temple, the farmland and
+  // the farmhouses' pads
+  function wild(x, z) {
     let open = smoothstep(40, 56, Math.abs(x - riverX(z)) - Math.max(0, -z) * 0.05) * smoothstep(85, 105, hyp(x + 10, z - 10)) * smoothstep(8, 16, templeDist(x, z));
     if (open > 0) { const zm = zoneAt(x, z); if (zm) open *= 1 - zm.m; }
     if (open > 0) for (const b of BUILDINGS) if (Math.abs(x - b.x) < 30 && Math.abs(z - b.z) < 30) open *= smoothstep(4, 9, padDist(b, x, z));
-    return open && open * Math.max(0.003, smoothstep(0.24, 0.34, gn ?? groveN(x, z)));
+    return open;
   }
   const groveN = (x, z) => NG.fbm2(x * 0.009, z * 0.009, 3);
+  // scrub out on the open hills (0..1): thickets of low bushes in patches over the slopes, more of them where the
+  // ground is steeper (ny: the ground normal's y), and a band of undergrowth along the groves' edges (the ground
+  // darkens there and its grass thins, groundCover; vegetation.js shrubData puts shrubs in it)
+  const NS = makeNoise(77);
+  function scrub(x, z, gn, wl, ny = 1) {
+    const open = wl ?? wild(x, z);
+    if (!open) return 0;
+    const g = open * smoothstep(0.24, 0.34, gn ?? groveN(x, z));
+    const edge = smoothstep(0.0, 0.06, g) * smoothstep(0.55, 0.2, g);
+    const patch = smoothstep(0.2, 0.45, NS.fbm2(x * 0.021 + 3, z * 0.021 - 8, 3));
+    const steep = ny < 0.94 ? smoothstep(0.94, 0.82, ny) * smoothstep(-0.3, 0.1, NS.fbm2(x * 0.03 + 17, z * 0.03, 2)) : 0;
+    return open * Math.max(edge * 0.85, patch, steep);
+  }
 
   function riverInfo(x, z) {
     const rx = riverX(z), hw = riverHW(z);
@@ -373,9 +393,9 @@ export function createWorld(seed = 7) {
   }
 
   // ---------- the ground's colour and its grass ----------
-  // At (x, y, z) with the ground's normal ny: its colour (meadow, banks, sand, rock, the hills' patchwork, lanes,
+  // At (x, y, z) with the ground's normal ny: its colour (meadow, banks, sand, rock, the hills' patchwork and scrub, lanes,
   // yards, the woods' floor, alpine and snow) and the grass grown there: none in the water, on rock, on the temple's
-  // gravel, the lanes and yards or high up; thin and short on the woods' floor; in patches, longer by the river
+  // gravel, the lanes and yards or high up; thin and short on the woods' floor and in the scrub; in patches, longer by the river
   // (reeds) and in the valley than out on the hills; tint 0 lush .. 1 straw.
   const c = new THREE.Color();
   const grassA = new THREE.Color(0.20, 0.34, 0.075), grassB = new THREE.Color(0.34, 0.44, 0.10), grassDry = new THREE.Color(0.45, 0.45, 0.18);
@@ -384,6 +404,8 @@ export function createWorld(seed = 7) {
   // the hills' patchwork: straw (times the ground's brightness), and tints multiplying the ground's colour
   const straw = new THREE.Color(1.5, 1.3, 0.62), fresh = new THREE.Color(1.1, 1.22, 0.7), lush = new THREE.Color(0.55, 0.74, 0.55), one = new THREE.Color(1, 1, 1), tint = new THREE.Color();
   const forest = new THREE.Color(0.07, 0.13, 0.05), woodFloor = new THREE.Color(0.045, 0.07, 0.03), snow = new THREE.Color(0.92, 0.94, 0.98), alpine = new THREE.Color(0.20, 0.22, 0.12);
+  // scrub: dark olive bushes and the brown of their dead stems and leaf litter between
+  const scrubA = new THREE.Color(0.075, 0.11, 0.035), scrubB = new THREE.Color(0.12, 0.1, 0.05);
   const tmp = new THREE.Color();
   function groundCover(x, y, z, ny) {
     const ri = riverInfo(x, z);
@@ -409,13 +431,16 @@ export function createWorld(seed = 7) {
     // out on the hills (the tall grass covers the ground round the cherry tree): a patchwork of last year's straw,
     // fresh growth, and darker, lusher grass in clumps, in the hollows and round the groves
     const out = smoothstep(75, 115, hyp(x + 10, z - 10)) * smoothstep(1.8, 2.6, ri.t) * (1 - steep);
-    const gn = out > 0 ? groveN(x, z) : undefined;
+    const wl = wild(x, z), gn = out > 0 || wl > 0 ? groveN(x, z) : undefined;
     if (out > 0) {
       const hollow = smoothstep(0.1, -0.35, N.fbm2(x * 0.006 + 5, z * 0.006 - 2, 2));
       c.multiply(tint.copy(one).lerp(fresh, out * smoothstep(0.05, -0.3, dry)));
       c.lerp(tint.copy(straw).multiplyScalar(0.3 * c.r + 0.6 * c.g + 0.1 * c.b), out * smoothstep(0.0, 0.35, dry) * (1 - hollow) * 0.85);
       c.multiply(tint.copy(one).lerp(lush, out * Math.max(hollow, smoothstep(0.06, 0.24, gn), smoothstep(-0.1, -0.45, N2.noise2(x * 0.07, z * 0.07)) * 0.7)));
     }
+    // scrub on the open hills and along the groves' edges, its grass thinned (below)
+    const sc = wl > 0 ? scrub(x, z, gn, wl, ny) * (1 - 0.4 * steep) * smoothstep(3, 8, y) * smoothstep(165, 140, y) : 0;
+    if (sc > 0) c.lerp(tint.copy(scrubA).lerp(scrubB, clamp(0.5 + n2, 0, 1)), smoothstep(0.05, 0.5, sc) * 0.9);
     // the lanes: bare earth, worn into the grass
     const ld = laneDist(x, z);
     c.lerp(dirt, smoothstep(1.9, 1.1, ld) * (0.8 + 0.2 * n2));
@@ -424,7 +449,7 @@ export function createWorld(seed = 7) {
     const yard = pad ? smoothstep(1.2, 0.0, pad.d) : 0;
     c.lerp(dirt, yard * (0.75 + 0.25 * n2));
     // shaded floor under the groves' trees
-    c.lerp(woodFloor, grove(x, z, gn) * 0.75 * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y));
+    c.lerp(woodFloor, grove(x, z, gn, wl) * 0.75 * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y));
     // mountains: alpine -> rock -> snow
     if (y > 90) {
       c.lerp(alpine, smoothstep(90, 170, y) * (1 - steep));
@@ -435,13 +460,14 @@ export function createWorld(seed = 7) {
     }
     // the grass: none in the water, on rock, on the temple's gravel or high up; thin and short on the woods' floor;
     // in patches, longer by the river (reeds) and in the valley than out on the hills; tint 0 lush .. 1 straw
-    const woods = grove(x, z, gn) * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y);
-    let dens = smoothstep(0.08, 0.3, y) * smoothstep(0.7, 0.86, ny) * (1 - 0.8 * woods) * smoothstep(170, 110, y) * smoothstep(0.3, 1.5, templeDist(x, z));
+    const woods = grove(x, z, gn, wl) * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y);
+    let dens = smoothstep(0.08, 0.3, y) * smoothstep(0.7, 0.86, ny) * (1 - 0.8 * woods) * (1 - smoothstep(0.1, 0.55, sc)) * smoothstep(170, 110, y) * smoothstep(0.3, 1.5, templeDist(x, z));
     dens *= clamp(0.82 + 0.6 * n1, 0.4, 1);
     const nearBank = smoothstep(1.4, 1.0, ri.t);
     let len = clamp(0.55 + 0.45 * N2.fbm2(x * 0.08, z * 0.08, 3), 0.25, 1) * lerp(1, 0.55, out) * (1 - 0.6 * woods) + nearBank * 0.35;
     let gTint = clamp(0.35 + clamp(dry * 0.6 - 0.05, 0, 0.45) * 0.6 - 0.25 * bankT, 0, 1);
-    if (out > 0) gTint = clamp(gTint + out * (smoothstep(0.0, 0.35, dry) * 0.4 - 0.3 * Math.max(smoothstep(0.06, 0.24, gn), smoothstep(-0.1, -0.45, N2.noise2(x * 0.07, z * 0.07)))), 0, 1);
+    if (out > 0) gTint = clamp(gTint + out * (smoothstep(0.0, 0.35, dry) * 0.4 - 0.3 * Math.max(smoothstep(0.06, 0.24, gn), smoothstep(-0.1, -0.45, N2.noise2(x * 0.07, z * 0.07)))
+      + 0.45 * NS.fbm2(x * 0.011 + 9, z * 0.011, 2)), 0, 1); // (and in broad swathes lusher or paler)
     dens *= smoothstep(1.3, 2.3, ld); // none on the lanes
     dens *= 1 - yard;
     // reeds (yoshi) in clumps where the bank meets the river, some standing in the shallows: grass.js grows them where
@@ -709,7 +735,7 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = HC.data, k = j * HC.nx + i;
     return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + HC.nx] * (1 - u) + d[k + HC.nx + 1] * u) * v;
   }
-  return { N, height, heightField, zoneAt, padAt, padDist, BUILDINGS, ground, LANES, CLEAR, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove };
+  return { N, height, heightField, zoneAt, padAt, padDist, BUILDINGS, ground, LANES, CLEAR, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove, wild, scrub };
 }
 
 // water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map (G = rock foam)

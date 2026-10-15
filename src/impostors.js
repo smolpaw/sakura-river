@@ -5,7 +5,7 @@
 // one looked up where the card's point projects into it, so turning round a tree morphs it instead of flicking.
 //
 // Hemisphere views on an octahedral grid (N x N, the horizon on its edge): grid point (i, j) is the direction decoded
-// from (i, j) / (N - 1). Per kind an N x N block of S-pixel cells; the kinds in a 3 x 2 atlas. Colour is stored as its
+// from (i, j) / (N - 1). Per kind an N x N block of S-pixel cells; the kinds in a 4 x 2 atlas. Colour is stored as its
 // square root (8 bits keep the dark woods' shades), both atlases premultiplied by coverage (cleared to 0), so mip
 // filtering and blending leave no dark fringe: divided back out when drawn.
 import * as THREE from 'three/webgpu';
@@ -17,7 +17,7 @@ import { U, LitMaterial } from './tsl.js';
 import { sunShadowAt } from './sunshadow.js';
 import { forestLight } from './materials.js';
 
-const N = 8, COLS = 3, ROWS = 2;
+const N = 8, COLS = 4, ROWS = 2;
 // grid coordinates (0..N-1 each way) -> view direction, in the shaders
 const decodeGrid = (g) => {
   const p = g.div(N - 1).mul(2.0).sub(1.0);

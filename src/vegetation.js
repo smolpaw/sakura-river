@@ -181,7 +181,7 @@ export function makeFlowers(d, mat) {
 }
 
 // ---------- rocks ----------
-// Boulders along the banks and in the shallows, stones at the water's edge: Blender models (lods.js, tools/rocks.py),
+// Boulders along the banks, in the shallows and in outcrops on the hills, stones at the water's edge: Blender models (lods.js, tools/rocks.py),
 // a boulder about 2.5 × 2 × 1.2 round its origin at scale 1, the stone the same shape.
 export const ROCK_KINDS = ['rock0', 'rock1', 'rock2', 'rock3', 'rock4'];
 
@@ -296,13 +296,14 @@ export function stoneJoints(l, { position, normal }) {
 }
 
 // pebble: the pebble model's vertices (lods.js modelVertices), for the walls' joints (stoneJoints)
+const OUTCROPS = 45; // rock outcrops on the hills (rocksData)
 export function rocksData(world, tier, treePos, pebble) {
   const { rng, placements, pebbles, rocksInWater } = rockPlan(world, tier, treePos);
   const isPebble = new Set(pebbles);
   const all = placements.concat(pebbles);
   const byV = ROCK_KINDS.map(() => []);
   all.forEach((p) => byV[p.v].push(p));
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
+  const m = new THREE.Matrix4(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
   const lists = ROCK_KINDS.map(() => ({ m: [], c: [] })), stones = { m: [], c: [] };
   // one pass in the old order, so the rng sequence (and every stone's pose and tint) stays as it was
   byV.forEach((list, vi) => list.forEach((r) => {
@@ -314,6 +315,28 @@ export function rocksData(world, tier, treePos, pebble) {
     const l = isPebble.has(r) ? stones : lists[vi];
     l.m.push(...m.elements); l.c.push(tint, tint * (0.97 + rng() * 0.05), tint * (0.93 + rng() * 0.08));
   }));
+  // outcrops on the hills: two to five boulders, two and a half to ten metres across, set deep into the steeper slopes where
+  // the ground shows rock (world.js groundCover), off the valley floor (their own random numbers: the rest stand as
+  // they would without them)
+  const r3 = mulberry32(2468);
+  const slope = (x, z, e = 3) => 1 / Math.hypot((world.height(x + e, z) - world.height(x - e, z)) / (2 * e), (world.height(x, z + e) - world.height(x, z - e)) / (2 * e), 1);
+  for (let t = 0, n = 0; t < 6000 && n < OUTCROPS; t++) {
+    const x = lerp(-420, 420, r3()), z = lerp(-520, 140, r3());
+    const ny = slope(x, z), y = world.height(x, z);
+    if (ny < 0.5 || ny > 0.86 || y < 8 || y > 150 || world.wild(x, z) < 0.9 || world.grove(x, z) > 0.5) continue;
+    n++;
+    for (let i = 0, m = 2 + Math.floor(r3() * 4); i < m; i++) {
+      const a = r3() * Math.PI * 2, d = i ? 3 + r3() * 6 : 0, xx = x + Math.cos(a) * d, zz = z + Math.sin(a) * d;
+      const sc = (i ? 1 : 2) + r3() * 2;
+      p.set(xx, world.height(xx, zz) - sc * 0.35, zz);
+      q.setFromEuler(new THREE.Euler((r3() - 0.5) * 0.6, r3() * 6.28, (r3() - 0.5) * 0.6));
+      s.set(sc, sc * (0.9 + r3() * 0.5), sc * (0.8 + r3() * 0.4));
+      m4.compose(p, q, s);
+      const tint = 0.75 + r3() * 0.3;
+      const l = lists[Math.floor(r3() * ROCK_KINDS.length)];
+      l.m.push(...m4.elements); l.c.push(tint, tint * (0.97 + r3() * 0.05), tint * (0.93 + r3() * 0.08));
+    }
+  }
   // the farmhouses' pads (world.js BUILDINGS): dry-stone walls (ishigaki) on the banks where a pad is built up or cut
   // into the slope by more than 40 cm: courses of rounded stones from the bank's foot to its top (the pebbles' stone,
   // ~4,000 of them, merged in groups by place: lods.js makeMerged)
@@ -528,15 +551,17 @@ export function shrubData(world, trees, clear = []) {
       n++;
     }
   }
-  // the woods' edges and the lanes' verges: dwarf bamboo and kerria, the odd azalea, in clumps
-  for (let t = 0; t < 60000 && placed.length < 1100; t++) {
+  // the woods' edges, the scrub on the hills (world.js scrub) and the lanes' verges: dwarf bamboo and kerria, the odd azalea, in clumps
+  for (let t = 0; t < 60000 && placed.length < 1200; t++) {
     const x = lerp(-220, 220, rng()), z = lerp(-330, 220, rng());
     const y = world.height(x, z);
     if (y < 0.5 || y > 130) continue;
-    const gr = world.grove(x, z), ld = world.laneDist(x, z);
-    const edge = smoothstep(0.02, 0.12, gr) * smoothstep(0.6, 0.3, gr), verge = smoothstep(6, 3, ld);
-    const clump = smoothstep(0.15, 0.5, nz.fbm2(x * 0.03, z * 0.03, 2) + 0.2);
-    if (rng() > Math.max(edge * 0.9, verge * 0.3) * clump) continue;
+    const wl = world.wild(x, z), gr = world.grove(x, z, undefined, wl), ld = world.laneDist(x, z);
+    let edge = smoothstep(0.02, 0.12, gr) * smoothstep(0.6, 0.3, gr);
+    const verge = smoothstep(6, 3, ld), clump = smoothstep(0.15, 0.5, nz.fbm2(x * 0.03, z * 0.03, 2) + 0.2), u = rng();
+    // (the scrub, the costliest test, only where it could let a shrub in)
+    if (wl > 0 && u < 0.72 * clump) edge = Math.max(edge, world.scrub(x, z, undefined, wl, flat(x, z, 4)) * 0.8);
+    if (u > Math.max(edge * 0.9, verge * 0.3) * clump) continue;
     const k = edge > verge ? (rng() < 0.6 ? SASA : rng() < 0.75 ? KER : AZ) : rng() < 0.6 ? KER : SASA;
     const h = k === SASA ? 0.7 + rng() * 0.5 : k === KER ? 1.2 + rng() * 0.6 : 0.8 + rng() * 0.6;
     const r = h * (k === SASA ? 1.1 : 0.75);
@@ -639,14 +664,32 @@ export function nanohanaData(world, { tree, small, turf, rocks = [], clear = [],
 }
 
 // ---------- woods on the hills ----------
-// A Japanese hillside in spring: dark stands of sugi (cedar) and hinoki (cypress), broadleaf woods in fresh green and
-// evergreen oak with wild cherries (yamazakura) flowering pale pink among them, all in groves with meadow between.
+// A Japanese hillside in early April: dark stands of sugi (cedar) and hinoki (cypress) among broadleaf woods in new
+// leaf, pale yellow-green konara oak, fresh green keyaki and maples, some of them reddish, dark evergreen oak (kashi),
+// with wild cherries (yamazakura) flowering pinkish-white among them; groves with meadow between, young trees along
+// their edges, and lone trees and small clumps out on the open slopes. Each tree has its own tint (forestTint).
 // Nothing grows on faces steep enough to show rock; black pines lean out from the cliff rims instead.
 // This places them; the kinds are Blender models, one unit tall (lods.js, tools/forest.py).
 // kinds: model names and height range (m)
-export const FOREST_KINDS = ['sugi', 'hinoki', 'konara', 'kashi', 'cherry', 'pine'];
-const SUGI = 0, HINOKI = 1, KONARA = 2, KASHI = 3, CHERRY = 4, PINE = 5;
-const HEIGHT = [[18, 8], [15, 8], [11, 6], [10, 5], [10, 6], [9, 4]];
+export const FOREST_KINDS = ['sugi', 'hinoki', 'konara', 'kashi', 'cherry', 'pine', 'keyaki', 'momiji'];
+const SUGI = 0, HINOKI = 1, KONARA = 2, KASHI = 3, CHERRY = 4, PINE = 5, KEYAKI = 6, MOMIJI = 7;
+const HEIGHT = [[18, 8], [15, 8], [11, 6], [10, 5], [10, 6], [9, 4], [14, 7], [7, 4]];
+// trees of one kind at most (each draw of a kind holds them all: lods.js makeLods)
+const PER_KIND = 1024;
+
+// a tree's tint (times its model's colours), from its kind and two random numbers: brightness, and the hue of its new
+// leaves (pale yellow-green to fresh green; the maples reddish, bronze or green; the cherries whiter or pinker)
+function forestTint(k, rng) {
+  const g = 0.85 + rng() * 0.3, h = rng();
+  const mix = (a, b, t) => a.map((x, i) => g * lerp(x, b[i], t));
+  switch (k) {
+    case KONARA: case KEYAKI: return mix([1.14, 1.05, 0.78], [0.88, 1.0, 1.06], h);
+    case KASHI: return h < 0.25 ? mix([1.25, 1.1, 0.85], [1.1, 1.05, 0.9], h * 4) : mix([0.95, 1.0, 1.0], [1.05, 1.0, 0.95], h);
+    case MOMIJI: return h < 0.3 ? mix([1.25, 0.75, 0.95], [1.1, 0.85, 0.95], h / 0.3) : h < 0.5 ? [g, g, g] : mix([0.75, 1.55, 1.1], [0.85, 1.7, 1.0], (h - 0.5) / 0.5);
+    case CHERRY: { const b = 0.92 + (g - 0.85) * 0.47; return [b, b * lerp(0.95, 1.02, h), b * lerp(0.97, 1.03, h)]; }
+    default: { const d = (h - 0.5) * 0.12; return [g * (1 + d), g, g * (1 - d)]; }
+  }
+}
 
 export function forestData(world, count) {
   const rng = mulberry32(555);
@@ -663,11 +706,13 @@ export function forestData(world, count) {
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const t of grid.get(`${cx + i},${cz + j}`) || []) if (Math.hypot(t.x - x, t.z - z) < r) return true;
     return false;
   };
-  const add = (k, x, y, z, a, hs = 1) => {
-    const t = { x, y, z, a, h: (HEIGHT[k][0] + rng() * HEIGHT[k][1]) * hs };
+  const add = (k, x, y, z, a, hs = 1, R = rng) => {
+    if (lists[k].length >= PER_KIND) return false;
+    const t = { x, y, z, a, h: (HEIGHT[k][0] + R() * HEIGHT[k][1]) * hs };
     lists[k].push(t);
     const key = `${Math.floor(x / cell)},${Math.floor(z / cell)}`;
     grid.set(key, [...(grid.get(key) || []), t]);
+    return true;
   };
   let tries = 0, n = 0;
   while (n < count && tries < count * 80) {
@@ -681,13 +726,12 @@ export function forestData(world, count) {
     // cedar and cypress are planted, so they stand in blocks (more of them higher up); broadleaf woods elsewhere
     const cedar = nz.fbm2(x * 0.02 - 7, z * 0.02 + 3, 2) + (y - 40) / 160;
     const r = rng();
-    const k = grove < 0.3 ? (r < 0.3 ? CHERRY : KONARA)
+    const k = grove < 0.3 ? (r < 0.3 ? CHERRY : r < 0.45 ? MOMIJI : KONARA)
       : cedar > 0.12 ? (r < 0.7 && grove > 0.55 ? SUGI : HINOKI) // tall sugi only inside a stand, never alone
-      : r < 0.16 ? CHERRY : r < 0.62 ? KONARA : r < 0.85 ? KASHI : HINOKI;
+      : r < 0.15 ? CHERRY : r < 0.47 ? KONARA : r < 0.57 ? KEYAKI : r < 0.67 ? MOMIJI : r < 0.85 ? KASHI : HINOKI;
     if (crowded(x, z, k <= HINOKI ? 4.5 : 6.5)) continue;
     // conifers shorter towards a stand's edge, so a stand rises to its middle instead of spikes standing out of it
-    add(k, x, y, z, rng() * Math.PI * 2, k <= HINOKI ? lerp(0.65, 1, smoothstep(0.3, 0.9, grove)) : 1);
-    n++;
+    if (add(k, x, y, z, rng() * Math.PI * 2, k <= HINOKI ? lerp(0.65, 1, smoothstep(0.3, 0.9, grove)) : 1)) n++;
   }
   // black pines on cliff rims: level ground with a drop of several metres just past it, leaning out over it
   for (let t = 0, pines = 0; t < 30000 && pines < 14; t++) {
@@ -706,16 +750,56 @@ export function forestData(world, count) {
     add(PINE, x, y, z, -a);
     pines++;
   }
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), c = new THREE.Color(), up = new V(0, 1, 0);
-  const out = lists.map((list) => {
+  // (their own random numbers: the groves' trees and the pines stand where they did without them)
+  const r2 = mulberry32(556);
+  // the groves' edges: young broadleaf trees, half grown, in a band round each grove (the hills' shrubs from afar)
+  const young = Math.round(count * 0.16);
+  for (let t = 0, m = 0; t < young * 60 && m < young; t++) {
+    const x = lerp(-560, 560, r2()), z = lerp(-700, 140, r2());
+    const gr = world.grove(x, z);
+    if (r2() > smoothstep(0.02, 0.1, gr) * smoothstep(0.45, 0.2, gr)) continue;
+    const y = world.height(x, z);
+    if (y < 4 || y > 160 || flat(x, z) < 0.76 || crowded(x, z, 3.5)) continue;
+    const r = r2(), k = r < 0.35 ? KONARA : r < 0.55 ? MOMIJI : r < 0.8 ? KASHI : r < 0.9 ? CHERRY : KEYAKI;
+    if (add(k, x, y, z, r2() * Math.PI * 2, lerp(0.35, 0.6, r2()), r2)) m++;
+  }
+  // steep faces off the valley floor, too steep to farm or graze: broadleaf woods and a little hinoki cling to them
+  const cling = Math.round(count * 0.2);
+  for (let t = 0, m = 0; t < cling * 60 && m < cling; t++) {
+    const x = lerp(-560, 560, r2()), z = lerp(-700, 140, r2());
+    const w = world.wild(x, z);
+    if (!w || world.grove(x, z) > 0.3) continue;
+    const ny = flat(x, z), y = world.height(x, z);
+    const clump = smoothstep(-0.2, 0.3, nz.fbm2(x * 0.025 - 13, z * 0.025 + 4, 2));
+    if (r2() > w * smoothstep(0.88, 0.66, ny) * (0.35 + 0.65 * clump) || ny < 0.45 || y < 6 || y > 150 || crowded(x, z, 5.5)) continue;
+    const r = r2(), k = r < 0.25 ? KONARA : r < 0.5 ? KASHI : r < 0.6 ? KEYAKI : r < 0.75 ? MOMIJI : r < 0.9 ? CHERRY : HINOKI;
+    if (add(k, x, y, z, r2() * Math.PI * 2, lerp(0.7, 1, r2()), r2)) m++;
+  }
+  // the open slopes between the groves: lone trees and small clumps of a few, so the hills nearest the valley are
+  // not bald
+  const lone = Math.round(count * 0.3);
+  for (let t = 0, m = 0; t < lone * 80 && m < lone; t++) {
+    const x = lerp(-560, 560, r2()), z = lerp(-700, 140, r2());
+    const w = world.wild(x, z);
+    if (!w || world.grove(x, z) > 0.25) continue;
+    const clump = smoothstep(0.05, 0.45, nz.fbm2(x * 0.03 + 11, z * 0.03 - 5, 2) + 0.1);
+    if (r2() > w * (0.12 + 0.88 * clump)) continue;
+    const y = world.height(x, z);
+    if (y < 6 || y > 150 || flat(x, z) < 0.6 || crowded(x, z, 7)) continue;
+    const r = r2(), k = r < 0.25 ? CHERRY : r < 0.6 ? KONARA : r < 0.72 ? MOMIJI : r < 0.84 ? KEYAKI : KASHI;
+    if (add(k, x, y, z, r2() * Math.PI * 2, lerp(0.7, 1, r2()), r2)) m++;
+  }
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), up = new V(0, 1, 0);
+  const out = lists.map((list, k) => {
+    // (the broadleaf crowns wider or narrower from tree to tree, so no two read alike)
+    const wv = k <= HINOKI || k === PINE ? 0.2 : 0.45;
     const matrix = new Float32Array(list.length * 16), color = new Float32Array(list.length * 3);
     list.forEach((t, i) => {
       p.set(t.x, t.y - 0.03 * t.h, t.z);
       q.setFromAxisAngle(up, t.a);
-      s.set(t.h * (0.9 + rng() * 0.2), t.h, t.h * (0.9 + rng() * 0.2));
+      s.set(t.h * (1 - wv / 2 + rng() * wv), t.h, t.h * (1 - wv / 2 + rng() * wv));
       m.compose(p, q, s).toArray(matrix, i * 16);
-      const g = 0.82 + rng() * 0.36, h = (rng() - 0.5) * 0.12;
-      c.setRGB(g * (1 + h), g, g * (1 - h)).toArray(color, i * 3);
+      color.set(forestTint(k, rng), i * 3);
     });
     return { matrix, color, n: list.length };
   });
@@ -723,8 +807,8 @@ export function forestData(world, count) {
 }
 
 // The woods' leaf cards' atlas (tools/forest.py leaf_cards), 2x2 cells painted near white (the trees' vertex colours
-// give the hue): 0 a broadleaf spray (konara, kashi), 1 sugi/hinoki fronds of scale-leaf shoots, 2 pine needles in
-// tufts, 3 wild cherry blossom with a few young bronze leaves. Each spray fills its cell's middle and thins to its edge.
+// give the hue): 0 a broadleaf spray (konara, kashi, keyaki, momiji), 1 sugi/hinoki fronds of scale-leaf shoots, 2 pine needles in
+// tufts, 3 wild cherry blossom among young bronze leaves (painted in their colour). Each spray fills its cell's middle and thins to its edge.
 export function paintLeafAtlas(seed = 11, size = 1024) {
   const rng = mulberry32(seed);
   const cv = new OffscreenCanvas(size, size);
@@ -733,9 +817,9 @@ export function paintLeafAtlas(seed = 11, size = 1024) {
   const grey = (v, a = 1) => `rgba(${Math.round(255 * v)},${Math.round(255 * v)},${Math.round(255 * v)},${a})`;
   // a point in the spray's disc, denser towards its middle
   const inDisc = (k = 1) => { const a = rng() * Math.PI * 2, r = R * Math.pow(rng(), 0.7) * k; return [Math.cos(a) * r, Math.sin(a) * r]; };
-  const leaf = (x, y, len, wid, rot, v) => {
+  const leaf = (x, y, len, wid, rot, v, fill = grey(v)) => {
     ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
-    ctx.fillStyle = grey(v);
+    ctx.fillStyle = fill;
     ctx.beginPath(); ctx.moveTo(0, 0);
     ctx.bezierCurveTo(wid, len * 0.25, wid * 0.8, len * 0.8, 0, len);
     ctx.bezierCurveTo(-wid * 0.8, len * 0.8, -wid, len * 0.25, 0, 0);
@@ -782,10 +866,10 @@ export function paintLeafAtlas(seed = 11, size = 1024) {
         }
       }
     },
-    () => { // blossom: small five-petalled flowers in bunches, a few young bronze leaves
-      for (let i = 0; i < 6; i++) {
-        const [x, y] = inDisc(0.9), len = cell * 0.09;
-        leaf(x, y, len, len * 0.4, rng() * Math.PI * 2, 0.62);
+    () => { // blossom: small five-petalled flowers in bunches among young reddish-bronze leaves (yamazakura)
+      for (let i = 0; i < 16; i++) {
+        const [x, y] = inDisc(0.95), len = cell * (0.08 + rng() * 0.03);
+        leaf(x, y, len, len * 0.4, rng() * Math.PI * 2, 0.62, `rgb(${150 + Math.round(rng() * 40)},${70 + Math.round(rng() * 25)},${45 + Math.round(rng() * 15)})`);
       }
       for (let i = 0; i < 95; i++) {
         const [x, y] = inDisc(0.95), r = cell * (0.035 + rng() * 0.015), v = 0.86 + 0.14 * rng(), rot = rng() * 6.28;

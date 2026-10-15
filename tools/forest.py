@@ -4,7 +4,8 @@
 # Crowns are clusters of foliage clumps fused into one surface (voxel remesh), roughened and decimated to a triangle
 # budget; limbs are tapered tubes from the trunk to the clumps. Shading lives in the vertex colours: ambient occlusion
 # (ray cast against the whole tree), darker undersides, a little mottling; crown normals are bent out from the crown's
-# middle so the light falls softly over it, as on a real crown seen from afar.
+# middle (the broadleaf kinds' partly from each mass's) so the light falls softly over it, as on a real crown seen from
+# afar.
 import bpy, bmesh, bisect, itertools, math, random, sys
 from mathutils import Vector, Matrix, noise
 from mathutils.bvhtree import BVHTree
@@ -280,7 +281,7 @@ def leaf_cards(name, bm, kind, base, mid, soft, low, ao_reach, ao_min, *, n, siz
         hit = sum(1 for d in DIRS if bvh.ray_cast(o, (t * d.x + nrm.cross(t) * d.y + nrm * d.z), ao_reach)[0] is not None)
         shade = lerp(ao_min, 1.0, 1 - hit / len(DIRS)) * lerp(low, 1.0, smoothstep(-0.7, 0.6, out.z))
         vary = 0.85 + 0.3 * rng.random()
-        col = [x * shade * vary for x in base]
+        col = [x * shade * vary for x in (base(p) if callable(base) else base)]
         nor = nrm.lerp(out, soft).normalized()
         flip = rng.random() < 0.5
         k = len(verts)
@@ -308,8 +309,9 @@ def leaf_cards(name, bm, kind, base, mid, soft, low, ao_reach, ao_min, *, n, siz
 
 
 def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0.4, cards=None):
-    """crowns: [(mesh, colour)]; bark: mesh or None; mid(p): the point a crown point bulges out from; ao_min: the
-    crown's shade in full occlusion; cards: leaf_cards' settings, for the near model."""
+    """crowns: [(mesh, colour)] (a colour, or a function of the point to one); bark: mesh or None; mid(p): the point a
+    crown point bulges out from; ao_min: the crown's shade in full occlusion; cards: leaf_cards' settings, for the near
+    model."""
     bm = bmesh.new()
     kind = bm.verts.layers.int.new('kind')  # -1 bark, else index into crowns
     parts = [(me, i) for i, (me, _) in enumerate(crowns)] + ([(bark, -1)] if bark else [])
@@ -337,6 +339,7 @@ def assemble(name, crowns, bark, mid, soft, low, ao_reach, mottle=None, ao_min=0
             out = (v.co - mid(v.co)).normalized()
             shade = lerp(ao_min, 1.0, a) * lerp(low, 1.0, smoothstep(-0.7, 0.6, out.z))
             base = crowns[k][1]
+            base = base(v.co) if callable(base) else base
             vary = 0.9 + 0.2 * noise.noise(v.co * 9.0 + V((3.1, 7.7, 1.3)))
             c = [x * shade * vary for x in base]
             if mottle:
@@ -438,47 +441,77 @@ def conifer(name, seed, *, w, base, n, taper, droop, size, col, target, level=0,
     return near_refine(me, near, seed, (1.0, 0.3)) if near else me
 
 
-def broadleaf(name, seed, *, cz, ex, ez, fork, n, size, gap, col, target, low=0.4, n_limbs=4, mottle=None, flat=1.0, soft=0.85, ao_min=0.4, level=0,
+def broadleaf(name, seed, *, fork, n_limbs, rise, reach, split, csize, cn, col, target, spread=0.85, flat=0.8, crook=0.12,
+              leader=True, stagger=0.4, vary=(0.65, 1.1), low=0.4, mottle=None, soft=0.8, ao_min=0.4, level=0,
               leaves=(500, 0.075), cell=0, near=None):
-    """A short trunk forking into limbs that carry clumps of leaves (or blossom) round an ellipsoidal crown."""
+    """A trunk forking into limbs (n_limbs: a range) that branch again (split side branches each), every branch's end
+    holding its own cluster of leafy clumps (or blossom): a crown of separate masses at different heights, gaps between
+    them where the limbs show, as a broadleaf crown reads from afar, not one dome. rise: the limbs' angles above the
+    level (degrees), reach: their length (times a random factor in `vary`); csize: a cluster's radius, cn: clumps round
+    its core, spread: how far out. col: a colour, or a palette [colour, ...] each cluster takes a random blend of two
+    neighbours from. Scaled to one unit tall after."""
     rng = random.Random(seed)
-    clumps = []
-    tries = 0
-    while len(clumps) < n and tries < 20000:
-        tries += 1
-        # a point in the crown's shell, the upper side favoured, none hanging far below
-        d = V((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1))).normalized()
-        if d.z < -0.55:
-            continue
-        depth = rng.uniform(0.55, 0.95)
-        p = V((d.x * ex * depth, d.y * ex * depth, cz + d.z * ez * depth))
-        s = size * rng.uniform(0.75, 1.2)
-        if any((p - c).length < gap * (s + r[0]) for c, r in clumps):
-            continue
-        clumps.append((p, (s, s, s * flat)))
-    # a few clumps inside to close the crown where it would look hollow
-    for _ in range(n // 5):
-        p = V((rng.uniform(-0.5, 0.5) * ex, rng.uniform(-0.5, 0.5) * ex, cz + rng.uniform(-0.1, 0.35) * ez))
-        clumps.append((p, (size * 0.9,) * 2 + (size * 0.9 * flat,)))
-    crown = foliage(clumps, VOXEL[level] * 0.008 * (NEAR['voxel'] if near else 1), 0.01, 14, target * CROWN[level] * (NEAR['crown'] if near else 1), seed)
-    # limbs: the trunk forks at `fork` into n_limbs, each carrying the clumps on its side, twigs to each clump
     top = V((rng.uniform(-0.02, 0.02), rng.uniform(-0.02, 0.02), fork))
-    paths, twigs = [([V((0, 0, -0.04)), V((0.005, 0, fork * 0.5)), top], 0.03, 0.022)], []
+    paths, ends = [([V((0, 0, -0.04)), V((0.005, 0, fork * 0.5)), top], 0.03, 0.022)], []
+    n = rng.randint(*n_limbs)
     phase = rng.random() * math.tau
-    for L in range(n_limbs):
-        a0 = phase + math.tau * L / n_limbs
-        mine = [c for c, _ in clumps if (math.atan2(c.y, c.x) - a0 + math.pi) % math.tau - math.pi < math.pi / n_limbs
-                and (math.atan2(c.y, c.x) - a0 + math.pi) % math.tau - math.pi >= -math.pi / n_limbs]
-        if not mine:
-            continue
-        g = sum(mine, V()) / len(mine)
-        end = top.lerp(g, 0.6)
-        paths.append((bend(top, end, 0.02, rng), 0.019, 0.011))
-        for c in mine:
-            if not level and (c - end).length > 0.05 and c.z < cz + 0.15 * ez:  # twigs only where they can show, under the crown
-                twigs.append(([end, end.lerp(c, 0.5) + V((0, 0, 0.02)), end.lerp(c, 0.85)], 0.009, 0.004))
-    bark = near_limbs(paths, twigs) if near else limbs(paths, (5, 4, 3)[level], twigs)
-    me = assemble(name + ('_near' if near else LEVELS[level]), [(crown, col)], bark, lambda p: V((0, 0, cz)), soft, low, 0.18, mottle, ao_min,
+    # the limbs (the first, with `leader`, carrying on up the middle) and their side branches, reaching out and down
+    # from part-way along them: masses low on the crown's sides as well as high in it
+    for i in range(n + (1 if leader else 0)):
+        a = phase + math.tau * (i + rng.uniform(-0.3, 0.3)) / n
+        up = leader and i == n
+        e = math.radians(rng.uniform(78, 88) if up else rng.uniform(*rise))
+        ln = reach * (rng.uniform(0.75, 0.95) if up else rng.uniform(*vary))
+        foot = top - V((0, 0, rng.uniform(0, stagger) * fork))  # the forks staggered down the trunk
+        end = foot + V((math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e))) * ln
+        paths.append((bend(foot, end, ln * crook, rng), 0.02, 0.01))
+        ends.append((end, 1.0))
+        for _ in range(split):
+            q = foot.lerp(end, rng.uniform(0.3, 0.75))
+            a2, e2 = a + rng.choice((-1, 1)) * rng.uniform(0.5, 1.2), clamp(e - rng.uniform(0.15, 0.7), -0.1, 1.3)
+            l2 = ln * rng.uniform(0.4, 0.65)
+            end2 = q + V((math.cos(e2) * math.cos(a2), math.cos(e2) * math.sin(a2), math.sin(e2))) * l2
+            paths.append(([q, q.lerp(end2, 0.5) + V((0, 0, l2 * 0.08)), end2], 0.012, 0.007))
+            ends.append((end2, rng.uniform(0.75, 0.95)))
+    # a cluster round each branch's end: a core and cn clumps round it, the upper side favoured
+    clusters, clumps = [], []
+    palette = [col] if isinstance(col[0], (int, float)) else col
+    for p, f in ends:
+        r = csize * f * rng.uniform(0.85, 1.2)
+        c = p + V((0, 0, r * 0.3 * flat))
+        j, u = rng.randrange(max(1, len(palette) - 1)), rng.random()
+        clusters.append((c, r, tuple(lerp(x, y, u) for x, y in zip(palette[j], palette[min(j + 1, len(palette) - 1)]))))
+        mine = [(c, (r, r, r * flat))]
+        for _ in range(cn):
+            d = V((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 0.6) + 0.25)).normalized()
+            s = r * rng.uniform(0.5, 0.75)
+            mine.append((c + V((d.x, d.y, d.z * flat)) * r * spread, (s, s, s * flat)))
+        clumps += mine
+    # one unit tall: the points scaled about the trunk's foot (the tubes' radii are already in the unit tree's terms)
+    k = 1 / max(c.z + r[2] * 1.1 for c, r in clumps)
+    clumps = [(c * k, tuple(x * k for x in r)) for c, r in clumps]
+    clusters = [(c * k, r * k, cc) for c, r, cc in clusters]
+    paths = [([p * k for p in pts], r0, r1) for pts, r0, r1 in paths]
+    crown = foliage(clumps, VOXEL[level] * 0.008 * (NEAR['voxel'] if near else 1), 0.013, 12, target * CROWN[level] * (NEAR['crown'] if near else 1), seed)
+    # twigs from each branch's end to its cluster's two lowest clumps, where they can show (the full model only)
+    twigs = []
+    if not level:
+        for (c, r, _), (p, _f) in zip(clusters, ends):
+            p = p * k
+            low_ = sorted((q for q, _ in clumps if (q - c).length < r * 1.6 and q.z < c.z and (q - p).length > 0.04), key=lambda q: q.z)
+            twigs += [([p, p.lerp(q, 0.5) + V((0, 0, 0.01)), p.lerp(q, 0.85)], 0.008, 0.004) for q in low_[:2]]
+    # the lighter levels only cast shadows (main.js draws impostors in their place): the trunk and the main limbs, three
+    # rings each, the distant level the trunk alone
+    if level:
+        paths = [([q[0][0], q[0][len(q[0]) // 2], q[0][-1]], q[1], q[2]) for q in paths if q[1] >= (0.02, 0.03)[level - 1]]
+    bark = near_limbs(paths, twigs) if near else limbs(paths, (5, 3, 3)[level], twigs)
+    centre = sum((c for c, _, _ in clusters), V()) / len(clusters)
+    near_c = lambda p: min(clusters, key=lambda q: (q[0] - p).length - q[1])
+    # light falls over the whole crown, a little over each mass: the masses show, and the impostors (whose normals are
+    # averaged over their texels) light as the models do
+    mid = lambda p: (lambda q: (q[0] - V((0, 0, q[1] * 0.5))).lerp(centre, 0.65))(near_c(p))
+    colour = col if len(palette) == 1 else (lambda p: near_c(p)[2])
+    me = assemble(name + ('_near' if near else LEVELS[level]), [(crown, colour)], bark, mid, soft, low, 0.18, mottle, ao_min,
                   cards=None if level or near else dict(n=leaves[0], size=leaves[1], cell=cell, seed=seed))
     return near_refine(me, near, seed) if near else me
 
@@ -518,8 +551,9 @@ def pine(name, seed, *, col, target, level=0, leaves=(450, 0.06), near=None):
 
 
 # Each kind comes in three levels (lods.js switches them by distance): `name` for the trees near the camera, `name_far`
-# with a fifth of the crown's triangles (conifers: a quarter, from fewer tufts), the twigs left out and coarser limbs,
-# and `name_dist` for the far hills with 6% of them (conifers: 9%) on three-sided limbs, fused on a coarser grid first
+# with a fifth of the crown's triangles (conifers: a quarter, from fewer tufts), the twigs left out and coarser limbs
+# (the broadleaf kinds' only their trunk and main limbs), and `name_dist` for the far hills with 6% of them (conifers:
+# 9%) on three-sided limbs (the broadleaf kinds' on the trunk alone), fused on a coarser grid first
 # (VOXEL) so that so few triangles still make a clean shape instead of shards. For the Ultra tier a fourth, `name_near`
 # (built from `name` after it: near_refine), goes in front of them all.
 LEVELS = ('', '_far', '_dist')
@@ -528,11 +562,23 @@ VOXEL = (1, 1, 2)
 KINDS = {
     'sugi': lambda level, near=None: conifer('sugi', 1, w=0.16, base=0.12, n=70, taper=0.85, droop=0.8, size=0.55, col=(0.045, 0.085, 0.05), target=1400, level=level, near=near),
     'hinoki': lambda level, near=None: conifer('hinoki', 2, w=0.25, base=0.08, n=60, taper=0.7, droop=0.55, size=0.6, col=(0.06, 0.11, 0.05), target=1600, level=level, near=near),
-    'konara': lambda level, near=None: broadleaf('konara', 3, cz=0.62, ex=0.44, ez=0.36, fork=0.3, n=22, size=0.14, gap=0.75, col=(0.19, 0.3, 0.06), target=3000, level=level, near=near),
-    'kashi': lambda level, near=None: broadleaf('kashi', 4, cz=0.6, ex=0.46, ez=0.38, fork=0.26, n=30, size=0.15, gap=0.55, col=(0.07, 0.13, 0.045), target=2600, level=level, near=near),
-    'cherry': lambda level, near=None: broadleaf('cherry', 5, cz=0.6, ex=0.62, ez=0.34, fork=0.22, n=55, size=0.09, gap=0.6, col=(1.0, 0.7, 0.74), target=7000,
-                                    low=0.75, n_limbs=5, mottle=((0.6, 0.3, 0.22), 0.35), flat=0.8, soft=0.7, ao_min=0.72, level=level, near=near,
-                                    leaves=(900, 0.075), cell=3),  # light shade: the blossom glows (forestMaterial)
+    # konara: young leaves pale, silvery yellow-green; kashi: evergreen, dark and dense
+    'konara': lambda level, near=None: broadleaf('konara', 3, fork=0.26, n_limbs=(4, 5), rise=(35, 75), reach=0.5, split=2, csize=0.125, cn=5, vary=(0.55, 1.2),
+                                    col=[(0.32, 0.37, 0.11), (0.26, 0.35, 0.09), (0.2, 0.31, 0.07)], target=3000, level=level, near=near),
+    'kashi': lambda level, near=None: broadleaf('kashi', 4, fork=0.2, n_limbs=(5, 6), rise=(35, 70), reach=0.45, split=3, csize=0.15, cn=6, spread=0.8,
+                                   flat=0.85, col=[(0.06, 0.12, 0.045), (0.08, 0.14, 0.05), (0.11, 0.15, 0.05)], target=2600, level=level, near=near),
+    # yamazakura: pinkish-white blossom among reddish-bronze young leaves, an open crown of sprays on spreading limbs;
+    # light shade: the blossom glows (materials.js forestLight)
+    'cherry': lambda level, near=None: broadleaf('cherry', 5, fork=0.22, n_limbs=(4, 5), rise=(30, 62), reach=0.55, split=2, csize=0.11, cn=5, spread=0.95,
+                                    flat=0.7, col=[(0.98, 0.86, 0.87), (0.95, 0.76, 0.78), (0.72, 0.46, 0.4), (0.46, 0.22, 0.14)], target=7000, low=0.7,
+                                    mottle=((0.42, 0.18, 0.1), 0.5), soft=0.7, ao_min=0.65, level=level, near=near, leaves=(900, 0.075), cell=3),
+    # keyaki (zelkova): a vase of upright limbs fanning out from low on the trunk, fresh green
+    'keyaki': lambda level, near=None: broadleaf('keyaki', 7, fork=0.2, n_limbs=(6, 7), rise=(52, 74), reach=0.65, split=2, csize=0.115, cn=5, leader=False,
+                                    col=[(0.2, 0.32, 0.07), (0.25, 0.34, 0.085)], target=3000, level=level, near=near),
+    # yamamomiji (maple): wide, layered sprays on spreading limbs; its young leaves reddish on some trees, green on
+    # others (vegetation.js forestData tints each tree)
+    'momiji': lambda level, near=None: broadleaf('momiji', 8, fork=0.18, n_limbs=(4, 5), rise=(22, 52), reach=0.45, split=3, csize=0.12, cn=5, flat=0.55,
+                                    col=[(0.27, 0.12, 0.06), (0.25, 0.16, 0.06)], target=2600, level=level, near=near),
     'pine': lambda level, near=None: pine('pine', 6, col=(0.05, 0.095, 0.045), target=5000, level=level, near=near),
 }
 
