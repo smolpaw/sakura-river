@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { build } from 'vite';
 import { BENCH } from './lib/serve.mjs';
+import { noBundledTranscoder } from '../vite.config.js';
 
 const ROOT = path.resolve(BENCH, '..');
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
@@ -26,6 +27,7 @@ export async function buildEngine(label, ref) {
     root,
     configFile: false,
     logLevel: 'warn',
+    plugins: [noBundledTranscoder()],
     build: {
       outDir, emptyOutDir: true, target: 'es2022', minify: true, reportCompressedSize: false,
       lib: { entry: path.join(root, 'src/main.js'), formats: ['es'], fileName: () => 'engine.js' },

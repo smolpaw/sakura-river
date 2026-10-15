@@ -227,9 +227,9 @@ export async function create(canvas, opts = {}) {
     const k = area.indexOf(Math.min(...area));
     fieldJobs[k].push(i); area[k] += a;
   });
-  // the photographed textures (photos.js), fetched and decoded while the scene generates; without them the surfaces
+  // the photographed textures (photos.js), fetched and transcoded while the scene generates; without them the surfaces
   // keep their procedural look
-  const photosLoading = loadPhotos(PHOTO_SETS, M.PHOTO_KIND_SETS);
+  const photosLoading = loadPhotos(renderer, PHOTO_SETS);
   const { results: G, stats: genStats } = await runJobs({
     terrain: { name: 'terrain', args: { seg: Q.terrain } },
     // the farmland and village mesh in three jobs that run at once, its zones shared out by area
@@ -264,13 +264,14 @@ export async function create(canvas, opts = {}) {
   progress('build');
   const maxAniso = renderer.getMaxAnisotropy();
   const aniso = (n) => Math.min(tierName === 'ultra' ? 16 : n, maxAniso); // ultra: the most the device filters
+  const formatName = (f) => ({ [THREE.RGBA_S3TC_DXT1_Format]: 'BC1', [THREE.RGBA_BPTC_Format]: 'BC7', [THREE.RGB_ETC2_Format]: 'ETC2', [THREE.RGB_ETC1_Format]: 'ETC1',
+    [THREE.RGBA_ASTC_4x4_Format]: 'ASTC 4x4', [THREE.RGB_PVRTC_4BPPV1_Format]: 'PVRTC', [THREE.RGBAFormat]: 'RGBA8' })[f] ?? f;
   // the photographed textures, in place before any material that lays them on is built
   const photos = await photosLoading;
   if (photos) {
     for (const set of Object.values(photos.sets)) {
       if (!set.diff) continue; // (the kinds' sets: layers of texture arrays)
       for (const t of [set.diff, set.nor]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso(8); }
-      set.diff.colorSpace = THREE.SRGBColorSpace;
     }
     // the bark's texture coordinates are metres round the limb and 0.9 x metres along it
     const b = photos.sets.sakura_bark;
@@ -1550,12 +1551,13 @@ export async function create(canvas, opts = {}) {
     figureInfo() { return figures.info(); }, figureAct(name) { figures.act(name); }, // the fisherman and the planter; start one's second clip (lift, stretch)
     touchInfo() { return touches.info(); }, touchRing(x, z, amp = 1, r, hx, hz) { touches.ring(x, z, amp, r, hx, hz); }, // the water's touch points; a ring at (x, z) now
     shootingStar() { sky.shootingStar(camera.getWorldDirection(new THREE.Vector3())); }, // one now, ahead of the camera
+    // photos: the GPU formats the photographed textures were transcoded to, colour/normals (null without them);
     // cull: the view culling (lods.js makeView): on, re-sorts so far and their mean main-thread ms, and per group the
     // instances (impostor cards, the walls' merged groups) the camera draws, of those it would unculled, and triangles
     info() {
       const groups = Object.fromEntries([...lodGroups.map((g) => [g.name, g.userData.counts()]), [walls.name, walls.userData.counts(camera)]]);
       const cull = { on: view.on, sorts: view.stats.sorts, sortMs: view.stats.ms / Math.max(1, view.stats.sorts), groups };
-      return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.levels.map((l) => l.range), verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, cull };
+      return { tier: tierName, backend: backendName, tree: [TX, TZ], blossoms: main.data.n, gen: genStats, grass: grass.userData.levels.map((l) => l.range), verts: terrainGeo.attributes.position.count, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, photos: photos && `${formatName(photos.layers.diff.format)}/${formatName(photos.layers.nor.format)}`, cull };
     },
     // debug: per-instance view culling of the Blender models and impostors on or off (on by default)
     setCulling(on) { view.on = !!on; },

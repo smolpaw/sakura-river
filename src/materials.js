@@ -70,32 +70,23 @@ export const PHOTO_KIND = [null,
   { set: 'japanese_cedar_bark', amount: 0.7, hue: 0.2, relief: 1.0 }, // the woods' bark
   { set: 'gravel_ground_01', amount: 0.75, hue: 0.2, relief: 1.0 }, // gravel (the temple's courtyard)
 ];
-// the sets the kinds take, in their layers' order
-export const PHOTO_KIND_SETS = [...new Set(PHOTO_KIND.filter(Boolean).map((k) => k.set))];
 const PHOTO_NEAR = 70; // m: beyond it the surfaces are as without the photos
-// The kinds' sets as the layers of two texture arrays (colour, normal; photos.js packs them, each set at the first's
-// resolution), and per kind three vec4s: (layer, amount, hue, relief), (mean, -) and the tiles per metre along x, y, z
+// The kinds' sets as the layers of two array textures (colour, normal; tools/textures.mjs packs them, each set squeezed
+// to square), and per kind three vec4s: (layer, amount, hue, relief), (mean, -) and the tiles per metre along x, y, z
 // (a set taller than wide, the woods' bark, keeps its proportions on the sides: its height along y). A surface samples
 // the layer its kind chooses, so a shader holds one copy of the sampling whatever kinds its model has, and two of the
 // 16 textures a WebGPU shader may sample by default.
 function kindArrays(L, anisotropy) {
-  const array = (data, srgb) => {
-    const t = new THREE.DataArrayTexture(data, L.width, L.height, L.names.length);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
-    t.anisotropy = anisotropy;
-    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    t.needsUpdate = true;
-    return t;
-  };
+  for (const t of [L.diff, L.nor]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = anisotropy; }
   const kinds = PHOTO_KIND.map((k) => {
     if (!k) return null;
     const set = PHOTO[k.set], layer = L.names.indexOf(k.set), s = 1 / set.size;
+    if (layer < 0) throw new Error(`${k.set} is not a layer of the kinds' arrays (tools/textures.mjs ARRAY)`);
     return { ...k, layer, mean: set.mean, scale: [s, s / L.aspect[layer], s] };
   });
   const v = (f, empty) => uniformArray(kinds.map((k) => (k ? new THREE.Vector4(...f(k)) : empty)), 'vec4');
   return {
-    diff: array(L.diff, true), nor: array(L.nor, false), kinds,
+    diff: L.diff, nor: L.nor, kinds,
     a: v((k) => [k.layer, k.amount, k.hue, k.relief], new THREE.Vector4()),
     b: v((k) => [...k.mean, 0], new THREE.Vector4(1, 1, 1, 0)),
     c: v((k) => [...k.scale, 0], new THREE.Vector4()),

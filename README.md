@@ -15,7 +15,7 @@ Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys).
     pnpm build     # dist/index.html, one self-contained file
     pnpm preview   # serve the build
 
-The page must be served over HTTP to load the sounds (`dist/audio/`) and the walker's and the people's models (`dist/models/`). Opened as a file, it runs without them.
+The page must be served over HTTP to load the sounds (`dist/audio/`), the walker's and the people's models (`dist/models/`) and the photographed textures (`dist/textures/`). Opened as a file, it runs without them.
 
 Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender models; needs `blender` on the PATH or `BLENDER=`) and `node tools/audio.mjs` (the sounds; needs ffmpeg).
 
@@ -36,7 +36,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - `src/world.js`: terrain height field, river path, the village's paddies, lanes and building pads.
 - `src/quality.js`: adaptive quality. `src/gen/`: worker pool for the generation done during loading.
 - `src/tsl.js`, `src/materials.js`: shared shader nodes and the lit materials (TSL, compiled to WGSL and GLSL).
-- `src/photos.js`, `src/photo-worker.js`, `src/kinds.js`: the photographed textures' loading, and the surface kinds that choose them. `src/groundao.js`: the ground's occlusion by the buildings.
+- `src/photos.js`, `src/kinds.js`: the photographed textures' loading, and the surface kinds that choose them. `src/groundao.js`: the ground's occlusion by the buildings.
 - `src/lods.js`, `src/impostors.js`: the instanced Blender models with their distance levels, culling and the woods' impostors.
 - `src/lights.js`, `src/sunshadow.js`, `src/post.js`: the lamps' light map, the valley and cloud shadows, light shafts and the final grade.
 - Scenery: `tree.js`, `blossoms.js`, `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `yard.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.
@@ -44,7 +44,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - Animals and people: `koi.js`, `deer.js`, `heron.js`, `ducks.js`, `turtles.js`, `frogs.js`, `tanuki.js`, `birds.js`, `perched.js`, `butterflies.js`, `figures.js`.
 - Walk mode: `walk.js` (the path network and the input), `walker.js` (the traveller's body).
 - `src/audio.js`: music and ambience.
-- `src/models/`: models inlined in the page. `public/models/`: models fetched later (the traveller, the people at work, the Ultra tier's near models). `public/audio/`: sounds. `public/textures/`: photographed textures.
+- `src/models/`: models inlined in the page. `public/models/`: models fetched later (the traveller, the people at work, the Ultra tier's near models). `public/audio/`: sounds. `public/textures/`: photographed textures. `public/basis/`: three's Basis transcoder for them.
 - `tools/`: model, audio and texture build scripts. `bench/`: headless capture and timing scripts. `docs/performance.md`: renderer performance notes.
 
 ## Engine API
@@ -129,7 +129,7 @@ The boulders (along the river and in outcrops on the hills) are photogrammetry s
 
 ## Textures
 
-Close up, these surfaces are photographed texture sets from Poly Haven (https://polyhaven.com), CC0, laid over the scene's own colours as detail. `tools/textures.mjs` downloads them into `public/textures/` as WebP.
+Close up, these surfaces are photographed texture sets from Poly Haven (https://polyhaven.com), CC0, laid over the scene's own colours as detail. `tools/textures.mjs` downloads them and encodes them into `public/textures/` as KTX2 (Basis Universal: ETC1S colour, UASTC normals), which the page transcodes to a GPU-compressed format with three's Basis transcoder (`public/basis/`, copied from `three` by the same script).
 
 - The cherries' bark: "Sakura Bark" by Charlotte Baglioni.
 - The boulders, pebbles, the gorge's walls and the village's dry-stone walls: "Lichen Rock" by Rico Cilliers.
