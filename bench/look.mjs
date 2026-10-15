@@ -15,6 +15,9 @@ try {
   for (const t of times.split(',')) for (const vid of views.length ? views : ['hero']) {
     const v = vid.includes(':') ? { pos: vid.split(':')[0].split(',').map(Number), target: vid.split(':')[1].split(',').map(Number) } : V.views.find((x) => x.id === vid);
     await page.evaluate((v, t, x) => H.view({ ...v, settings: { time: +t, ...JSON.parse(x) } }, 90), v, t, process.env.LOOK_SET || '{}');
+    // drawn frames, so the valley's shadow map (redrawn at most every 15 of them) catches up with the new time: H.view's
+    // settling simulates without drawing, and a capture after a jump in time would keep the old sun's shadows
+    await page.evaluate(() => H.call('tick', 32));
     await page.evaluate((o) => H.capture(o, 1 / 60), `${prefix}-${vid.replace(/[^a-z0-9]/gi, '_').slice(0, 30)}-t${t}.png`);
   }
 } catch (e) { console.log('ERROR', e.message.slice(0, 2000)); }
