@@ -184,14 +184,16 @@ export function createWorld(seed = 7) {
   // WALL.top out from the pad's edge, battered back at WALL.batter (rise over run) into the earth it holds, down or up
   // to the ground; square at the pad's corners. Under WALL.min the pad eases into the ground over 2.2 m of bank.
   function padGround(x, z, g) {
-    for (const b of BUILDINGS) {
-      if (Math.abs(x - b.x) > 20 || Math.abs(z - b.z) > 20) continue;
-      const e = padEdge(b, x, z);
-      if (e >= 2.2) continue;
-      const lim = Math.max(0, e - WALL.top) * WALL.batter, face = b.y + clamp(g - b.y, -lim, lim);
-      return lerp(lerp(g, b.y, smoothstep(2.2, 0.15, padDist(b, x, z))), face, smoothstep(WALL.min, WALL.full, Math.abs(g - b.y)));
+    // (the nearest pad's, where two pads' banks overlap)
+    let b = null, e = 2.2;
+    for (const o of BUILDINGS) {
+      if (Math.abs(x - o.x) > 20 || Math.abs(z - o.z) > 20) continue;
+      const eo = padEdge(o, x, z);
+      if (eo < e) { b = o; e = eo; }
     }
-    return g;
+    if (!b) return g;
+    const lim = Math.max(0, e - WALL.top) * WALL.batter, face = b.y + clamp(g - b.y, -lim, lim);
+    return lerp(lerp(g, b.y, smoothstep(2.2, 0.15, padDist(b, x, z))), face, smoothstep(WALL.min, WALL.full, Math.abs(g - b.y)));
   }
   // the small cherries along the river stand in their own clearings (their Blender trunks fit the ground there)
   const CLEAR = [[-50.4, -92], [-5.3, -150], [-43.9, -225], [2.2, -40]];
@@ -523,9 +525,13 @@ export function createWorld(seed = 7) {
     let k = 0;
     for (let j = 0; j <= segZ; j++) for (let i = 0; i <= segX; i++) {
       const x = xs[i], z = zs[j], h = heightField(x, z);
-      // under the farmland the fine mesh (buildFields) draws the ground: this one drops away beneath it
+      // under the farmland the fine mesh (buildFields) draws the ground: this one drops away beneath it, and round
+      // the farmhouses' pads by as much as their walls' faces stand (padGround), so its few metres wide triangles,
+      // spanning a wall, stay under the fine mesh's
       const m = (farm[k / 3] = h.F ? h.F.m : 0);
-      pos[k++] = x; pos[k++] = h.y - 0.5 * smoothstep(0.25, 0.6, m); pos[k++] = z;
+      let pad = Infinity;
+      if (m > 0.6) for (const b of BUILDINGS) if (Math.abs(x - b.x) < 25 && Math.abs(z - b.z) < 25) pad = Math.min(pad, padEdge(b, x, z));
+      pos[k++] = x; pos[k++] = h.y - 0.5 * smoothstep(0.25, 0.6, m) - 6 * smoothstep(0.6, 0.9, m) * smoothstep(5, 3, pad); pos[k++] = z;
     }
     const idx = new Uint32Array(segX * segZ * 6);
     k = 0;

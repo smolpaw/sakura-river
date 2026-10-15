@@ -424,7 +424,7 @@ function wallStones(world) {
         const fill = g < P;
         // (the ground a little further out too, under the foot stones' fronts)
         const foot = fill ? Math.min(g, ground(t, c + 0.3)) - 0.06 : P - 0.06;
-        const top = fill ? P - hip + 0.03 : g + 0.03;
+        const top = fill ? P - hip - 0.04 : g + 0.03; // (the top course flush with the yard, or a little proud of the ground above a cut)
         samp.push(top - (fill ? foot : P + hip) >= 0.3 ? { lo: fill ? foot : P + hip - (hip > 0 ? 0 : 0.06), hi: top, fill } : null);
       }
       const lo = new Float32Array(n), hi = new Float32Array(n), sky = new Float32Array(n), ok = new Uint8Array(n), fill = new Uint8Array(n);
