@@ -2,7 +2,7 @@
 
 [![A cherry tree in bloom by a river, a red drum bridge, a pagoda and a snow-capped mountain](docs/screenshot.jpg)](https://smolpaw.github.io/sakura-river/)
 
-A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, rapeseed flowering yellow across the meadow and along the bank, a drum bridge, a farming village and rice terraces, a temple on a knoll. Sika deer keep their day's round on the far bank and watch whoever comes near, a heron fishes the shallows, spot-billed and mandarin ducks, turtles, a kingfisher and wagtails live along the river, white-eyes work the blossom, swallows build their mud nests at the farmhouses, a fisherman and a rice planter work, skylarks sing high over the fields, and birds, butterflies, bats, frogs, a tanuki, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
+A full-screen, interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom by a river flowing from a Fuji-style mountain, rapeseed flowering yellow across the meadow and along the bank, a drum bridge, a farming village and rice terraces, a temple on a knoll, and wooded hills round the valley: dark cedar and cypress among oak, zelkova and maples in new leaf, with wild cherries in bloom. Sika deer keep their day's round on the far bank and watch whoever comes near, a heron fishes the shallows, spot-billed and mandarin ducks, turtles, a kingfisher and wagtails live along the river, white-eyes work the blossom, swallows build their mud nests at the farmhouses, a fisherman and a rice planter work, skylarks sing high over the fields, and birds, butterflies, bats, frogs, a tanuki, koi and fireflies come and go with the hour. Seven weather presets combine with any time of day, and the lanes can be walked in first person.
 
 Most of what you see is generated in code, and the models are built by Blender scripts in `tools/`. The exceptions are the boulders (scanned rocks, simplified in Blender), the photographed textures over the surfaces close up (bark, stone, thatch, timber, plaster, tiles, turf, earth, gravel), and the sound (recordings); all are credited below.
 
@@ -125,7 +125,7 @@ Footsteps (every `step-*` file carries the geta recording's knock, so all of the
 
 Every model is built by a Blender script in `tools/`, which describes what it builds at its top.
 
-The boulders are photogrammetry scans from Poly Haven (https://polyhaven.com), CC0, which `tools/rocks.py` downloads, simplifies and shades: "Namaqualand Boulder 04" by Jenelle van Heerden, "Namaqualand Boulder 06" by Greg Zaal and Jenelle van Heerden, "Namaqualand Boulder 05" by Jenelle van Heerden and Dario Barresi, "Boulder 01" by Rico Cilliers, and one stone of "Namaqualand Boulders 01" by Greg Zaal and Jenelle van Heerden.
+The boulders (along the river and in outcrops on the hills) are photogrammetry scans from Poly Haven (https://polyhaven.com), CC0, which `tools/rocks.py` downloads, simplifies and shades: "Namaqualand Boulder 04" by Jenelle van Heerden, "Namaqualand Boulder 06" by Greg Zaal and Jenelle van Heerden, "Namaqualand Boulder 05" by Jenelle van Heerden and Dario Barresi, "Boulder 01" by Rico Cilliers, and one stone of "Namaqualand Boulders 01" by Greg Zaal and Jenelle van Heerden.
 
 ## Textures
 
