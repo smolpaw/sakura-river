@@ -3,7 +3,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, vec4, uniform, uv, rtt, mix, max, min, dot, sqrt, clamp, length, exp, fract, select, Loop, renderOutput, toneMappingExposure,
-  pass, floor, abs, sin,
+  pass, floor, abs, sin, step,
 } from 'three/tsl';
 import FSR1Node from 'three/addons/tsl/display/FSR1Node.js';
 import { hashSin, sstep } from './tsl.js';
@@ -113,7 +113,7 @@ export function lightShafts(color, samples, scale = 0.5) {
 }
 
 export function grade(input) {
-  const u = { res: uniform(new THREE.Vector2(1, 1)), time: uniform(0), vig: uniform(0.36), clarity: uniform(0.2), sharp: uniform(0.35) };
+  const u = { res: uniform(new THREE.Vector2(1, 1)), time: uniform(0), vig: uniform(0.36), clarity: uniform(0.2), sharp: uniform(0.35), black: uniform(0.06) };
   const node = Fn(() => {
     const vUv = uv();
     const px = vec2(1.0).div(u.res);
@@ -138,12 +138,19 @@ export function grade(input) {
     const l = luma(c).toVar();
     const detail = clamp(l.sub(b1).mul(1.0).add(l.sub(b2).mul(0.35)), -0.12, 0.12);
     c.mulAssign(float(1.0).add(u.clarity.mul(detail).div(l.add(0.22))));
-    // gentle S-curve
-    c.assign(mix(c, c.mul(c).mul(vec3(3.0).sub(c.mul(2.0))), 0.28));
+    // black point with a soft toe (quadratic below 2 * black, so the darkest shades still part): the sky's light
+    // and the haze lift the day's shadows off black
+    const bk = max(u.black, 1e-4);
+    c.assign(mix(c.mul(c).div(bk.mul(4.0)), c.sub(bk), step(bk.mul(2.0), c)).div(float(1.0).sub(bk)));
+    // S-curve
+    c.assign(mix(c, c.mul(c).mul(vec3(3.0).sub(c.mul(2.0))), 0.5));
     l.assign(luma(c));
-    // vibrance: lift muted colours more than saturated ones
-    const mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
-    c.assign(mix(vec3(l), c, float(1.0).add(float(1.0).sub(mx.sub(mn)).mul(0.12))));
+    // saturation: vibrance (most on muted colours) everywhere, and more on top of it, of which the greens (the grass,
+    // the woods) get a fifth: more turns them lime
+    const mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b)), chroma = mx.sub(mn);
+    const green = clamp(c.g.sub(max(c.r, c.b)).div(chroma.add(1e-4)), 0.0, 1.0).mul(clamp(chroma.mul(8.0), 0.0, 1.0));
+    const muted = float(1.0).sub(chroma);
+    c.assign(mix(vec3(l), c, float(1.0).add(muted.mul(0.12)).add(muted.mul(0.3).add(0.1).mul(float(1.0).sub(green.mul(0.8))))));
     // split tone: indigo shadows, warm apricot highlights
     c.assign(mix(c, c.mul(vec3(0.9, 0.95, 1.12)).add(vec3(0.005, 0.008, 0.028)), float(1.0).sub(sstep(0.0, 0.5, l))));
     c.assign(mix(c, c.mul(vec3(1.05, 0.99, 0.93)), sstep(0.55, 1.0, l)));

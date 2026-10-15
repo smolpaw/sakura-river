@@ -930,14 +930,19 @@ export async function create(canvas, opts = {}) {
     U.uFogSunColor.value.copy(st.fogSun);
     sun.color.copy(st.sun);
     sun.intensity = st.sunI * st.vis;
-    const amb = tmpAmb.copy(st.zenith).lerp(st.horizon, 0.45);
+    // the sky's light, three quarters of it under a high sun in a clear sky, so the shade deepens; under cloud it is
+    // nearly all the light there is
+    const fill = lerp(1, 0.75, smoothstep(4, 20, st.elev) * (1 - (st.gloom || 0)));
+    const amb = tmpAmb.copy(st.zenith).lerp(st.horizon, 0.45).multiplyScalar(fill);
     U.uSkyAmb.value.copy(amb);
     hemi.color.copy(amb).multiplyScalar(1.25);
     hemi.groundColor.setRGB(0.16, 0.15, 0.08).lerp(st.fog, 0.25);
-    hemi.intensity = lerp(0.62, 1.0, 1 - st.vis * 0.6);
+    hemi.intensity = lerp(0.62, 1.0, 1 - st.vis * 0.6) * fill;
     hemiBase.copy(hemi.color); ambBase.copy(amb);
     rays.tint.value.copy(st.sun).lerp(rayWarm, 0.3);
     renderer.toneMappingExposure = lerp(1.35, 0.98, st.vis) * (st.elev > 30 ? 0.92 : 1);
+    // the grade's black point: high sun lifts the shadows most (sky light, haze); low light is dark enough already
+    post.grade.uniforms.black.value = lerp(0.025, 0.06, smoothstep(4, 20, st.elev));
     lastTime = t; lastCover = S.clouds;
     return st;
   }
@@ -1157,7 +1162,7 @@ export async function create(canvas, opts = {}) {
     CLOUDS.uCover.value = S.clouds; CLOUDS.uSun.value.copy(U.uSunDir.value);
     U.uFogDensity.value = 0.0006 + Math.pow(S.fog, 1.5) * 0.013;
     U.uFogFalloff.value = 0.028;
-    U.uAerial.value = (0.7 + 1.2 * S.fog) / 2400; // hazier air with the weather's haze
+    U.uAerial.value = (0.3 + 1.2 * S.fog) / 2400; // hazier air with the weather's haze
     // river mist (kawagiri) from before dawn to mid-morning, thinned by the wind
     U.uMist.value = smoothstep(4.2, 5.0, clockH) * smoothstep(8.3, 6.8, clockH) * lerp(1, 0.4, S.wind / 1.6);
     mist.visible = warming || U.uMist.value > 0.001; // warm-up builds its pipeline
