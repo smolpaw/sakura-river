@@ -374,9 +374,11 @@ export function createSound(world, bridge) {
     return [day * (1 - haze) * (1 - dull), Math.max((1 - day) * (1 - 0.6 * late), haze) * (1 - 0.8 * dull), Math.max(wet, 0.9 * grey, late)];
   }
   // the next track: the moods' fit cubed, so the best fitting mostly, but the one just played only half as likely
-  // and never three times running (not `not`)
+  // and not three times running while another fits the mood as well (not `not`): one that did not would only play
+  // until the mood's rule (music) took it off again at its first seam, a few seconds in
   function pick(fit, not = -1) {
-    const w = fit.map((f, i) => (i === not ? 0 : (0.05 + f) ** 3 * (i === run.track ? (run.n >= 2 ? 0 : 0.5) : 1)));
+    const top = Math.max(...fit), others = fit.some((f, i) => i !== run.track && i !== not && f >= top - 0.35);
+    const w = fit.map((f, i) => (i === not ? 0 : (0.05 + f) ** 3 * (i === run.track ? (run.n >= 2 && others ? 0 : 0.5) : 1)));
     let r = Math.random() * w.reduce((a, b) => a + b, 0);
     for (let i = 0; i < w.length; i++) if ((r -= w[i]) <= 0 && w[i] > 0) return i;
     return w.findIndex((x) => x > 0);
