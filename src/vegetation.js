@@ -235,8 +235,8 @@ export function rockPlan(world, tier, treePos) {
     const side = rng() < 0.5 ? -1 : 1;
     const t = lerp(0.55, 1.12, rng());
     const x = rx + side * t * hw;
-    const y = world.height(x, z);
-    pebbles.push({ x, y: y - 0.02, z, sc: 0.05 + Math.pow(rng(), 2) * 0.18, flatten: 0.7, v: Math.floor(rng() * variants), rot: rng() * 6.28 });
+    const sc = 0.05 + Math.pow(rng(), 2) * 0.18; // (drawn in the order the rng sequence had them)
+    pebbles.push({ x, y: lowest(world, x, z, sc) - 0.02, z, sc, flatten: 0.7, v: Math.floor(rng() * variants), rot: rng() * 6.28 });
   }
   return { rng, placements, pebbles, rocksInWater };
 }
