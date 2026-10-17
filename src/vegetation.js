@@ -1,7 +1,7 @@
 // The deer's turf, wildflowers, rocks & pebbles, the farmhouses' dry-stone walls, the gorge's rock walls, the woods on the hills
 import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
-import { WALL } from './world.js';
+import { WALL, RAMP } from './world.js';
 import { toroSites } from './village.js';
 import { bridgeFrame, BRIDGE_Z } from './props.js';
 
@@ -409,9 +409,7 @@ function wallStones(world) {
       G.kind.push(kind);
     };
     // the pad's sides: middle and direction along it (in the building's frame), the way out, half its length
-    const zc = b.yard / 2, hd = b.hd + b.yard / 2;
-    const sides = [[0, zc - hd, 1, 0, 0, -1, b.hw], [b.hw, zc, 0, 1, 1, 0, hd], [0, zc + hd, -1, 0, 0, 1, b.hw], [-b.hw, zc, 0, -1, -1, 0, hd]];
-    for (const [cx, cz, ax, az, ox, oz, half] of sides) {
+    for (const [cx, cz, ax, az, ox, oz, half] of world.padSides(b)) {
       const toW = (t, e) => {
         const lx = cx + ax * t + ox * e, lz = cz + az * t + oz * e;
         return [b.x + lx * b.c + lz * b.s, b.z - lx * b.s + lz * b.c];
@@ -424,6 +422,7 @@ function wallStones(world) {
       const samp = [];
       for (let j = 0; j < ns; j++) {
         const t = -reach + j * S, e0 = Math.max(WALL.top, Math.abs(t) - half), hip = (e0 - WALL.top) * k;
+        if (b.ramp && world.rampDist(...toW(t, e0 + 0.2)) < RAMP.flank) { samp.push(null); continue; } // (none across the yard's ramp, world.js rampOf, or its flanks)
         let e = e0, g = ground(t, e);
         if (Math.abs(g - P) <= hip + 0.05) { samp.push(null); continue; }
         while (e < 2.2 && Math.abs(g - P) > (e - WALL.top) * k) { e += 0.2; g = ground(t, e); }
@@ -574,7 +573,7 @@ export function bambooData(world) {
     for (let t = 0, n = 0; t < 160 && n < 16; t++) {
       const lx = lerp(-b.hw - 4, b.hw + 4, r2()), lz = -b.hd - lerp(3.2, 12, r2());
       const x = b.x + lx * b.c + lz * b.s, z = b.z - lx * b.s + lz * b.c;
-      if (world.padAt(x, z) || world.zoneAt(x, z) || world.laneDist(x, z) < 3) continue;
+      if (world.padAt(x, z) || world.zoneAt(x, z) || world.laneDist(x, z) < 3 || world.rampDist(x, z) < 3) continue;
       if (world.BUILDINGS.some((o) => o !== b && Math.abs(x - o.x) < 30 && Math.abs(z - o.z) < 30 && world.padDist(o, x, z) < 7)) continue;
       if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 1.9)) continue;
       placed.push([x, z]);
@@ -608,7 +607,7 @@ export function shrubData(world, trees, clear = []) {
   };
   const free = (x, z, r) => {
     const ri = world.riverInfo(x, z);
-    if (ri.t < 1.7 || world.zoneAt(x, z) || world.laneDist(x, z) < 1.6 + r || world.padAt(x, z) || world.templeDist(x, z) < 1 + r) return false;
+    if (ri.t < 1.7 || world.zoneAt(x, z) || world.laneDist(x, z) < 1.6 + r || world.padAt(x, z) || world.rampDist(x, z) < 1 + r || world.templeDist(x, z) < 1 + r) return false;
     if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < t.r)) return false;
     return !placed.some(([px, pz, pr]) => Math.hypot(px - x, pz - z) < (pr + r) * 0.85);
   };
@@ -709,7 +708,7 @@ export function nanohanaData(world, { tree, small, turf, rocks = [], clear = [],
   };
   // whether a plant r across may stand at (x, z)
   const free = (x, z, r, lane = 3) => {
-    if (world.laneDist(x, z) < lane + r || world.zoneAt(x, z) || world.padAt(x, z) || world.grove(x, z) > 0.02) return false;
+    if (world.laneDist(x, z) < lane + r || world.zoneAt(x, z) || world.padAt(x, z) || world.rampDist(x, z) < 1 + r || world.grove(x, z) > 0.02) return false;
     if (Math.hypot(x - tree[0], z - tree[1]) < 17 || turf(x, z) > 0.005) return false;
     if (world.CLEAR.some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 10 + r)) return false;
     if (small.some((t) => Math.hypot(x - t.x, z - t.z) < 3 + r)) return false;

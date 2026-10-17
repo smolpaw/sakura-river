@@ -47,6 +47,7 @@ const SLOTS = {
   ],
 };
 const PAD_MARGIN = 0.15; // m of the pad kept clear round a footprint
+const RAMP_CLEAR = 1.6; // m clear of the yard's ramp (world.js rampOf) and of the yard before its top
 const LANE_CLEAR = 1.7; // the footprint's nearest point from a lane's middle (a lane's 1.2 m and the walker's body)
 
 // houses: [{ b: the building (world.js BUILDINGS), sc: its model's scale }]. Returns the instances for lods.js (per kind
@@ -79,7 +80,7 @@ export function yardData(world, houses) {
         return pts;
       };
       const fits = ring(hw + PAD_MARGIN, hd + PAD_MARGIN).every(([px, pz]) => world.padDist(b, px, pz) === 0)
-        && ring(hw, hd).every(([px, pz]) => world.laneDist(px, pz) >= LANE_CLEAR && !world.zoneAt(px, pz))
+        && ring(hw, hd).every(([px, pz]) => world.laneDist(px, pz) >= LANE_CLEAR && !world.zoneAt(px, pz) && world.rampDist(px, pz) >= RAMP_CLEAR)
         && world.CLEAR.every(([cx, cz]) => hyp(x - cx, z - cz) > 2.5 + hyp(hw, hd))
         && placed.every((o) => hyp(o.x - x, o.z - z) > o.r + Math.min(hw, hd));
       if (!fits) continue;

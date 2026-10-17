@@ -11,6 +11,8 @@ export const terrainSMaxZ = () => Math.asinh((TERRAIN_GRID.zMax - TERRAIN_GRID.z
 // the farmhouses' pads' dry-stone walls (padGround): the face's top this far out from the pad's edge (m), its batter
 // (rise over run), and the step between the pad and the ground over which the bank turns from an eased slope into it
 export const WALL = { top: 0.15, batter: 3, min: 0.25, full: 0.45 };
+// the cart ramps into walled yards (world.js rampOf): half-width and the flanks beside it (m), rise over run
+export const RAMP = { w: 1.0, flank: 0.7, slope: 0.4 };
 
 export function createWorld(seed = 7) {
   const N = makeNoise(seed);
@@ -109,25 +111,30 @@ export function createWorld(seed = 7) {
   // distance to the nearest lane: looked up in a 1 m grid made on first use (out to 8 m; beyond, Infinity). Each
   // segment of each lane fills only the cells within 8 m of its bounds, keeping the nearest (every cell as the exact
   // distance to all the segments, clamped to 8, would cost ~50 ms in every worker that asks for a height)
-  const LD = { x0: -104, z0: -250, s: 1, nx: 165, nz: 253, d: null };
-  function laneDist(x, z) {
-    if (!LD.d) {
-      const d = LD.d = new Float32Array(LD.nx * LD.nz).fill(8), cell = (v, o) => (v - o) / LD.s;
-      for (const L of LANES) for (let k = 1; k < L.length; k++) {
-        const [ax, az] = L[k - 1], [bx, bz] = L[k], vx = bx - ax, vz = bz - az, vv = vx * vx + vz * vz;
-        const i0 = Math.max(0, Math.floor(cell(Math.min(ax, bx) - 8, LD.x0))), i1 = Math.min(LD.nx - 1, Math.ceil(cell(Math.max(ax, bx) + 8, LD.x0)));
-        const j0 = Math.max(0, Math.floor(cell(Math.min(az, bz) - 8, LD.z0))), j1 = Math.min(LD.nz - 1, Math.ceil(cell(Math.max(az, bz) + 8, LD.z0)));
-        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-          const x = LD.x0 + i * LD.s, z = LD.z0 + j * LD.s, t = clamp(((x - ax) * vx + (z - az) * vz) / vv, 0, 1);
-          const r = hyp(x - ax - vx * t, z - az - vz * t);
-          if (r < d[j * LD.nx + i]) d[j * LD.nx + i] = r;
-        }
+  const LD = { x0: -104, z0: -250, s: 1, nx: 165, nz: 253 };
+  let laneD = null; // (the grid: Float32Array, made on first use)
+  // (the grid made apart from the lookup and kept out of LD: filled in on an object the lookup reads, V8 threw away its
+  // optimised code at every call once it had been optimised before the grid was made)
+  function laneGrid() {
+    const d = new Float32Array(LD.nx * LD.nz).fill(8), cell = (v, o) => (v - o) / LD.s;
+    for (const L of LANES) for (let k = 1; k < L.length; k++) {
+      const [ax, az] = L[k - 1], [bx, bz] = L[k], vx = bx - ax, vz = bz - az, vv = vx * vx + vz * vz;
+      const i0 = Math.max(0, Math.floor(cell(Math.min(ax, bx) - 8, LD.x0))), i1 = Math.min(LD.nx - 1, Math.ceil(cell(Math.max(ax, bx) + 8, LD.x0)));
+      const j0 = Math.max(0, Math.floor(cell(Math.min(az, bz) - 8, LD.z0))), j1 = Math.min(LD.nz - 1, Math.ceil(cell(Math.max(az, bz) + 8, LD.z0)));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = LD.x0 + i * LD.s, z = LD.z0 + j * LD.s, t = clamp(((x - ax) * vx + (z - az) * vz) / vv, 0, 1);
+        const r = hyp(x - ax - vx * t, z - az - vz * t);
+        if (r < d[j * LD.nx + i]) d[j * LD.nx + i] = r;
       }
     }
+    return d;
+  }
+  function laneDist(x, z) {
+    if (!laneD) laneD = laneGrid();
     const fx = (x - LD.x0) / LD.s, fz = (z - LD.z0) / LD.s;
     const i = Math.floor(fx), j = Math.floor(fz);
     if (i < 0 || j < 0 || i >= LD.nx - 1 || j >= LD.nz - 1) return Infinity;
-    const u = fx - i, v = fz - j, d = LD.d, k = j * LD.nx + i;
+    const u = fx - i, v = fz - j, d = laneD, k = j * LD.nx + i;
     const r = (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + LD.nx] * (1 - u) + d[k + LD.nx + 1] * u) * v;
     return r >= 8 ? Infinity : r;
   }
@@ -179,6 +186,67 @@ export function createWorld(seed = 7) {
     const dx = x - b.x, dz = z - b.z, lx = dx * b.c - dz * b.s, lz = dx * b.s + dz * b.c;
     return Math.max(Math.abs(lx) - b.hw, Math.abs(lz - b.yard / 2) - b.hd - b.yard / 2);
   };
+  // A pad's sides in its own frame: the middle, the direction along it, the way out, half its length (the back, +x,
+  // the front, -x; vegetation.js wallStones lays the walls side by side so)
+  const padSides = (b) => {
+    const zc = b.yard / 2, hd = b.hd + b.yard / 2;
+    return [[0, zc - hd, 1, 0, 0, -1, b.hw], [b.hw, zc, 0, 1, 1, 0, hd], [0, zc + hd, -1, 0, 0, 1, b.hw], [-b.hw, zc, 0, -1, -1, 0, hd]];
+  };
+  const sideToW = (b, side, t, e) => {
+    const [cx, cz, ax, az, ox, oz] = side, lx = cx + ax * t + ox * e, lz = cz + az * t + oz * e;
+    return [b.x + lx * b.c + lz * b.s, b.z - lx * b.s + lz * b.c];
+  };
+  // A cart ramp into a yard walled off from the ground round it (its pad cut into the slope or built up on it by more
+  // than WALL.min where it would leave): an earth track RAMP.w each side of its line, from the yard's edge at its
+  // level down or up to the ground at RAMP.slope, leaving the front or an end of the yard (beside the yard, not the
+  // house) straight out or slanting along the slope (to 60 degrees), the shortest that meets the ground, towards the
+  // lanes, never into a paddy or another pad. { x0, z0 (its start on the yard's edge), dx, dz (its way), len, y1 (the
+  // ground at its end) }, or null.
+  function rampOf(b) {
+    if (b.yard < 3) return null;
+    const sides = padSides(b), g = (x, z) => unlevelled(x, z);
+    let best = null;
+    for (const k of [1, 2, 3]) {
+      const side = sides[k], [, cz, ax, az, ox, oz] = side, half = side[6];
+      // (along an end, only beside the yard: from the house's front to the yard's edge, clear of both)
+      const lo = az ? (b.hd + 0.4 + RAMP.w - cz) * az : -half + RAMP.w + 0.4, hi = az ? (b.hd + b.yard - RAMP.w - 0.4 - cz) * az : half - RAMP.w - 0.4;
+      for (let t = Math.min(lo, hi); t <= Math.max(lo, hi) + 1e-6; t += 1) {
+        const [x0, z0] = sideToW(b, side, t, 0);
+        if (Math.abs(g(...sideToW(b, side, t, WALL.top + 0.3)).g - b.y) < WALL.min) continue; // (no wall there)
+        for (let a = -60; a <= 60; a += 20) {
+          // the way out, turned by a towards the side's direction, in the world
+          const lx = ox * Math.cos(a * Math.PI / 180) + ax * Math.sin(a * Math.PI / 180), lz = oz * Math.cos(a * Math.PI / 180) + az * Math.sin(a * Math.PI / 180);
+          const dx = lx * b.c + lz * b.s, dz = -lx * b.s + lz * b.c;
+          let len = 0, y1 = 0, ok = true;
+          for (let e = 0.6; e <= 9; e += 0.3) {
+            const x = x0 + dx * e, z = z0 + dz * e, u = g(x, z);
+            if ((u.F && u.F.wet) || BUILDINGS.some((o) => o !== b && Math.abs(x - o.x) < 20 && Math.abs(z - o.z) < 20 && padDist(o, x, z) < 1.5)) { ok = false; break; }
+            if (Math.abs(u.g - b.y) <= RAMP.slope * e) { len = e; y1 = u.g; break; }
+          }
+          if (!ok || !len) continue;
+          const score = len + 0.3 * Math.min(laneDist(x0 + dx * len, z0 + dz * len), 12);
+          if (!best || score < best.score) best = { score, x0, z0, dx, dz, len, y1 };
+        }
+      }
+    }
+    return best && { x0: best.x0, z0: best.z0, dx: best.dx, dz: best.dz, len: best.len, y1: best.y1 };
+  }
+  // the ramps (their buildings), and the box round each (its flanks and a margin: x0, z0, x1, z1), once the pads are
+  // levelled; the lookups below run for every point of the ground, so they test the boxes first and allocate nothing
+  const RAMPS = [];
+  let RBOX = new Float64Array(0);
+  // how far (x, z) lies outside the ramps' tracks (0 on one), the nearest ramp's (Infinity more than a metre outside
+  // the box round its flanks)
+  function rampDist(x, z) {
+    let d = Infinity;
+    for (let i = 0; i < RAMPS.length; i++) {
+      const k = i * 4;
+      if (x < RBOX[k] || z < RBOX[k + 1] || x > RBOX[k + 2] || z > RBOX[k + 3]) continue;
+      const r = RAMPS[i].ramp, px = x - r.x0, pz = z - r.z0, s = px * r.dx + pz * r.dz, l = px * r.dz - pz * r.dx;
+      d = Math.min(d, hyp(Math.max(0, Math.abs(l) - RAMP.w), Math.max(0, -s, s - r.len)));
+    }
+    return d;
+  }
   // The pads levelled into the ground g at (x, z). Where a pad is cut into the slope or built up on it by more than
   // WALL.full, its bank is a dry-stone wall's face (vegetation.js wallStones lays the stones on it): a plane from
   // WALL.top out from the pad's edge, battered back at WALL.batter (rise over run) into the earth it holds, down or up
@@ -191,9 +259,23 @@ export function createWorld(seed = 7) {
       const eo = padEdge(o, x, z);
       if (eo < e) { b = o; e = eo; }
     }
-    if (!b) return g;
+    if (!b) return rampGround(x, z, g);
     const lim = Math.max(0, e - WALL.top) * WALL.batter, face = b.y + clamp(g - b.y, -lim, lim);
-    return lerp(lerp(g, b.y, smoothstep(2.2, 0.15, padDist(b, x, z))), face, smoothstep(WALL.min, WALL.full, Math.abs(g - b.y)));
+    const level = lerp(lerp(g, b.y, smoothstep(2.2, 0.15, padDist(b, x, z))), face, smoothstep(WALL.min, WALL.full, Math.abs(g - b.y)));
+    return rampGround(x, z, level);
+  }
+  // the ramps graded into the ground y at (x, z): from the yard's level to the ground's along the track, its flanks
+  // RAMP.flank wide back to the ground beside it
+  function rampGround(x, z, y) {
+    for (let i = 0; i < RAMPS.length; i++) {
+      const k = i * 4;
+      if (x < RBOX[k] || z < RBOX[k + 1] || x > RBOX[k + 2] || z > RBOX[k + 3]) continue;
+      const b = RAMPS[i], r = b.ramp, px = x - r.x0, pz = z - r.z0, s = px * r.dx + pz * r.dz, l = px * r.dz - pz * r.dx;
+      if (s < -0.5 || s > r.len + RAMP.flank || Math.abs(l) > RAMP.w + RAMP.flank) continue;
+      const track = b.y + (r.y1 - b.y) * clamp(s / r.len, 0, 1);
+      return lerp(y, track, smoothstep(RAMP.w + RAMP.flank, RAMP.w, Math.abs(l)) * smoothstep(r.len + RAMP.flank, r.len, s));
+    }
+    return y;
   }
   // the small cherries along the river stand in their own clearings (their Blender trunks fit the ground there)
   const CLEAR = [[-50.4, -92], [-5.3, -150], [-43.9, -225], [2.2, -40]];
@@ -372,6 +454,12 @@ export function createWorld(seed = 7) {
 
   temple.y = height(temple.x, temple.z) + 1.6;
   for (const b of BUILDINGS) b.y = b.level ?? ground(b.x, b.z) - meadowFine(b.x, b.z); // the pad's level: the ground under the house, half cut, half built up
+  for (const b of BUILDINGS) b.ramp = rampOf(b);
+  RAMPS.push(...BUILDINGS.filter((b) => b.ramp));
+  RBOX = new Float64Array(RAMPS.flatMap(({ ramp: r }) => {
+    const m = RAMP.w + RAMP.flank + 1, x1 = r.x0 + r.dx * (r.len + RAMP.flank), z1 = r.z0 + r.dz * (r.len + RAMP.flank);
+    return [Math.min(r.x0, x1) - m, Math.min(r.z0, z1) - m, Math.max(r.x0, x1) + m, Math.max(r.z0, z1) + m];
+  }));
   // distance outside the temple's terrace (0 on it)
   function templeDist(x, z) {
     const dx = x - temple.x, dz = z - temple.z;
@@ -393,6 +481,7 @@ export function createWorld(seed = 7) {
     let open = smoothstep(40, 56, Math.abs(x - riverX(z)) - Math.max(0, -z) * 0.05) * smoothstep(85, 105, hyp(x + 10, z - 10)) * smoothstep(8, 16, templeDist(x, z));
     if (open > 0) { const zm = zoneAt(x, z); if (zm) open *= 1 - zm.m; }
     if (open > 0) for (const b of BUILDINGS) if (Math.abs(x - b.x) < 30 && Math.abs(z - b.z) < 30) open *= smoothstep(4, 9, padDist(b, x, z));
+    if (open > 0) open *= smoothstep(2, 5, rampDist(x, z));
     return open;
   }
   const groveN = (x, z) => NG.fbm2(x * 0.009, z * 0.009, 3);
@@ -476,7 +565,7 @@ export function createWorld(seed = 7) {
     c.lerp(dirt, smoothstep(1.9, 1.1, ld) * (0.8 + 0.2 * n2));
     // the farmhouses' yards: packed earth, grass round the edges
     const pad = padAt(x, z);
-    const yard = pad ? smoothstep(1.2, 0.0, pad.d) : 0;
+    const yard = Math.max(pad ? smoothstep(1.2, 0.0, pad.d) : 0, smoothstep(0.5, -0.3, rampDist(x, z)) * 0.9);
     c.lerp(dirt, yard * (0.75 + 0.25 * n2));
     // shaded floor under the groves' trees
     c.lerp(woodFloor, grove(x, z, gn, wl) * 0.75 * (1 - steep) * smoothstep(3, 6, y) * smoothstep(175, 160, y));
@@ -779,7 +868,7 @@ export function createWorld(seed = 7) {
     const u = fx - i, v = fz - j, d = HC.data, k = j * HC.nx + i;
     return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + HC.nx] * (1 - u) + d[k + HC.nx + 1] * u) * v;
   }
-  return { N, height, heightField, unlevelled, zoneAt, padAt, padDist, padEdge, BUILDINGS, ground, LANES, CLEAR, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove, wild, scrub };
+  return { N, height, heightField, unlevelled, zoneAt, padAt, padDist, padEdge, padSides, rampDist, BUILDINGS, ground, LANES, CLEAR, laneDist, LANES, ZONES, heightFast, buildHeightCache, heightCacheData: () => HC.data, computeHeightCache, setHeightCache, riverX, riverHW, riverInfo, flowDir, buildTerrain, buildFields, buildRiver, buildDepthMap, peak: { x: peakX, z: peakZ, R: fujiR }, temple, templeDist, grove, wild, scrub };
 }
 
 // water depth textures (R = depth / 4) from buildDepthMap's data: terrain, and the fine rock map (G = rock foam)
