@@ -1,7 +1,8 @@
 // Builds public/audio/ from the source recordings credited in README.md (Sound).
 //   node tools/audio.mjs [name ...]
-// Needs ffmpeg with libmp3lame. Sources are downloaded once into tools/.audio-cache/. Given names, it builds only the
-// outputs whose names start with one of them (`node tools/audio.mjs step- frogs`) and leaves the other files as they are.
+// Needs ffmpeg with libmp3lame and rubberband. Sources are downloaded once into tools/.audio-cache/. Given names, it
+// builds only the outputs whose names start with one of them (`node tools/audio.mjs step- frogs`) and leaves the other
+// files as they are.
 // - Beds (river, wind, rain, birds, lapping, waterwheel, frogs, bamboo, the skylark's song, rain off the eaves and on the
 //   water) become seamless loops: the segment's tail is
 //   crossfaded into its head, and the file carries PAD seconds of the loop's own end before it and of its start after

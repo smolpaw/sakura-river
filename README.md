@@ -17,7 +17,7 @@ Live: https://smolpaw.github.io/sakura-river/ (every push to `main` deploys, onc
 
 The page must be served over HTTP to load the sounds (`dist/audio/`), the walker's and the people's models (`dist/models/`) and the photographed textures (`dist/textures/`). Opened as a file, it runs without them.
 
-Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender models; needs `blender` on the PATH or `BLENDER=`) and `node tools/audio.mjs` (the sounds; needs ffmpeg).
+Rebuild generated assets with `node tools/blender.mjs [name]` (the Blender models; needs `blender` on the PATH or `BLENDER=`), `node tools/audio.mjs` (the sounds; needs ffmpeg with libmp3lame and rubberband) and `node tools/textures.mjs` (the photographed textures and three's Basis transcoder; encoding needs Linux x86-64, since it fetches KTX-Software's Linux build of `ktx`; `--transcoder` only copies the transcoder, anywhere).
 
 ## Repeat visits
 
@@ -31,32 +31,33 @@ The built site registers a service worker (`src/sw.js`, written into `dist/sw.js
 
 ## Controls
 
-Drag to look round, scroll or pinch to zoom, right-drag to pan. Buttons: Cinematic (a flight round the valley), Orbit, Walk and Reset view. In walk mode, W A S D or the arrow keys walk, the mouse looks (click to lock the pointer, Esc to release it), and Shift hurries. On touch screens, the left thumb walks and the right one looks.
+Drag to look round, scroll or pinch to zoom, right-drag to pan. Buttons: Cinematic (a flight round the valley), Orbit, Walk and Reset view. In walk mode, W A S D or the arrow keys walk, the mouse looks (click to lock the pointer, Esc to release it; a second Esc leaves walk mode), and Shift hurries. On touch screens, the left thumb walks and the right one looks.
 
-The time slider moves the scene as it is dragged; its arrow keys step by half hours. With the system's reduced-motion setting on, the page opens without its flight in, a new time is cut to rather than run as a time-lapse and the weather changes within a second; the cinematic flight still runs when started.
+The panel picks the weather and the time: a preset, the time slider (the scene moves as it is dragged; its arrow keys step by half hours, Page Up and Page Down by two hours), or the dice beside each (another weather at random, or a random time at least two hours away). It also sets the music's and the nature sounds' volumes. The sound starts with the first click, tap or key press, since browsers hold it back until then. The buttons in the top corner copy a link to the view, hide the controls, mute the sound and go full screen. With the system's reduced-motion setting on, the page opens without its flight in, a new time is cut to rather than run as a time-lapse and the weather changes within a second; the cinematic flight still runs when started.
 
 The address keeps the time, the weather and the view (or the walker's place): `#t=<hour>&w=<weather>&v=<x,y,z,tx,ty,tz>`, or `&walk=<x,z,yaw,pitch>` (metres, degrees), with no hash at the opening view at night in clear weather. A page opened from it starts there, flying in briefly. The link button copies it. The photo button or H hides every control and the title; H, Esc (outside walk mode) or the button that shows in the corner after a touch or a mouse movement brings them back.
 
-Quality: Auto picks a tier and lowers the resolution under load; a tier picked by hand stays fixed. Frame rate: Auto runs at 60 fps and drops to 30 on slow devices; 60 and 30 hold that rate.
+Quality: Auto picks a tier and lowers the resolution under load; a tier picked by hand stays fixed. Frame rate: Auto runs at 60 fps; at Auto quality, where the browser reports GPU timings (WebGPU's timestamp queries, WebGL's timer-query extension), it drops to 30 before it lowers any detail. 60 and 30 hold that rate.
 
 ## Layout
 
 - `index.html`, `src/style.css`, `src/ui.js`: the page and its controls.
 - `src/main.js`: engine entry: renderer, scene assembly, camera modes, post chain, public API.
 - `src/world.js`: terrain height field, river path, the village's paddies, lanes and building pads.
-- `src/quality.js`: adaptive quality. `src/gen/`: worker pool for the generation done during loading.
+- `src/quality.js`: adaptive quality. `src/gen/`: worker pool for the generation done during loading. `src/noise.js`: the seeded random numbers and simplex noise.
 - `src/tsl.js`, `src/materials.js`: shared shader nodes and the lit materials (TSL, compiled to WGSL and GLSL).
 - `src/photos.js`, `src/kinds.js`: the photographed textures' loading, and the surface kinds that choose them. `src/textures.json`: each set's size in metres and average colour (written by `tools/textures.mjs`). `src/groundao.js`: the ground's occlusion by the buildings. `src/camerahull.js`: the height the orbit camera keeps over the buildings.
 - `src/lods.js`, `src/impostors.js`: the instanced Blender models with their distance levels, culling and the woods' impostors.
 - `src/lights.js`, `src/sunshadow.js`, `src/post.js`: the lamps' light map, the valley and cloud shadows, light shafts and the final grade.
-- Scenery: `tree.js`, `blossoms.js`, `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `yard.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.
+- Scenery: `tree.js`, `blossoms.js`, `dropped.js` (whole flowers under the cherry), `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `yard.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.
 - Sky and water: `sky.js`, `weather.js`, `water.js`, `touches.js`, `petals.js`, `petalsgpu.js`, `fx.js`, `fireflies.js`.
 - Animals and people: `koi.js`, `deer.js`, `heron.js`, `ducks.js`, `turtles.js`, `frogs.js`, `tanuki.js`, `birds.js`, `perched.js`, `butterflies.js`, `figures.js`.
 - Walk mode: `walk.js` (the path network and the input), `walker.js` (the traveller's body).
 - `src/audio.js`: music and ambience.
-- `src/assets.js`, `src/sw.js`: the versioned URLs of the files from `public/` and the service worker that keeps them (Repeat visits). `vite.plugins.mjs`: the build's plugins (the files' hashes, `dist/sw.js`, three's transcoder kept out of the page).
+- `src/assets.js`, `src/sw.js`: the versioned URLs of the files from `public/` and the service worker that keeps them (Repeat visits). `vite.config.js`, `vite.plugins.mjs`: the build (one inlined page) and its plugins (the files' hashes, `dist/sw.js`, three's transcoder kept out of the page).
 - `src/models/`: models inlined in the page. `public/models/`: models fetched later (the traveller, the people at work, the Ultra tier's near models). `public/audio/`: sounds. `public/textures/`: photographed textures. `public/basis/`: three's Basis transcoder for them.
-- `tools/`: model, audio and texture build scripts. `bench/`: headless capture and timing scripts. `docs/performance.md`: renderer performance notes.
+- Bench only: `src/stress.js` (a heavier future-content scenario), `src/bench-hash.js` (hashes of every generated buffer, to prove the workers' output identical), `src/bench-probe-gpu.js` (per-pass GPU time and counters).
+- `tools/`: model, audio and texture build scripts. `bench/`: headless capture and timing scripts. `docs/performance.md`: renderer performance notes. `docs/research/`: sourced notes on browser GPU facts and three r186's API.
 
 ## Engine API
 
@@ -67,7 +68,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
     scene.followTime(hour);                     // eased there within a fraction of a second (a slider being dragged)
     scene.timeOfDay();
     scene.view();                               // { pos, target, flying, home } or, walking, { walk: [x, z, yaw, pitch], flying }
-    scene.set('wind' | 'petals' | 'river' | 'time' | 'fog' | 'bloom' | 'clouds' | 'rain' | 'lightning', value0to1);
+    scene.set('wind' | 'petals' | 'river' | 'time' | 'fog' | 'bloom' | 'clouds' | 'rain' | 'lightning', value0to1); // 'time': 0..1 is 05:00..19:00
     scene.setCinematic(on); scene.setAutoOrbit(on); scene.setWalk(on); scene.walking();
     scene.setSound(on); scene.setVolume('music' | 'nature', v); scene.soundWaiting();
     scene.setRenderScale(s);                    // 0.6..1
@@ -78,7 +79,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - `view` opens on a view, flown into briefly: `{ pos: [x, y, z], target: [x, y, z] }`, or `{ walk: [x, z, yaw, pitch] }` (radians) to open walking there; anything else is ignored. `introDuration`: the opening flight's seconds (6.5 to the default view, 1.6 into `view`; 0 for none).
 - `quality` is `'ultra' | 'high' | 'medium' | 'low'`. When it is omitted, the engine picks a tier for the device, never Ultra. `fixedQuality` turns off the adaptive resolution. `backend: 'webgl'` forces WebGL2.
 - `create` rejects with `code` `'unsupported'` (no WebGPU or WebGL2), `'stalled'` (shader preparation hung) or `'lost'` (device lost during start-up).
-- The callbacks: `onProgress({ stage, f, quality, backend })` during loading, `onStats({ fps, quality, level, scale, floor })` about once a second, `onLost({ api, message, reason })` on a lost device.
+- The callbacks: `onProgress({ stage, f, quality, backend })` during loading (`stage`: `'generate'`, `'build'`, `'shaders'`, `'warm'`), `onReady({ quality })` with the tier in use as the scene first shows, `onStats({ fps, rate, quality, level, scale, floor })` about once a second (`rate`: the frame rate it runs at, 60 or 30), `onLost({ api, message, reason })` on a lost device.
 - The handle also carries debug hooks for headless checks, commented where `src/main.js` returns it.
 
 ## Sound
@@ -140,7 +141,7 @@ The boulders (along the river and in outcrops on the hills) are photogrammetry s
 
 ## Textures
 
-Close up, these surfaces are photographed texture sets from Poly Haven (https://polyhaven.com), CC0, laid over the scene's own colours as detail. `tools/textures.mjs` downloads them and encodes them into `public/textures/` as KTX2 (Basis Universal: ETC1S colour, UASTC normals), which the page transcodes to a GPU-compressed format with three's Basis transcoder (`public/basis/`, copied from `three` by the same script).
+Close up, these surfaces are photographed texture sets from Poly Haven (https://polyhaven.com), CC0, laid over the scene's own colours as detail. `tools/textures.mjs` downloads them and encodes them into `public/textures/` as KTX2 (Basis Universal: ETC1S colour, UASTC normals), which the page transcodes to a GPU-compressed format with three's Basis transcoder (`public/basis/`, copied from `three` by the same script; Basis Universal by Binomial, Apache-2.0).
 
 - The cherries' bark: "Sakura Bark" by Charlotte Baglioni.
 - The boulders, pebbles, the gorge's walls and the village's dry-stone walls: "Lichen Rock" by Rico Cilliers.
@@ -155,3 +156,7 @@ Close up, these surfaces are photographed texture sets from Poly Haven (https://
 - The temple's gravel courtyard: "Gravel Ground 01" by Rob Tuytel.
 - The ground under the grass and the green yards: "Forest Ground 01" by Rob Tuytel.
 - Bare earth off the lanes (the yards, levees, dry paddies and banks): "Brown Mud 02" by Rob Tuytel.
+
+## Fonts
+
+The page sets its type in Shippori Mincho (by FONTDASU) and Zen Kaku Gothic New (by Yoshimichi Ohira), served by Google Fonts (https://fonts.google.com) under the SIL Open Font License 1.1.

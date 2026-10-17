@@ -20,7 +20,7 @@ export const WEATHER_KEYS = ['wind', 'petals', 'river', 'fog', 'bloom', 'clouds'
 // Times of day as clock hours. The scene's time t runs 0..1 from 05:00 to 19:00; outside that it is night.
 export const TIMES = [
   { id: 'dawn', kanji: '暁', name: 'Dawn', hour: 5.5 },
-  { id: 'afternoon', kanji: '昼', name: 'Afternoon', hour: 14.5 },
+  { id: 'afternoon', kanji: '昼', name: 'Day', hour: 14.5 },
   { id: 'dusk', kanji: '夕', name: 'Dusk', hour: 17.85 },
   { id: 'night', kanji: '夜', name: 'Night', hour: 20.75 },
 ];

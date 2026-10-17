@@ -1,4 +1,4 @@
-// The service worker (registered by ui.js on the built site; vite.config.js writes it into dist/ as sw.js with this
+// The service worker (registered by ui.js on the built site; vite.plugins.mjs writes it into dist/ as sw.js with this
 // build's VERSION and ASSETS filled in). It makes a repeat visit fetch next to nothing without ever serving an old page:
 // - the page (a navigation) from the network every time, revalidated past the browser's cache; the copy kept is used
 //   only when the network fails (offline);

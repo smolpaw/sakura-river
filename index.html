@@ -4,22 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Sakura River</title>
+<meta name="description" content="An interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom, a village, a temple and wooded hills, under any weather and time of day, to look round or walk through.">
+<meta name="theme-color" content="#0e0c14">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Sakura River">
+<meta property="og:description" content="An interactive Three.js scene of a Japanese river valley in spring: a cherry tree in bloom, a village, a temple and wooded hills, under any weather and time of day.">
+<meta property="og:url" content="https://smolpaw.github.io/sakura-river/">
+<!-- og.jpg (public/) is for link previews only: the page never fetches it, so the service worker never keeps it -->
+<meta property="og:image" content="https://smolpaw.github.io/sakura-river/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A cherry tree in bloom by a river, a red drum bridge, a pagoda and a snow-capped mountain">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-50 -50 100 100'%3E%3Cg fill='%23f5a9c1' stroke='%23c9486e' stroke-width='3'%3E%3Cg transform='rotate(0)'%3E%3Cpath d='M0 0C-21-10-21-36-8-44L0-37 8-44C21-36 21-10 0 0Z'/%3E%3C/g%3E%3Cg transform='rotate(72)'%3E%3Cpath d='M0 0C-21-10-21-36-8-44L0-37 8-44C21-36 21-10 0 0Z'/%3E%3C/g%3E%3Cg transform='rotate(144)'%3E%3Cpath d='M0 0C-21-10-21-36-8-44L0-37 8-44C21-36 21-10 0 0Z'/%3E%3C/g%3E%3Cg transform='rotate(216)'%3E%3Cpath d='M0 0C-21-10-21-36-8-44L0-37 8-44C21-36 21-10 0 0Z'/%3E%3C/g%3E%3Cg transform='rotate(288)'%3E%3Cpath d='M0 0C-21-10-21-36-8-44L0-37 8-44C21-36 21-10 0 0Z'/%3E%3C/g%3E%3C/g%3E%3Ccircle r='7' fill='%23c9486e'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- fonts load without holding back the first paint (the loading veil shows at once, in a fallback font if need be) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap"></noscript>
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap">
+<style>#veil-text { display: none; } .veil-mark { animation: none; }</style></noscript>
 <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
-<canvas id="scene" aria-label="Interactive 3D scene: a cherry blossom tree beside a river flowing from a snow-capped mountain"></canvas>
+<canvas id="scene" role="img" aria-label="Interactive 3D scene: a cherry blossom tree beside a river flowing from a snow-capped mountain"></canvas>
 
-<div class="brand" aria-hidden="false">
-  <div class="brand-title">桜川</div>
+<div class="brand">
+  <div class="brand-title" lang="ja">桜川</div>
   <div class="brand-meta">
-    <div class="seal" aria-hidden="true">春</div>
+    <div class="seal" lang="ja" aria-hidden="true">春</div>
     <div class="brand-name">Sakura River</div>
+    <a class="credits" href="https://github.com/smolpaw/sakura-river#sound" target="_blank" rel="noopener" title="Credits and source code, on GitHub">Credits</a>
   </div>
 </div>
 
@@ -35,7 +49,7 @@
     <svg class="i-on" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"></path></svg>
     <svg class="i-off" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M16 9.5l5 5M21 9.5l-5 5"></path></svg>
   </button>
-  <button type="button" class="btn icon" id="btn-full" aria-label="Enter full screen">
+  <button type="button" class="btn icon" id="btn-full" aria-label="Enter full screen" title="Full screen">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>
   </button>
 </div>
@@ -51,9 +65,9 @@
         <option value="low">Low</option>
       </select>
     </label>
-    <label class="quality rate" title="Frame rate: Auto runs at 60 and drops to 30 on a slow device before it lowers any detail">
+    <label class="quality rate" title="Frame rate: Auto runs at 60; at Auto quality, where the browser reports GPU timings, it drops to 30 before it lowers any detail">
       <select id="rate" aria-label="Frame rate">
-        <option value="auto">Auto · fps</option>
+        <option value="auto">Auto</option>
         <option value="60">60 fps</option>
         <option value="30">30 fps</option>
       </select>
@@ -103,7 +117,7 @@
   </section>
 </div>
 
-<div class="hint" id="walk-hint">W A S D walk · mouse look · Shift hurry · Esc frees the mouse, Esc again leaves</div>
+<div class="hint" id="walk-hint">W A S D walk · click, then move the mouse to look · Shift hurry · Esc frees the mouse, Esc again leaves</div>
 <div class="hint" id="toast" role="status" aria-live="polite"></div>
 
 <button type="button" class="btn" id="photo-exit" aria-keyshortcuts="H Escape" title="Show the controls (H or Esc)">
@@ -120,9 +134,12 @@
 </div>
 
 <div class="veil" id="veil" role="status">
-  <div class="veil-mark" aria-hidden="true">桜</div>
-  <div class="veil-text" id="veil-text">Growing the blossoms…</div>
+  <div class="veil-mark" lang="ja" aria-hidden="true">桜</div>
+  <!-- the stage is announced as it changes; its percentage and the seconds are left out (aria-hidden) -->
+  <div class="veil-text" id="veil-text"><span id="veil-stage">Shaping the valley…</span><span id="veil-pct" aria-hidden="true"></span></div>
+  <noscript><div class="veil-text">This scene needs JavaScript.</div></noscript>
   <div class="veil-sub" id="veil-sub"></div>
+  <div class="veil-sub veil-detail" id="veil-detail" hidden></div>
   <div class="veil-actions" id="veil-actions"></div>
 </div>
 

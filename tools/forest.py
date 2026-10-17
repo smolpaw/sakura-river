@@ -1,4 +1,4 @@
-# The woods' tree kinds (src/vegetation.js places them), built in Blender. Run through tools/forest.mjs:
+# The woods' tree kinds (src/vegetation.js places them), built in Blender. Run through tools/blender.mjs:
 #   blender -b --factory-startup -P tools/forest.py -- <out.glb>
 # Each kind is one mesh, one unit tall, standing on its origin (Blender: z up; glTF: y up), named as in KINDS.
 # Crowns are clusters of foliage clumps fused into one surface (voxel remesh), roughened and decimated to a triangle

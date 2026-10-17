@@ -11,7 +11,7 @@ export const noBundledTranscoder = () => ({
   transform(code, id) {
     if (!/[\\/]KTX2Loader\.js$/.test(id)) return null;
     const re = /new URL\( '\.\.\/libs\/basis\/basis_transcoder\.(?:wasm|js)', import\.meta\.url \)\.toString\(\)/g;
-    if ((code.match(re) || []).length !== 2) throw new Error('KTX2Loader.js: the bundled transcoder\'s URLs are no longer where vite.config.js looks for them');
+    if ((code.match(re) || []).length !== 2) throw new Error('KTX2Loader.js: the bundled transcoder\'s URLs are no longer where vite.plugins.mjs looks for them');
     return { code: code.replace(re, "''"), map: null };
   },
 });

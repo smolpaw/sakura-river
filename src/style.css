@@ -25,6 +25,11 @@ body { margin: 0; background: var(--ink); color: var(--washi); overflow: hidden;
 .seal { width: 30px; height: 30px; border-radius: 4px; background: var(--shu); color: #fff3ea; display: grid; place-items: center;
   font-family: 'Shippori Mincho', serif; font-weight: 700; font-size: 17px; box-shadow: inset 0 0 0 2px rgba(255, 236, 226, 0.35); text-shadow: none; }
 .brand-name { font-family: 'Shippori Mincho', serif; font-size: 15px; letter-spacing: 0.3em; text-transform: uppercase; color: #fbf6ee; }
+/* the credits (README.md on GitHub), a quiet link under the name; it fades with the controls */
+.credits { align-self: flex-start; pointer-events: auto; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--washi-dim);
+  text-decoration: none; padding: 2px 0; border-bottom: 1px solid rgba(247, 241, 236, 0.22); transition: color 0.2s, border-color 0.2s, opacity var(--fade) ease; }
+.credits:hover { color: var(--washi); border-color: var(--washi-dim); }
+.credits:focus-visible { outline: 2px solid var(--sakura); outline-offset: 3px; border-radius: 2px; }
 
 .top-right { position: fixed; top: calc(18px + env(safe-area-inset-top, 0px)); right: 18px; display: flex; align-items: center; gap: 8px; }
 .stats { font-size: 11px; color: var(--washi-dim); font-variant-numeric: tabular-nums; text-shadow: 0 1px 12px rgba(20, 10, 20, 0.5); }
@@ -52,14 +57,14 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
    The glass itself fades, not its container: under a translucent parent, backdrop-filter stops blurring the scene */
 .ui-idle { --fade: 1.2s; }
 .ui-idle .side { transform: translateY(12px); }
-.ui-idle .side, .ui-idle .top-right { pointer-events: none; }
-.ui-idle :is(.panel, .quality, .actions .btn, .top-right > *) { opacity: 0; }
+.ui-idle .side, .ui-idle .top-right, .ui-idle .credits { pointer-events: none; }
+.ui-idle :is(.panel, .quality, .actions .btn, .top-right > *, .credits) { opacity: 0; }
 .ui-idle #scene { cursor: none; }
 
 /* a line over the scene: walk mode's controls as walking starts, a word after copying the link; fading after a few
    seconds (ui.js) */
 .hint { position: fixed; top: calc(22px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
-  max-width: calc(100vw - 32px); box-sizing: border-box; padding: 9px 16px; border-radius: 10px; text-align: center;
+  width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 9px 16px; border-radius: 10px; text-align: center;
   background: var(--glass); border: 1px solid var(--glass-edge); -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25);
   font: 500 13px/1.35 var(--sans); letter-spacing: 0.04em; color: var(--washi); pointer-events: none; opacity: 0; transition: opacity 1.2s ease; }
 .hint.show { opacity: 1; transition-duration: 0.35s; }
@@ -129,6 +134,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 .veil-mark { font-family: 'Shippori Mincho', serif; font-weight: 700; font-size: 56px; color: var(--sakura); animation: breathe 2.4s ease-in-out infinite; }
 .veil-text { font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--washi-dim); text-align: center; padding-inline: 16px; }
 .veil-sub { max-width: 440px; min-height: 1.5em; padding-inline: 20px; font: 400 13px/1.5 var(--sans); color: var(--washi-dim); text-align: center; }
+.veil-detail { min-height: 0; max-width: 520px; font-size: 11px; opacity: 0.7; overflow-wrap: anywhere; }
 .veil-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .veil-actions:empty { display: none; }
 .veil.failed .veil-mark { animation: none; opacity: 0.5; }
@@ -136,13 +142,16 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--sakura); o
 @keyframes breathe { 50% { opacity: 0.55; transform: scale(0.96); } }
 /* a word about how the scene runs here (too slow even on Low, or Low may help) */
 .notice { position: fixed; top: calc(22px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 4;
-  max-width: calc(100vw - 32px); box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px;
+  width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px;
   background: var(--glass); border: 1px solid var(--glass-edge); -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25);
   font: 500 13px/1.4 var(--sans); color: var(--washi); }
 .notice[hidden], .notice [hidden] { display: none; }
 .notice .btn { padding: 7px 11px; }
 @media (prefers-reduced-motion: reduce) { .veil-mark, #btn-sound.waiting svg { animation: none; } .side, .veil { transition: none; } }
 @media (max-width: 560px) { #photo-exit { right: 12px; } }
+/* the lines over the scene stay clear of the title where the screen is wide enough for one line between it and the
+   corner's buttons; narrower, they keep to the middle half */
+@media (min-width: 561px) { .hint, .notice { max-width: max(50vw, calc(100vw - 580px)); } }
 
 @media (max-width: 560px) {
   .side { left: 12px; right: 12px; width: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }

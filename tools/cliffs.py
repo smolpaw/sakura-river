@@ -1,4 +1,4 @@
-# The rock walls of the gorge above the bridge (src/cliffs.js places them), built in Blender. Run through
+# The rock walls of the gorge above the bridge (cliffData in src/vegetation.js places them), built in Blender. Run through
 # tools/blender.mjs:
 #   blender -b --factory-startup -P tools/cliffs.py -- <out.glb>
 # Each wall is one mesh, one unit tall and 1.2 wide (x), its face towards -y (glTF: +z) leaning back as the gorge's
@@ -128,7 +128,7 @@ def cliff(name, seed, target, sharp, near=None):
     return me
 
 
-# three walls, each in two levels: `cliffN` near the camera, `cliffN_far` with FAR of its triangles (cliffs.js), and
+# three walls, each in two levels: `cliffN` near the camera, `cliffN_far` with FAR of its triangles (lods.js), and
 # `cliffN_near` with NEAR times them for the Ultra tier
 FAR, NEAR, NEAR_MOSS = 0.2, 4, 900
 TARGET = 2000

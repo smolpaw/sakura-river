@@ -183,7 +183,7 @@ const CHECKS = {
     const n = await open('');
     const flying = await moved(n, 7000);
     await n.close();
-    await page.click('#times button:nth-child(2)'); // afternoon
+    await page.click('#times button:nth-child(2)'); // Day (14:30)
     await sleep(300);
     const s = await state(page);
     await page.click('#btn-cine');

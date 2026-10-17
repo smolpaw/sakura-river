@@ -117,7 +117,8 @@ import { WEATHERS, TIMES } from './weather.js';
     engine.followTime(+day.value);
     showTime();
   });
-  // the period the clock is in: dawn 04:30-09:00, afternoon to 17:00, dusk to 19:30, then night
+  // the period the clock is in (the preset whose button shows pressed): dawn 04:30-09:00, day to 17:00, dusk to 19:30,
+  // then night
   function period(h) { return h >= 4.5 && h < 9 ? 'dawn' : h >= 9 && h < 17 ? 'afternoon' : h >= 17 && h < 19.5 ? 'dusk' : 'night'; }
   function showTime() {
     if (!engine) return;
@@ -125,7 +126,7 @@ import { WEATHERS, TIMES } from './weather.js';
     var waiting = engine.soundWaiting();
     if (waiting !== $('btn-sound').classList.contains('waiting')) {
       $('btn-sound').classList.toggle('waiting', waiting);
-      $('btn-sound').title = waiting ? 'Click anywhere to start the sound' : 'Music and ambience';
+      $('btn-sound').title = waiting ? 'Click or tap anywhere to start the sound' : 'Music and ambience';
     }
     $('clock').textContent = clock(dragged !== null ? dragged : h);
     var vt = clock(+day.value);
@@ -182,7 +183,7 @@ import { WEATHERS, TIMES } from './weather.js';
   $('rate').value = rate;
   $('rate').addEventListener('change', function () {
     rate = this.value; save('sr.rate', rate);
-    if (rate !== 'auto') $('rate').options[0].textContent = 'Auto · fps';
+    if (rate !== 'auto') $('rate').options[0].textContent = 'Auto'; // (the rate Auto runs at shows while it is chosen)
     if (engine) engine.setFrameRate(rate);
   });
 
@@ -230,16 +231,20 @@ import { WEATHERS, TIMES } from './weather.js';
       }
     } catch (e) { fullBtn.hidden = true; }
   });
-  document.addEventListener('fullscreenchange', function () {
-    fullBtn.setAttribute('aria-label', document.fullscreenElement ? 'Exit full screen' : 'Enter full screen');
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (t) {
+    document.addEventListener(t, function () {
+      var on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      fullBtn.setAttribute('aria-label', on ? 'Exit full screen' : 'Enter full screen');
+      fullBtn.title = on ? 'Exit full screen' : 'Full screen';
+    });
   });
 
   // ---------- the controls fade out after a few seconds without activity ----------
   var idleTimer = 0, mouse = false;
   function idle() {
     // stay while the mouse rests on a control or keyboard focus is in one
-    if ((mouse && document.querySelector('.side:hover, .top-right:hover')) ||
-        document.querySelector('.side :focus-visible, .top-right :focus-visible')) return wake();
+    if ((mouse && document.querySelector('.side:hover, .top-right:hover, .credits:hover')) ||
+        document.querySelector('.side :focus-visible, .top-right :focus-visible, .credits:focus-visible')) return wake();
     document.body.classList.add('ui-idle');
   }
   function wake(e) {
@@ -323,12 +328,20 @@ import { WEATHERS, TIMES } from './weather.js';
   var failed = false;
   var STAGES = { generate: 'Shaping the valley', build: 'Growing the blossoms', shaders: 'Preparing the shaders', warm: 'Almost there' };
   var stage = null, stageAt = 0, stageF = null;
+  // (written only when they change: the veil is a live region, which announces the stage's name but not its percentage
+  // or the seconds, both aria-hidden)
+  function put(el, text) { if (el.textContent !== text) el.textContent = text; }
   function showStage() {
     if (failed || !stage) return;
-    $('veil-text').textContent = STAGES[stage] + '…' + (stageF !== null ? ' ' + Math.round(stageF * 100) + '%' : '');
+    put($('veil-stage'), STAGES[stage] + '…');
+    put($('veil-pct'), stageF !== null ? ' ' + Math.round(stageF * 100) + '%' : '');
     // a slow device spends long on a stage: say it is still working
-    var s = (performance.now() - stageAt) / 1000;
-    $('veil-sub').textContent = s > 12 ? Math.round(s) + ' s · this takes longer on slower devices' : '';
+    var s = (performance.now() - stageAt) / 1000, sub = $('veil-sub');
+    if (s <= 12) put(sub, '');
+    else {
+      if (!sub.firstElementChild) sub.innerHTML = '<span aria-hidden="true"></span>this takes longer on slower devices';
+      put(sub.firstElementChild, Math.round(s) + ' s · ');
+    }
   }
   var stageTimer = setInterval(showStage, 1000);
   function act(label, fn) {
@@ -342,7 +355,8 @@ import { WEATHERS, TIMES } from './weather.js';
     try { if (be) sessionStorage.setItem('sr.backend', be); else sessionStorage.removeItem('sr.backend'); } catch (e) { /* ignore */ }
     location.reload();
   }
-  // the scene can't start or has stopped: say why, and what may still work here
+  // the scene can't start or has stopped: say why, and what may still work here (`opts.detail`: the error's own
+  // words, smaller, under the plain sentence)
   function fail(title, text, opts) {
     if (failed) return;
     failed = true;
@@ -352,6 +366,8 @@ import { WEATHERS, TIMES } from './weather.js';
     veil.setAttribute('role', 'alert');
     $('veil-text').textContent = title;
     $('veil-sub').textContent = text;
+    $('veil-detail').textContent = opts.detail || '';
+    $('veil-detail').hidden = !opts.detail;
     $('veil-actions').textContent = '';
     if (opts.low && tier !== 'low') act('Try Low quality', function () { reloadWith('low', backend); });
     if (opts.webgl && using === 'webgpu') act('Try the WebGL renderer', function () { reloadWith(null, 'webgl'); });
@@ -389,7 +405,7 @@ import { WEATHERS, TIMES } from './weather.js';
   $('notice-low').addEventListener('click', function () { save('sr.autoTier', 'low'); location.reload(); });
   $('notice-close').addEventListener('click', function () { $('notice').hidden = true; });
 
-  // The service worker (src/sw.js, put into the build by vite.config.js) keeps the files from public/, so a repeat
+  // The service worker (src/sw.js, put into the build by vite.plugins.mjs) keeps the files from public/, so a repeat
   // visit fetches only the page. Registered once the scene shows: its first fill comes from the browser's cache.
   function keepFiles() {
     if (!import.meta.env.PROD || !('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
@@ -423,7 +439,10 @@ import { WEATHERS, TIMES } from './weather.js';
       onLost: lost,
       onCinematicChange: function (on) { setPressed($('btn-cine'), on); },
       onWalkChange: showWalk,
-      onReady: function (r) { tier = r.quality; if (!fixed) $('quality').options[0].textContent = 'Auto · ' + r.quality; },
+      onReady: function (r) {
+        tier = r.quality;
+        if (!fixed) $('quality').options[0].textContent = 'Auto · ' + r.quality.charAt(0).toUpperCase() + r.quality.slice(1);
+      },
     }).then(function (e) {
       if (failed) { try { e.dispose(); } catch (err) { /* the device is gone */ } return; }
       engine = e;
@@ -443,13 +462,14 @@ import { WEATHERS, TIMES } from './weather.js';
       console.error(err);
       if (err && err.code === 'unsupported') {
         fail('This browser can’t show the scene',
-          'It needs WebGPU or WebGL2 with hardware acceleration. Try a current Chrome, Edge or Safari, with hardware acceleration on in its settings.',
+          'It needs WebGPU or WebGL2. Try a current Chrome, Edge or Safari, and check that hardware acceleration is on in its settings.',
           {});
       } else if (err && err.code === 'stalled') {
         fail('The scene couldn’t start', 'The graphics driver stopped while preparing the scene’s shaders' +
           (using === 'webgpu' ? '. The WebGL renderer may work on this device.' : '.'), { low: true, webgl: true });
       } else {
-        fail('The scene couldn’t start', String((err && err.message) || err).slice(0, 200), { low: true, webgl: true });
+        fail('The scene couldn’t start', 'Something went wrong while starting the scene.',
+          { low: true, webgl: true, detail: String((err && err.message) || err).slice(0, 200) });
       }
     });
   }
