@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mulberry32, makeNoise, clamp, lerp, smoothstep } from './noise.js';
 import { WALL } from './world.js';
 import { toroSites } from './village.js';
+import { bridgeFrame, BRIDGE_Z } from './props.js';
 
 const V = THREE.Vector3;
 
@@ -192,7 +193,15 @@ export function rockPlan(world, tier, treePos) {
   const variants = 5;
   const placements = [];
   const rocksInWater = [];
+  // (none under the bridge's deck: one there stood through its abutment; moved off along the flow, past the deck's edge)
+  const B = bridgeFrame(world, BRIDGE_Z);
   const add = (x, z, sc, sink = 0.3, flatten = 1) => {
+    const dx = x - B.center.x, dz = z - B.center.z, u = dx * B.across.x + dz * B.across.z, side = dx * B.along.x + dz * B.along.z;
+    const clear = B.width / 2 + 0.4 + sc * 1.3;
+    if (Math.abs(u) < B.half + 1.5 + sc && Math.abs(side) < clear) {
+      const k = (side < 0 ? -clear : clear) - side;
+      x += B.along.x * k; z += B.along.z * k;
+    }
     const y = world.height(x, z);
     placements.push({ x, y: y - sc * sink, z, sc, flatten, v: Math.floor(rng() * variants), rot: rng() * Math.PI * 2 });
     if (y < 0.15) rocksInWater.push({ x, z, r: sc * 1.1, top: y + sc * (0.65 - sink) }); // top: roughly, see tools/rocks.py

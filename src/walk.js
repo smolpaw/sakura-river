@@ -150,7 +150,9 @@ export function makeNetwork(world, obstacles = []) {
   ways.push(area('terrace', tf, SITES.belfry[0] + 2.8 + BODY + 0.1, T.hw - 0.9, SITES.hall[2] + 8.9, D - 0.7));
 
   // what stands in the way: the given obstacles, the bridge's corner posts and railings, the terrace's buildings
-  const obs = obstacles.map((o) => post(o.x, o.z, o.r + BODY));
+  // (not what stands under the deck: the boulders on the banks below it)
+  const underDeck = (o) => { const { u, side } = deckAt(o.x, o.z); return u > 0 && u < 1 && Math.abs(side) < RAIL_OFF + 0.5; };
+  const obs = obstacles.filter((o) => !underDeck(o)).map((o) => post(o.x, o.z, o.r + BODY));
   for (const u of [-CORNER, 1 + CORNER]) for (const sd of [-1, 1]) { const p = B.pt(u, sd * cornerOff(B.width)); obs.push(post(p.x, p.z, 0.21 + BODY)); }
   for (const sd of [-1, 1]) { const a = B.pt(0, sd * RAIL_OFF), b = B.pt(1, sd * RAIL_OFF); obs.push(bar(a.x, a.z, b.x, b.z, 0.12 + BODY)); }
   // (temple.js: the pagoda's podium 11.6 m square and its front steps, the bell tower's 5.6 m)
