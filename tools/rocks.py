@@ -2,7 +2,7 @@
 # places them), built in Blender. Run through tools/blender.mjs:
 #   blender -b --factory-startup -P tools/rocks.py -- <out.glb>
 # A boulder is one mesh about 2.5 wide, 2 deep and 1.2 tall round its origin, its base where it sits in the ground
-# (Blender: z up; glTF: y up). The boulders are photogrammetry scans from Poly Haven (CC0, README.md Models),
+# (Blender: z up; glTF: y up). The boulders are photogrammetry scans from Poly Haven (CC0, CREDITS.md Models),
 # downloaded once into tools/.model-cache/ and simplified to each level's triangles from the full scan. The stone at
 # the water's edge is modelled here: granite rounded by the water, with a broad face where it split; and the village's
 # dry-stone walls' stones (wall_stone), each with a lighter `_far` model. Shading in the vertex colours: each stone its own grey, mottled by the scan's own light and dark (the

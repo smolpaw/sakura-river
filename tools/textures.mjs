@@ -1,4 +1,4 @@
-// Builds public/textures/ from the photographed texture sets credited in README.md (Textures), and src/textures.json:
+// Builds public/textures/ from the photographed texture sets credited in CREDITS.md (Textures), and src/textures.json:
 // per set its size in metres (as Poly Haven gives it) and its average colour (linear), which the shaders divide by to
 // lay a photo over a surface's own colour as detail (materials.js); for the surface kinds' sets also their layer in
 // the kinds' texture arrays and their height / width.

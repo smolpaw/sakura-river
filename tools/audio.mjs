@@ -1,4 +1,4 @@
-// Builds public/audio/ from the source recordings credited in README.md (Sound).
+// Builds public/audio/ from the source recordings credited in CREDITS.md (Sound).
 //   node tools/audio.mjs [name ...]
 // Needs ffmpeg with libmp3lame and rubberband. Sources are downloaded once into tools/.audio-cache/. Given names, it
 // builds only the outputs whose names start with one of them (`node tools/audio.mjs step- frogs`) and leaves the other
