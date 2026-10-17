@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32 } from './noise.js';
-import { kit, toro } from './temple.js';
+import { kit, toro, toroFoot } from './temple.js';
 import { yardData } from './yard.js';
 
 export const VILLAGE_KINDS = ['minka0', 'minka1', 'kura', 'koya', 'torii', 'suisha'];
@@ -104,6 +104,6 @@ export function toroSites(world) {
 }
 function toroData(world) {
   const k = kit();
-  for (const t of toroSites(world)) toro(k, t.x, world.height(t.x, t.z) - 0.05, t.z, t.yaw);
+  for (const t of toroSites(world)) toro(k, t.x, toroFoot(world.height, t.x, t.z), t.z, t.yaw);
   return { geo: mergeGeometries(k.parts), lamps: new Float32Array(k.lamps.flatMap((p) => p.toArray())) };
 }

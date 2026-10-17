@@ -441,10 +441,17 @@ function tsuri(k, x, yTop, z) {
   });
 }
 
-// stone lantern (Kasuga form) standing at (x, y, z) (village.js lines the approach with them)
+// where a stone lantern stands on sloping ground: its base's foot at the lowest of the ground under it (ground(x, z))
+export const toroFoot = (ground, x, z) => {
+  let y = ground(x, z);
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; y = Math.min(y, ground(x + Math.cos(a) * 0.42, z + Math.sin(a) * 0.42)); }
+  return y - 0.03;
+};
+// stone lantern (Kasuga form) standing at (x, y, z) (village.js lines the approach with them); its base runs half a
+// metre down into the ground, so on a slope it is set in the earth on the downhill side too (toroFoot)
 export function toro(k, x, y, z, ry = 0) {
   k.at(x, y, z, ry, () => {
-    k.lathe([[0, 0], [0.42, 0], [0.42, 0.12], [0.34, 0.2], [0.2, 0.26], [0, 0.26]], 6, STONE);
+    k.lathe([[0, -0.5], [0.42, -0.5], [0.42, 0.12], [0.34, 0.2], [0.2, 0.26], [0, 0.26]], 6, STONE);
     k.lathe([[0, 0.26], [0.14, 0.26], [0.12, 1.02], [0, 1.02]], 8, STONE);
     k.lathe([[0, 1.02], [0.2, 1.02], [0.36, 1.14], [0.36, 1.22], [0, 1.22]], 6, STONE);
     k.lathe([[0, 1.22], [0.21, 1.22], [0.21, 1.6], [0, 1.6]], 6, FIREBOX, 0, Math.PI / 6, 2.2);
@@ -563,7 +570,7 @@ function compound(k, T, ground) {
     zf = z + run / 2;
     if (ground(sx, z + run) >= y - rise) break;
   }
-  for (const s of [1, -1]) toro(k, sx + s * 2.6, ground(sx + s * 2.6, zf + 0.9) - 0.05, zf + 0.9);
+  for (const s of [1, -1]) toro(k, sx + s * 2.6, toroFoot(ground, sx + s * 2.6, zf + 0.9), zf + 0.9);
   // flagstone paths to the hall and to the pagoda
   for (let z = D - 0.6; z > 4.8; z -= 0.95) k.box(2.8, 0.1, 0.88, sx, 0.02, z, toned(rng, 1.05, 0.1), (rng() - 0.5) * 0.03, 0, KIND.STONE);
   for (let x = sx + 2.2; x < 8.5; x += 0.95) k.box(0.88, 0.1, 1.6, x, 0.02, 10.8, toned(rng, 1.05, 0.1), (rng() - 0.5) * 0.03, 0, KIND.STONE);

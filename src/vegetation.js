@@ -203,7 +203,7 @@ export function rockPlan(world, tier, treePos) {
       x += B.along.x * k; z += B.along.z * k;
     }
     const y = world.height(x, z);
-    placements.push({ x, y: y - sc * sink, z, sc, flatten, v: Math.floor(rng() * variants), rot: rng() * Math.PI * 2 });
+    placements.push({ x, y: Math.min(y - sc * sink, lowest(world, x, z, sc * 0.9) - sc * 0.1), z, sc, flatten, v: Math.floor(rng() * variants), rot: rng() * Math.PI * 2 });
     if (y < 0.15) rocksInWater.push({ x, z, r: sc * 1.1, top: y + sc * (0.65 - sink) }); // top: roughly, see tools/rocks.py
   };
   const zR = [-90, 60];
@@ -345,7 +345,7 @@ export function rocksData(world, tier, treePos, walls) {
     for (let i = 0, m = 2 + Math.floor(r3() * 4); i < m; i++) {
       const a = r3() * Math.PI * 2, d = i ? 3 + r3() * 6 : 0, xx = x + Math.cos(a) * d, zz = z + Math.sin(a) * d;
       const sc = (i ? 1 : 2) + r3() * 2;
-      p.set(xx, world.height(xx, zz) - sc * 0.35, zz);
+      p.set(xx, lowest(world, xx, zz, sc) - sc * 0.15, zz);
       q.setFromEuler(new THREE.Euler((r3() - 0.5) * 0.6, r3() * 6.28, (r3() - 0.5) * 0.6));
       s.set(sc, sc * (0.9 + r3() * 0.5), sc * (0.8 + r3() * 0.4));
       m4.compose(p, q, s);
@@ -536,6 +536,14 @@ export function cliffData(world) {
 // temple, on the terrace, down in the gorge or on slopes steep enough to show rock.
 export const BAMBOO_KINDS = ['bamboo0', 'bamboo1'];
 
+// the lowest of the ground round (x, z) out to r (and at it): where what spreads over a slope stands, so its downhill
+// side meets the ground
+const lowest = (world, x, z, r) => {
+  let y = world.height(x, z);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; y = Math.min(y, world.height(x + Math.cos(a) * r, z + Math.sin(a) * r)); }
+  return y;
+};
+
 export function bambooData(world) {
   const rng = mulberry32(919), nz = makeNoise(47);
   const T = world.temple, tc = Math.cos(T.yaw), ts = Math.sin(T.yaw);
@@ -552,7 +560,7 @@ export function bambooData(world) {
     if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 2.6)) continue;
     placed.push([x, z]);
     const h = lerp(10, 15, rng()) * lerp(0.75, 1, dens);
-    p.set(x, y - 0.3, z);
+    p.set(x, Math.min(y, lowest(world, x, z, h * 0.13)) - 0.3, z); // (the culms' feet within 0.13 of its height)
     q.setFromAxisAngle(up, rng() * Math.PI * 2);
     s.set(h, h, h);
     const g = 0.88 + rng() * 0.24;
@@ -572,7 +580,7 @@ export function bambooData(world) {
       placed.push([x, z]);
       n++;
       const h = lerp(10, 15, r2());
-      p.set(x, world.height(x, z) - 0.3, z);
+      p.set(x, lowest(world, x, z, h * 0.13) - 0.3, z);
       q.setFromAxisAngle(up, r2() * Math.PI * 2);
       s.set(h, h, h);
       const g = 0.88 + r2() * 0.24;
@@ -606,7 +614,7 @@ export function shrubData(world, trees, clear = []) {
   };
   const put = (k, x, z, h, r, sink = 0.12) => {
     placed.push([x, z, r]);
-    p.set(x, world.height(x, z) - sink * h, z);
+    p.set(x, lowest(world, x, z, r * 0.8) - sink * h, z);
     q.setFromAxisAngle(up, rng() * Math.PI * 2);
     s.set(h * (0.9 + rng() * 0.25), h, h * (0.9 + rng() * 0.25));
     const g = 0.85 + rng() * 0.3, c = [g, g * (0.97 + rng() * 0.06), g * (0.94 + rng() * 0.08)];
@@ -708,7 +716,7 @@ export function nanohanaData(world, { tree, small, turf, rocks = [], clear = [],
     return !rocks.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + r) && !clear.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + r);
   };
   const put = (k, x, z, h, w, sink = 0.03) => {
-    p.set(x, world.height(x, z) - sink, z);
+    p.set(x, lowest(world, x, z, w * 0.35) - sink, z);
     q.setFromAxisAngle(up, rng() * Math.PI * 2);
     s.set(w * (0.9 + rng() * 0.2), h, w * (0.9 + rng() * 0.2));
     const g = 0.88 + rng() * 0.22, c = [g, g * (0.97 + rng() * 0.06), g * (0.92 + rng() * 0.1)];
