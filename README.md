@@ -46,7 +46,7 @@ Quality: Auto picks a tier and lowers the resolution under load; a tier picked b
 - `src/world.js`: terrain height field, river path, the village's paddies, lanes and building pads.
 - `src/quality.js`: adaptive quality. `src/gen/`: worker pool for the generation done during loading.
 - `src/tsl.js`, `src/materials.js`: shared shader nodes and the lit materials (TSL, compiled to WGSL and GLSL).
-- `src/photos.js`, `src/kinds.js`: the photographed textures' loading, and the surface kinds that choose them. `src/groundao.js`: the ground's occlusion by the buildings.
+- `src/photos.js`, `src/kinds.js`: the photographed textures' loading, and the surface kinds that choose them. `src/textures.json`: each set's size in metres and average colour (written by `tools/textures.mjs`). `src/groundao.js`: the ground's occlusion by the buildings. `src/camerahull.js`: the height the orbit camera keeps over the buildings.
 - `src/lods.js`, `src/impostors.js`: the instanced Blender models with their distance levels, culling and the woods' impostors.
 - `src/lights.js`, `src/sunshadow.js`, `src/post.js`: the lamps' light map, the valley and cloud shadows, light shafts and the final grade.
 - Scenery: `tree.js`, `blossoms.js`, `grass.js`, `vegetation.js`, `props.js`, `temple.js`, `village.js`, `yard.js`, `wayside.js`, `lanterns.js`, `banners.js`, `boat.js`.

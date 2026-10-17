@@ -41,6 +41,7 @@ import { clamp, lerp, smoothstep } from './noise.js';
 import { makeBridge, makeFuji } from './props.js';
 import { makeTemple } from './temple.js';
 import { makeGroundAO, occluderBoxes } from './groundao.js';
+import { cameraHull } from './camerahull.js';
 import { makeKoi, koiClearing } from './koi.js';
 import { makeTouches } from './touches.js';
 import { makeBirds } from './birds.js';
@@ -564,7 +565,7 @@ export async function create(canvas, opts = {}) {
   // the ground's occlusion by the farmhouses (their far models: the same outline in fewer triangles), the temple (its
   // floors too) and the dry-stone walls (their far level, flagged in aStone.w), worked out in a worker while the rest
   // is built
-  let groundAOJob;
+  let groundAOJob, hull = null;
   {
     const occluders = [];
     village.traverse((o) => {
@@ -573,9 +574,15 @@ export async function create(canvas, opts = {}) {
     });
     temple.updateMatrixWorld(true);
     temple.traverse((o) => { if (o.isMesh) occluders.push({ geometry: o.geometry, matrix: o.matrixWorld, floor: true }); });
+    const built = occluderBoxes(occluders);
+    // the orbit camera's hull round the farmhouses and the temple (camerahull.js; not the low walls)
+    hull = cameraHull(built.boxes);
+    const walled = [];
     walls.updateMatrixWorld(true);
-    walls.traverse((o) => { if (o.isMesh && o.geometry.attributes.aStone && o.geometry.attributes.aStone.array[3] === 255) occluders.push({ geometry: o.geometry, matrix: o.matrixWorld }); });
-    groundAOJob = runJobs({ groundAO: { name: 'groundAO', args: { ...occluderBoxes(occluders), cache: G.heightCache } } }, { mainThread: opts.workers === false })
+    walls.traverse((o) => { if (o.isMesh && o.geometry.attributes.aStone && o.geometry.attributes.aStone.array[3] === 255) walled.push({ geometry: o.geometry, matrix: o.matrixWorld }); });
+    const wb = occluderBoxes(walled).boxes, boxes = new Float32Array(built.boxes.length + wb.length);
+    boxes.set(built.boxes); boxes.set(wb, built.boxes.length);
+    groundAOJob = runJobs({ groundAO: { name: 'groundAO', args: { boxes, floors: built.floors, cache: G.heightCache } } }, { mainThread: opts.workers === false })
       .then(({ results }) => groundAO.set(results.groundAO), (e) => console.warn('ground occlusion not worked out:', e && e.message));
   }
   // the waterwheel, turned by the river (a full and a far model, switched as the village's, and the near one)
@@ -755,15 +762,19 @@ export async function create(canvas, opts = {}) {
   const trunkTop = MAIN_TREE.trunk.length * MAIN_TREE.scale + 1.5;
   function clampCamera() {
     const p = camera.position;
-    const g = Math.max(world.heightFast(p.x, p.z), 0);
-    if (p.y < g + 0.8) p.y = g + 0.8;
+    // the target kept to the valley (to the village's far end, where walk mode can leave the figure) and off the ground;
+    // the camera moves with it, so a pan stops at the edge instead of turning the view as it pushes on
+    const t = controls.target, tx = t.x, ty = t.y, tz = t.z;
+    t.x = clamp(t.x, -160, 160); t.z = clamp(t.z, -250, 90);
+    t.y = clamp(t.y, Math.max(world.heightFast(t.x, t.z), 0) + 0.3, 40);
+    p.x += t.x - tx; p.y += t.y - ty; p.z += t.z - tz;
+    const r = Math.hypot(p.x - TX, p.z - TZ);
+    // (and kept within 260 m of the tree, the target with it)
+    if (r > 260) { const k = 1 - 260 / r, sx = (p.x - TX) * k, sz = (p.z - TZ) * k; p.x -= sx; p.z -= sz; t.x -= sx; t.z -= sz; }
+    const g = Math.max(world.heightFast(p.x, p.z) + 0.8, hull ? hull.at(p.x, p.z) : -Infinity, 0.8);
+    if (p.y < g) p.y = g;
     const dx = p.x - TX, dz = p.z - TZ, d = Math.hypot(dx, dz);
     if (p.y < trunkTop && d < 1.8) { const k = 1.8 / Math.max(d, 1e-3); p.x = TX + dx * k; p.z = TZ + dz * k; }
-    const t = controls.target;
-    t.x = clamp(t.x, -160, 160); t.z = clamp(t.z, -250, 90); // (to the village's far end, where walk mode can leave the figure)
-    t.y = clamp(t.y, Math.max(world.heightFast(t.x, t.z), 0) + 0.3, 40);
-    const r = Math.hypot(p.x - TX, p.z - TZ);
-    if (r > 260) { p.x = TX + (p.x - TX) * 260 / r; p.z = TZ + (p.z - TZ) * 260 / r; }
   }
 
   // cinematic flight path
@@ -782,10 +793,18 @@ export async function create(canvas, opts = {}) {
   const tgtCurve = new THREE.CatmullRomCurve3(camKeys.map((k) => k.t), true, 'centripetal');
   let cinematic = false, cineT = 0, autoOrbit = false;
   const ORBIT_FOV = camera.fov;
+  // a mode's field of view (vertical, degrees) on this screen: as given on a landscape screen; on a portrait one wider,
+  // keeping the width a square screen would see (to 75 degrees), so a phone held upright still sees the valley and
+  // not only the middle of it
+  const fovFor = (f) => {
+    const a = camera.aspect;
+    if (a >= 1) return f;
+    return Math.min(75, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(f / 2)) / a)));
+  };
   // a flight of the camera to a view: from fp/ft to tp/tt (position, target), the field of view from ff to tf;
   // walk: into the walker's eye (no orbit limits on the way, lifted over what lies between by `lift` metres)
   let tween = null; // { fp, ft, tp, tt, ff, tf, t, dur, walk, lift }
-  function startTween(toPos, toTarget, dur, fov = ORBIT_FOV) {
+  function startTween(toPos, toTarget, dur, fov = fovFor(ORBIT_FOV)) {
     tween = { fp: camera.position.clone(), ft: controls.target.clone(), tp: toPos.clone(), tt: toTarget.clone(), ff: camera.fov, tf: fov, t: 0, dur, walk: false, lift: 0 };
   }
   // the lanterns' halos are sized in the scene pass's pixels: the canvas height times the pixel ratio and, on ultra,
@@ -839,6 +858,9 @@ export async function create(canvas, opts = {}) {
   }
   const walk = makeWalk(world, { canvas, obstacles: walkObstacles, onEscape: () => setWalk(false) });
   let walking = false, walker = null, walkerLoad = null, firstPerson = false;
+  // (the controls update the camera in their own pointer and wheel handlers too, between frames: clamped
+  // there as well)
+  controls.addEventListener('change', () => { if (!walking) clampCamera(); });
   const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3();
   // the eye in the world: the model's (walker.eye, after its update), a little ahead along the facing so a look
   // down shows the hem and the geta stepping out and not only the robe's front; before the model has loaded,
@@ -879,7 +901,7 @@ export async function create(canvas, opts = {}) {
       autoOrbit = false; controls.autoRotate = false; controls.enabled = false;
       const eye = eyeAt(eyeV), to = lookV.copy(eye).addScaledVector(walk.dir(), 10);
       const d = camera.position.distanceTo(eye);
-      startTween(eye, to, clamp(1.2 + d / 40, 1.4, 3.2), WALK.fov);
+      startTween(eye, to, clamp(1.2 + d / 40, 1.4, 3.2), fovFor(WALK.fov));
       tween.walk = true; tween.lift = Math.min(8, d * 0.15);
       walk.lock();
     } else {
@@ -1243,7 +1265,7 @@ export async function create(canvas, opts = {}) {
       camera.lookAt(controls.target);
     }
     // the mode's field of view (eased there when a flight was cut short)
-    const fovTo = walking ? WALK.fov : ORBIT_FOV;
+    const fovTo = fovFor(walking ? WALK.fov : ORBIT_FOV);
     if (!tween) setFov(Math.abs(camera.fov - fovTo) < 0.01 ? fovTo : lerp(camera.fov, fovTo, 1 - Math.exp(-dt * 4)));
     // the head hidden while the camera is in it (it keeps its shadow and reflection)
     if (walker) {
