@@ -199,7 +199,7 @@ import { WEATHERS, TIMES } from './weather.js';
   $('btn-reset').addEventListener('click', function () {
     setPressed($('btn-cine'), false); if (engine) engine.resetCamera();
   });
-  // walk mode: first person along the lanes (the Walk button, Reset view or a second Esc leave it); a hint on the
+  // walk mode: first person (the Walk button, Reset view or a second Esc leave it); a hint on the
   // controls fades a few seconds after it starts
   var walking = false, hintTimer = 0, hint = $('walk-hint');
   if (window.matchMedia && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) {
@@ -243,8 +243,8 @@ import { WEATHERS, TIMES } from './weather.js';
   var idleTimer = 0, mouse = false;
   function idle() {
     // stay while the mouse rests on a control or keyboard focus is in one
-    if ((mouse && document.querySelector('.side:hover, .top-right:hover, .credits:hover')) ||
-        document.querySelector('.side :focus-visible, .top-right :focus-visible, .credits:focus-visible')) return wake();
+    if ((mouse && document.querySelector('.side:hover, .top-right:hover')) ||
+        document.querySelector('.side :focus-visible, .top-right :focus-visible')) return wake();
     document.body.classList.add('ui-idle');
   }
   function wake(e) {
