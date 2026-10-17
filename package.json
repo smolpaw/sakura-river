@@ -2,6 +2,7 @@
   "name": "sakura-river",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Full-screen interactive 3D cherry-blossom river scene (Three.js)",
   "scripts": {
     "dev": "vite",

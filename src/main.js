@@ -188,7 +188,9 @@ export async function create(canvas, opts = {}) {
   if (backendName === 'webgl' && opts.bench) renderer.backend.trackTimestamp = false;
   const tierName = tierNow = opts.quality || detectTier(renderer);
   const Q = { ...TIERS[tierName] };
-  const ST = opts.stress || null; // bench-only future-content scenario
+  // __BENCH__: a bench build (bench/build.mjs; false in the site's, vite.config.js), which keeps the GPU probe, the
+  // scene's hash and the stress scenario; the site's build leaves them out
+  const ST = (__BENCH__ && opts.stress) || null; // bench-only future-content scenario
   // the device pixel ratio, capped by the tier; it changes with the browser's zoom and as the window moves to another
   // display (followed below, with the sizing)
   const deviceRatio = () => Math.min(window.devicePixelRatio || 1, Q.pr);
@@ -197,7 +199,7 @@ export async function create(canvas, opts = {}) {
   renderer.toneMappingExposure = 1.0; // read by renderOutput() in the post pipeline
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // filter replaced below by the r170 PCFSoft equivalent
-  const probe = opts.bench ? createGPUProbe(renderer) : null;
+  const probe = __BENCH__ && opts.bench ? createGPUProbe(renderer) : null;
   // MSAA: none on WebGPU compatibility-mode devices (three disables it there); WebGPU has only 1 or 4 samples, so
   // a tier's 2x becomes 4x there (with fewer, the blossoms' alpha-to-coverage would have no coverage to work with)
   const compat = renderer.backend.isWebGPUBackend && renderer.backend.compatibilityMode;
@@ -1577,7 +1579,7 @@ export async function create(canvas, opts = {}) {
       };
     },
     bench: probe,
-    hashScene: () => hashScene(scene, { heightCache: world.heightCacheData() }),
+    hashScene: () => (__BENCH__ ? hashScene(scene, { heightCache: world.heightCacheData() }) : null),
     // bench: triangles per drawable (instances included; a model level's: those in the camera's view), largest first
     meshStats() {
       const out = [];

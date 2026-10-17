@@ -28,6 +28,7 @@ export async function buildEngine(label, ref) {
     configFile: false,
     logLevel: 'warn',
     plugins: [noBundledTranscoder()],
+    define: { __BENCH__: 'true' }, // (main.js: the GPU probe, scene hashing, stress objects)
     build: {
       outDir, emptyOutDir: true, target: 'es2022', minify: true, reportCompressedSize: false,
       lib: { entry: path.join(root, 'src/main.js'), formats: ['es'], fileName: () => 'engine.js' },
