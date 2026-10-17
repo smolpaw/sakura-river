@@ -74,8 +74,10 @@ export function createSound(world, bridge) {
   const beds = {};
   const shots = { thunder: null, songs: null, bell: null, steps: null, creak: null, tune: null, calls: null, owl: null, village: null };
   let walked = -Infinity; // when the walk last stepped or moved (performance.now() ms): keeps the footsteps loaded
+  let ground = 'earth'; // the surface under the walker at its last step or move
   let lights = -1; // the lanterns' level at the last mix
   let toll = null; // the bell's strokes waiting for its files: { n, wait (s left) }
+  let struck = -Infinity; // when the bell was last struck (performance.now() ms)
   let forward = 0; // > 0 while a time-lapse runs forward (s)
   let since = TICK, bout = null, songWait = 4;
   let cam = null; // the camera at the last mix (for the one-shots placed when they play)
@@ -113,6 +115,15 @@ export function createSound(world, bridge) {
     return buf;
   }
 
+  // move a loop's (or the voice's) gain, filter or pan towards v with time constant tc s; at once while `snap`
+  // (sound turned back on: the first sound heard is the scene's mix now, not the one when it went off)
+  let snap = false;
+  function glide(param, v, tc = 0.3) {
+    if (!snap) { param.setTargetAtTime(v, ctx.currentTime, tc); return; }
+    param.cancelScheduledValues(0);
+    param.setValueAtTime(v, ctx.currentTime);
+  }
+
   // a looping bed: source -> [chain] -> gain -> nature bus
   function bed(name, chain = []) {
     const gain = new GainNode(ctx, { gain: 0 });
@@ -142,7 +153,7 @@ export function createSound(world, bridge) {
     } else if (b.state === 'ready' && (b.idle += TICK) > 60) {
       b.src.stop(); b.src.disconnect(); b.src = null; b.buf = null; b.state = 'idle';
     }
-    if (b.state === 'ready') b.gain.gain.setTargetAtTime(target, ctx.currentTime, 0.6);
+    if (b.state === 'ready') glide(b.gain.gain, target, 0.6);
   }
 
   // a set of one-shots, loaded together while `wanted` and dropped after a minute without
@@ -159,6 +170,14 @@ export function createSound(world, bridge) {
           (e) => failed(set, set.names, e));
       }
     } else if (set.state === 'ready' && (set.idle += TICK) > 60) { set.bufs = null; set.state = 'idle'; }
+  }
+  // the footsteps' sets and the bridge's creaks: the surface under the walker fetched first, then the creaks, then the
+  // other surfaces (the creaks behind all 32 step files would leave a walk's first steps on the bridge without them)
+  function keepSteps(wanted) {
+    const first = shots.steps[ground];
+    keepShots(first, wanted);
+    keepShots(shots.creak, wanted);
+    for (const set of Object.values(shots.steps)) if (set !== first) keepShots(set, wanted);
   }
   // a variant of a loaded set at random, never the same twice running
   function anyOf(set) {
@@ -291,6 +310,7 @@ export function createSound(world, bridge) {
   // how long the track has not fitted the mood (s); the change to come: the next track starts when the playing one is
   // at `at` (s), which starts fading out at `out`; `end` at the track's end
   let misfit = 0, swap = null;
+  let musicWait = 0; // after a track failed to load, no music until then (performance.now() ms)
   function deck() {
     const el = new Audio();
     el.preload = 'auto';
@@ -298,6 +318,18 @@ export function createSound(world, bridge) {
     ctx.createMediaElementSource(el).connect(gain).connect(duckGain);
     const d = { el, gain, track: -1, state: 'idle', until: 0 };
     el.addEventListener('ended', () => { d.state = 'idle'; if (cur === d) cur = null; });
+    // a track that fails to load is fetched again when next cued; the music, if it was the playing track, starts
+    // again half a minute later (as a failed loop does)
+    el.addEventListener('error', () => {
+      if (!el.getAttribute('src')) return; // (the element emptied below)
+      console.warn('sound:', d.track >= 0 ? TRACKS[d.track].name : 'music', el.error && el.error.message);
+      if (cur === d) {
+        if (run.track === d.track) run.n--; // (it did not play)
+        cur = null; swap = null; musicWait = performance.now() + 30000;
+      }
+      d.track = -1; d.state = 'idle';
+      el.removeAttribute('src'); el.load();
+    });
     return d;
   }
   const level = (k) => 10 ** ((MUSIC_LUFS - TRACKS[k].lufs) / 20);
@@ -353,7 +385,7 @@ export function createSound(world, bridge) {
     for (const d of decks) if (d !== cur && d.state === 'out' && ctx.currentTime >= d.until) { d.el.pause(); d.state = 'idle'; }
     const fit = (lv.fit = moods(st));
     if (vol.music <= 0) return;
-    if (!cur) { start(pick(fit), FADE_IN); misfit = 0; swap = null; return; }
+    if (!cur) { if (performance.now() >= musicWait) { start(pick(fit), FADE_IN); misfit = 0; swap = null; } return; }
     const el = cur.el, t = el.currentTime, dur = el.duration, best = fit.indexOf(Math.max(...fit));
     const fading = cur.state === 'out';
     // the next seam far enough ahead for the fade out, and early enough to change before the track's end
@@ -407,8 +439,12 @@ export function createSound(world, bridge) {
   // run or pause everything for the on/off switch and the tab's visibility: a fade out, then the music paused and the
   // context suspended; on return the context resumes and the music fades back in where it was
   const live = () => on && !document.hidden;
+  let wasLive = false, scene = null; // (scene: the latest update's st, also while sound is off)
   function apply() {
     if (!ctx || dead) return;
+    // back on: the loops set at once to the scene's mix now (it does not run while off), before the fade in
+    if (live() && !wasLive && scene) { snap = true; mix(scene); snap = false; since = 0; }
+    wasLive = live();
     const t = ctx.currentTime;
     master.gain.cancelScheduledValues(t);
     master.gain.setTargetAtTime(live() ? 1 : 0, t, live() ? 0.5 : 0.15);
@@ -538,8 +574,8 @@ export function createSound(world, bridge) {
     const r = riverPlace(st.camera);
     const near = 1 / (1 + (r.dist / 16) ** 1.6);
     setBed(beds.river, (0.45 + 0.6 * st.river) * lerp(0.06, 1, near));
-    riverLP.frequency.setTargetAtTime(lerp(1400, 18000, near), ctx.currentTime, 0.3);
-    riverPan.pan.setTargetAtTime(clamp(r.pan * 0.6 * (1 - near * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
+    glide(riverLP.frequency, lerp(1400, 18000, near));
+    glide(riverPan.pan, clamp(r.pan * 0.6 * (1 - near * 0.5), -0.7, 0.7));
     setBed(beds.breeze, (0.2 + 0.9 * smoothstep(0.05, 0.7, wind)) * (1 - 0.45 * gale));
     setBed(beds.gale, 1.3 * gale);
     setBed(beds.drizzle, 1.1 * smoothstep(0, 0.3, rain));
@@ -549,12 +585,12 @@ export function createSound(world, bridge) {
     const wet = smoothstep(0.02, 0.2, rain) * lerp(0.45, 1, smoothstep(0.3, 1, rain));
     const sn = Math.max(0, 1 / (1 + (r.dist / 7) ** 2) - 0.02) / 0.98;
     setBed(beds.rainwater, 1.3 * wet * sn);
-    splashLP.frequency.setTargetAtTime(lerp(3000, 16000, Math.min(1, sn * 1.6)), ctx.currentTime, 0.3);
-    splashPan.pan.setTargetAtTime(clamp(r.pan * 0.6 * (1 - sn * 0.6), -0.6, 0.6), ctx.currentTime, 0.3);
+    glide(splashLP.frequency, lerp(3000, 16000, Math.min(1, sn * 1.6)));
+    glide(splashPan.pan, clamp(r.pan * 0.6 * (1 - sn * 0.6), -0.6, 0.6));
     const rp = roofPlace(st.camera), rn = Math.max(0, 1 / (1 + (rp.d / 5) ** 2) - 0.02) / 0.98;
     setBed(beds.roof, 1.4 * wet * rn);
-    roofLP.frequency.setTargetAtTime(lerp(3000, 16000, Math.min(1, rn * 1.6)), ctx.currentTime, 0.3);
-    roofPan.pan.setTargetAtTime(clamp(panTo(st.camera, rp.x, rp.z) * 0.7 * (1 - rn * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
+    glide(roofLP.frequency, lerp(3000, 16000, Math.min(1, rn * 1.6)));
+    glide(roofPan.pan, clamp(panTo(st.camera, rp.x, rp.z) * 0.7 * (1 - rn * 0.5), -0.7, 0.7));
     // a dawn chorus; birds fall quiet in the rain and in a gale
     const dawn = 1 + 0.5 * smoothstep(5, 6, h) * (1 - smoothstep(7, 8.5, h));
     lv.birds = dayOf(h) * dawn * (1 - smoothstep(0.05, 0.4, rain)) * (1 - 0.7 * gale);
@@ -562,34 +598,34 @@ export function createSound(world, bridge) {
     // water lapping around the bridge's posts, heard only close to it
     const bd = st.camera.position.distanceTo(bridge), bn = Math.max(0, 1 / (1 + (bd / 9) ** 2) - 0.02);
     setBed(beds.lapping, 1.5 * bn * (0.7 + 0.5 * st.river));
-    lapLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, bn * 1.6)), ctx.currentTime, 0.3);
-    lapPan.pan.setTargetAtTime(clamp(panTo(st.camera, bridge.x, bridge.z) * 0.7 * (1 - bn * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
+    glide(lapLP.frequency, lerp(2500, 16000, Math.min(1, bn * 1.6)));
+    glide(lapPan.pan, clamp(panTo(st.camera, bridge.x, bridge.z) * 0.7 * (1 - bn * 0.5), -0.7, 0.7));
     // the waterwheel's paddles and churn, heard within about 25 m; it turns faster with the river
     if (wheel) {
       const p = st.camera.position, wd = Math.hypot(p.x - wheel.x, p.y - wheel.y, p.z - wheel.z);
       const wn = Math.max(0, 1 / (1 + (wd / 7) ** 2) - 0.073) / 0.927;
       setBed(beds.waterwheel, 1.4 * wn * (0.6 + 0.6 * st.river));
-      wheelLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, wn * 1.6)), ctx.currentTime, 0.3);
-      wheelPan.pan.setTargetAtTime(clamp(panTo(st.camera, wheel.x, wheel.z) * 0.7 * (1 - wn * 0.5), -0.7, 0.7), ctx.currentTime, 0.3);
+      glide(wheelLP.frequency, lerp(2500, 16000, Math.min(1, wn * 1.6)));
+      glide(wheelPan.pan, clamp(panTo(st.camera, wheel.x, wheel.z) * 0.7 * (1 - wn * 0.5), -0.7, 0.7));
     }
     // frogs in the flooded paddies from dusk (18:00) to dawn (05:00), loud among the fields and carrying a long way;
     // quiet in the rain and in a gale
     const fp = fieldPlace(st.camera), fn = 1 / (1 + (fp.d / 30) ** 2);
     const night = smoothstep(17.6, 18.6, h) + 1 - smoothstep(4.5, 5.4, h);
     setBed(beds.frogs, 0.8 * fn * night * (1 - smoothstep(0.1, 0.5, rain)) * (1 - 0.6 * gale));
-    frogPan.pan.setTargetAtTime(clamp(panTo(st.camera, fp.x, fp.z) * 0.5 * (1 - fn), -0.5, 0.5), ctx.currentTime, 0.3);
+    glide(frogPan.pan, clamp(panTo(st.camera, fp.x, fp.z) * 0.5 * (1 - fn), -0.5, 0.5));
     // wind in the bamboo, close to the groves; louder with the wind, a little rustle even in calm air
     const bp = bambooPlace(st.camera), bnear = Math.max(0, 1 / (1 + (bp.d / 12) ** 2) - 0.03) / 0.97;
     setBed(beds.bamboo, 1.4 * bnear * (0.3 + 0.9 * smoothstep(0.05, 0.8, wind)) * (1 - 0.5 * gale));
-    bambooPan.pan.setTargetAtTime(clamp(panTo(st.camera, bp.x, bp.z) * 0.6 * (1 - bnear * 0.6), -0.6, 0.6), ctx.currentTime, 0.3);
-    // the skylark singing high over the fields (birds.js lark()), carrying a long way
+    glide(bambooPan.pan, clamp(panTo(st.camera, bp.x, bp.z) * 0.6 * (1 - bnear * 0.6), -0.6, 0.6));
+    // the skylark singing high over the fields (birds.js lark()), carrying a long way; by day only, quiet in the rain
+    // and silent in a gale (a lark already up when night or the weather comes keeps singing on its way down for about
+    // a minute)
     const lk = st.lark, ld = lk ? st.camera.position.distanceTo(lk) : Infinity;
-    setBed(beds.hibari, 0.9 / (1 + (ld / 50) ** 2));
-    if (lk) larkPan.pan.setTargetAtTime(clamp(panTo(st.camera, lk.x, lk.z) * 0.6, -0.6, 0.6), ctx.currentTime, 0.3);
+    setBed(beds.hibari, (0.9 / (1 + (ld / 50) ** 2)) * dayOf(h) * (1 - smoothstep(0.05, 0.4, rain)) * (1 - gale));
+    if (lk) glide(larkPan.pan, clamp(panTo(st.camera, lk.x, lk.z) * 0.6, -0.6, 0.6));
     // the footsteps (and the bridge's creaks) stay loaded while the walk goes on (and drop a minute after it stops)
-    const walking = performance.now() - walked < 5000;
-    for (const set of Object.values(shots.steps)) keepShots(set, walking);
-    keepShots(shots.creak, walking);
+    keepSteps(performance.now() - walked < 5000);
     bell(st);
     keepShots(shots.songs, lv.birds > 0.2);
     hum(st);
@@ -613,13 +649,15 @@ export function createSound(world, bridge) {
     lights = st.lights;
     if (!toll) return;
     if (shots.bell.state !== 'ready') { if ((toll.wait -= TICK) <= 0) toll = null; return; }
-    // (a bell still tolling stops for the new toll)
+    // (a bell still tolling stops for the new toll, which keeps its rhythm: a lapse through both dusk and dawn tolls
+    // on from the last stroke struck, never two strokes on top of each other)
     for (let i = later.length - 1; i >= 0; i--) if (later[i].name.startsWith('bell')) later.splice(i, 1);
-    let at = 0.5 + Math.random();
+    let at = Math.max(0.5 + Math.random(), (struck - performance.now()) / 1000 + 19.6 + Math.random() * 1.1);
     for (let i = 0; i < toll.n; i++) {
       const last = i === toll.n - 1, k = last ? 2 : Math.floor(Math.random() * 2), g = 0.9 * (0.9 + Math.random() * 0.2);
       after(at, `bell-${k + 1}`, () => {
         if (shots.bell.state !== 'ready') return;
+        struck = performance.now();
         from({ x: T.x, y: T.y + 6, z: T.z }, shots.bell.bufs[k], `bell-${k + 1}`, g, 400, 0.5, { lowpass: lerp(4000, 2200, clamp(Math.hypot(T.x - cam.position.x, T.z - cam.position.z) / 400, 0, 1)) });
       });
       at += 19.6 + Math.random() * 1.1;
@@ -635,10 +673,10 @@ export function createSound(world, bridge) {
     const d = f ? st.camera.position.distanceTo(f.pos) : Infinity;
     keepShots(shots.tune, d < 60);
     const n = Math.max(0, 1 / (1 + (d / 4) ** 2) - 0.02) / 0.98;
-    voiceGain.gain.setTargetAtTime(1.3 * n, t, 0.3);
+    glide(voiceGain.gain, 1.3 * n);
     if (f) {
-      voiceLP.frequency.setTargetAtTime(lerp(2500, 16000, Math.min(1, n * 1.6)), t, 0.3);
-      voicePan.pan.setTargetAtTime(clamp(panTo(st.camera, f.pos.x, f.pos.z) * 0.8 * (1 - n * 0.4), -0.8, 0.8), t, 0.3);
+      glide(voiceLP.frequency, lerp(2500, 16000, Math.min(1, n * 1.6)));
+      glide(voicePan.pan, clamp(panTo(st.camera, f.pos.x, f.pos.z) * 0.8 * (1 - n * 0.4), -0.8, 0.8));
     }
     if (voice.src && t >= voice.until) voice.src = null;
     if (voice.src && (!f || f.busy)) {
@@ -659,8 +697,8 @@ export function createSound(world, bridge) {
     log(fired, { t: +t.toFixed(2), name: `fisher-${kind}`, gain: +(1.3 * n).toFixed(3) });
   }
 
-  // the Ural owl at night (19:30-04:30), not in the rain or a gale: bouts of 2-5 songs 25-45 s apart from one spot in
-  // the woods 70-260 m off, then 1.5-4 minutes' quiet
+  // the Ural owl at night (19:30-04:30), silent in rain heavier than drizzle and in a gale: bouts of 2-5 songs 25-45 s
+  // apart from one spot in the woods 70-260 m off, then 1.5-4 minutes' quiet
   const hoot = { wait: 20 + Math.random() * 40, left: 0, at: null };
   function owl(st, gale) {
     const h = st.hour, night = (h >= 19.5 || h < 4.5) && st.rain < 0.35 && gale < 0.5;
@@ -673,12 +711,13 @@ export function createSound(world, bridge) {
   }
 
   // the villages by day, heard from MIN_FAR-320 m: now and then (every 35-105 s) a dog barking once or a few times,
-  // someone splitting logs (3-7 strokes), or before mid-morning a cock crowing; not in the rain or a gale
+  // someone splitting logs (3-7 strokes), or before mid-morning a cock crowing; silent in rain heavier than drizzle
+  // (the owl's threshold: the drizzle's rain is 0.3) and in a gale
   const vil = { wait: 15 + Math.random() * 30 };
   function village(st, gale) {
     const h = st.hour, p = st.camera.position;
     const near = villages.some((b) => nearestIn(b, p, 0).d < 320);
-    const open = near && h > 5 && h < 19 && st.rain < 0.3 && gale < 0.5;
+    const open = near && h > 5 && h < 19 && st.rain < 0.35 && gale < 0.5;
     for (const set of Object.values(shots.village)) keepShots(set, open);
     // (a dog's or an axe's bout stops with the day, or when the camera leaves)
     if (!open) for (let i = later.length - 1; i >= 0; i--) if (later[i].name in VILLAGE) later.splice(i, 1);
@@ -734,6 +773,7 @@ export function createSound(world, bridge) {
     // 1 forward, -1 back, else 0), lights (the lanterns, 0..1), camera, fisher ({ pos, busy } or null: figures.js
     // voice), lark (the skylark singing, a Vector3, or null) }
     update(dt, st) {
+      scene = st;
       if (!this.active) return;
       due();
       sing(dt);
@@ -748,10 +788,10 @@ export function createSound(world, bridge) {
     // so only the walk's very first steps can go unheard).
     footstep({ surface = 'earth', hurry = false, foot = 0 } = {}) {
       walked = performance.now();
+      if (surface in STEPS) ground = surface;
       if (!this.active) return;
       const set = shots.steps[surface] || shots.steps.earth;
-      for (const s of Object.values(shots.steps)) keepShots(s, true);
-      keepShots(shots.creak, true);
+      keepSteps(true);
       if (set.state !== 'ready') return;
       const k = anyOf(set);
       const side = foot === 'left' ? -1 : foot === 'right' ? 1 : Math.sign(+foot || 0);
@@ -762,10 +802,11 @@ export function createSound(world, bridge) {
       }
     },
     // walking(speed, surface): the walk's pace (m/s, 0 standing), every frame or on change. It plays nothing (no
-    // recording of cloth in motion was clean enough for a kimono's rustle, so the surface goes unused); while the walker
-    // moves it keeps the footsteps loaded.
-    walking(speed) {
+    // recording of cloth in motion was clean enough for a kimono's rustle); while the walker moves it keeps the
+    // footsteps loaded, the surface's own set fetched first.
+    walking(speed, surface) {
       if (speed > 0) walked = performance.now();
+      if (surface in STEPS) ground = surface;
     },
     // An animal's call or the moored boat's sound (CALLS: 'sika', 'heron', 'kawasemi', 'sekirei', 'karugamo', 'oshidori',
     // 'mejiro', 'plop', 'knock', 'hull') from world x, y, z: quieter and duller with distance, panned towards it, after

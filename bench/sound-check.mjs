@@ -1,7 +1,8 @@
 // The sound's behaviour, checked headless through the engine's debug hooks (soundInfo, soundDebug): the music's
 // track by mood, a change of mood handing over at a seam, the hand-over at a track's end, ducking under a near thunderclap,
-// a delayed thunderclap dropped after a hidden tab, mute and tab-hide fading out before the music pauses, the bell only
-// on a time-lapse through dusk or dawn, the owl only at night, the village by day, rain off the eaves only near a roof
+// a delayed thunderclap dropped after a hidden tab, mute and tab-hide fading out before the music pauses, the loops at
+// the scene's levels from the moment sound is back on, the bell only on a time-lapse through dusk or dawn (one rhythm
+// through both), the owl only at night, the village by day, rain off the eaves only near a roof
 // in the rain, rain on the water near the river, the moored boat, the mandarins, the bridge's creaks, that the walker
 // stays out of the water, and the sound stopping on a lost device. It runs in real time (the sound's clock is the browser's), about five minutes.
 //   node bench/build.mjs look && BENCH_HEADLESS=1 LOOK_BACKEND=webgl node bench/sound-check.mjs look [step ...]
@@ -109,10 +110,16 @@ try {
   }
 
   if (want('mute')) {
+    // muted in a downpour, the sky cleared meanwhile: the rain is gone from the first moment back on (target/gain)
+    await call('setWeather', 'downpour', 0); await run(3);
+    const rain = (i) => `rain ${i.beds.rain.target}/${i.beds.rain.gain} drizzle ${i.beds.drizzle.target}/${i.beds.drizzle.gain}`;
+    i = await info(); say(`mute: in a downpour: ${rain(i)}`);
     await call('setSound', false);
     for (let k = 0; k < 5; k++) { await new Promise((r) => setTimeout(r, 250)); i = await info(); say(`mute: +${(k + 1) / 4}s master ${i.master} state ${i.state} ${decks(i.music)}`); }
+    await call('setWeather', 'clear', 0); await run(1);
     await call('setSound', true);
-    for (let k = 0; k < 4; k++) { await run(0.5); i = await info(); say(`unmute: +${(k + 1) / 2}s master ${i.master} state ${i.state} ${decks(i.music)}`); }
+    await run(0.3); i = await info(); say(`unmute (cleared while muted): +0.3s master ${i.master} ${rain(i)}`);
+    for (let k = 0; k < 4; k++) { await run(0.5); i = await info(); say(`unmute: +${(k + 1) / 2 + 0.3}s master ${i.master} state ${i.state} ${rain(i)} ${decks(i.music)}`); }
   }
 
   if (want('bell')) {
@@ -131,6 +138,8 @@ try {
     await call('setTimeOfDay', 20.75, false); await run(1);
     await bell('time-lapse forward 20:45 -> 05:30', 5.5, true);
     await bell('time-lapse forward 05:30 -> 14:30', 14.5, true);
+    // through dusk and dawn in one lapse: the dawn's toll keeps the dusk's rhythm (strokes about 20 s apart)
+    await bell('time-lapse forward 14:30 -> 05:30', 5.5, true);
   }
 
   if (want('owl')) {
@@ -212,7 +221,7 @@ try {
     await run(8); i = await info();
     say('  steps fired:', i.fired.filter((f) => /^step/.test(f.name)).map((f) => f.name).join(' ') || 'none');
     const steps = i.fired.filter((f) => /^step-wood/.test(f.name)).length, creaks = i.fired.filter((f) => /^creak/.test(f.name)).length;
-    say(`creak: on the bridge 8 s: ${steps} wood steps, ${creaks} creaks; surface ${(await call('walkInfo')).surface}; ${fired(i, /creak/)}`);
+    say(`creak: on the bridge 8 s: ${steps} wood steps, ${creaks} creaks (set ${i.shots.creak}); surface ${(await call('walkInfo')).surface}; ${fired(i, /creak/)}`);
     await call('walkInput', { forward: 0 });
   }
 
