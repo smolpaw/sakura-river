@@ -616,8 +616,8 @@ export async function create(canvas, opts = {}) {
   const koi = makeKoi(world, Q.koi, focus, G.rocks.rocksInWater);
   koi.mesh.name = 'koi';
   scene.add(koi.mesh);
-  // reflection buffer per CSS pixel above DPR 1.4 (0.35 at DPR 2 passes against sub-pixel A/A, 0.25 does not;
-  // bench/dpr_parity.py); the light shafts are per CSS pixel at every DPR (see buildPipeline below)
+  // reflection buffer per CSS pixel above DPR 1.4 (at DPR 2, 0.35 stays within sub-pixel A/A noise against the full
+  // buffer, 0.25 does not: docs/performance.md); the light shafts are per CSS pixel at every DPR (see buildPipeline below)
   const reflScale = () => opts.reflScale ?? Q.refl * Math.min(1, 1.4 / dpr);
   // where things touch the water (touches.js): the heron's legs, the boat, the fisherman's float, a koi rising
   const touches = makeTouches();
@@ -739,7 +739,7 @@ export async function create(canvas, opts = {}) {
   mark('assembled');
   await yieldTask();
   // ---------- post ----------
-  // light shafts per CSS pixel: 0.25 of the drawing buffer at DPR 2 is ~7x below sub-pixel A/A noise (dpr_parity)
+  // light shafts per CSS pixel: 0.25 of the drawing buffer at DPR 2 is ~7x below sub-pixel A/A noise
   // The adaptive render scale (quality.js): the scene pass at that scale and FSR 1 upscaling it to the drawing buffer
   // (post.js). On tiers that supersample (ultra) and with `upscale: false` the canvas itself scales instead and the
   // browser stretches it (bilinear).

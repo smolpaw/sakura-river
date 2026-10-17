@@ -1,8 +1,8 @@
 // Real mouse input on the live engine (run with LIVE=1): looks down hard, zooms all the way in and out, pans to the
 // valley's edge and past it, spins, dives at the tree; records the camera every frame and prints per gesture the
 // largest frame-to-frame jump of the camera and its target and how often the camera's height turned back (yFlips:
-// jitter, e.g. a pan held against a limit). PNGs: bench/out/qa/ms-*.png.
-//   LIVE=1 GPU=1 bench/gpu.sh node bench/qa-eval.mjs <build> bench/probes/mouse.mjs     (CAMLOG=<file>: the frames as JSON)
+// jitter, e.g. a pan held against a limit). PNGs: bench/out/mouse-*.png.
+//   LIVE=1 GPU=1 bench/gpu.sh node bench/look.mjs <build> --probe bench/probes/mouse.mjs     (CAMLOG=<file>: the frames as JSON)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export default async (page, { shoot }) => {
   await page.evaluate(() => { H.set('time', 0.5); H.call('resetCamera'); });
@@ -20,29 +20,29 @@ export default async (page, { shoot }) => {
   const marks = [];
   // 1. look down hard (camera to the ground), hold
   marks.push(['down', await mark('down')]);
-  await drag(0, -400, 30, 'left', 1500); await sleep(800); await shoot('out/qa/ms-1down.png');
+  await drag(0, -400, 30, 'left', 1500); await sleep(800); await shoot('out/mouse-1down.png');
   // 2. zoom fully in, then out
   marks.push(['zoomin', await mark('zoomin')]);
   for (let i = 0; i < 40; i++) { await page.mouse.move(cx, cy); await page.mouse.wheel({ deltaY: -200 }); await sleep(30); }
-  await sleep(1500); await shoot('out/qa/ms-2zoomin.png');
+  await sleep(1500); await shoot('out/mouse-2zoomin.png');
   marks.push(['zoomout', await mark('zoomout')]);
   for (let i = 0; i < 60; i++) { await page.mouse.wheel({ deltaY: 300 }); await sleep(30); }
-  await sleep(1500); await shoot('out/qa/ms-3zoomout.png');
+  await sleep(1500); await shoot('out/mouse-3zoomout.png');
   // 3. pan far (right drag) several times in one direction
   marks.push(['pan', await mark('pan')]);
   for (let k = 0; k < 6; k++) await drag(-500, 0, 20, 'right');
-  await sleep(1500); await shoot('out/qa/ms-4pan.png');
+  await sleep(1500); await shoot('out/mouse-4pan.png');
   for (let k = 0; k < 6; k++) await drag(0, 400, 20, 'right');
-  await sleep(1500); await shoot('out/qa/ms-5pan2.png');
+  await sleep(1500); await shoot('out/mouse-5pan2.png');
   // 4. look round fast
   marks.push(['spin', await mark('spin')]);
-  await drag(1200, 0, 40); await drag(-2000, 150, 40); await sleep(1500); await shoot('out/qa/ms-6spin.png');
+  await drag(1200, 0, 40); await drag(-2000, 150, 40); await sleep(1500); await shoot('out/mouse-6spin.png');
   // 5. reset, then dive at the tree: pan down + zoom in at the trunk
   await page.evaluate(() => H.call('resetCamera')); await sleep(2500);
   marks.push(['tree', await mark('tree')]);
   for (let i = 0; i < 30; i++) { await page.mouse.move(box.x + box.w * 0.3, box.y + box.h * 0.55); await page.mouse.wheel({ deltaY: -250 }); await sleep(30); }
-  await drag(0, -300, 30, 'left', 500); await sleep(1500); await shoot('out/qa/ms-7tree.png');
-  await drag(800, 0, 40); await sleep(1500); await shoot('out/qa/ms-8tree2.png');
+  await drag(0, -300, 30, 'left', 500); await sleep(1500); await shoot('out/mouse-7tree.png');
+  await drag(800, 0, 40); await sleep(1500); await shoot('out/mouse-8tree2.png');
   marks.push(['end', await mark('end')]);
   const cam = await page.evaluate(() => window.__cam);
   if (process.env.CAMLOG) (await import('node:fs')).writeFileSync(process.env.CAMLOG, JSON.stringify({ cam, marks }));
