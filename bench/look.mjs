@@ -28,6 +28,7 @@ const page = await openHarness(browser, url);
 if (gpu) await page.setViewport({ width: W, height: Hh });
 // one rendered frame per browser frame (the skinned meshes' bones and the WebGPU post nodes update once per frame)
 const shoot = async (name) => {
+  if (gpu) fs.mkdirSync(path.dirname(path.join(BENCH, name)), { recursive: true }); // (the harness's /save makes its own)
   if (live) return gpu ? page.screenshot({ path: path.join(BENCH, name) }) : page.evaluate((o) => H.captureLive(o), name);
   if (!gpu) return page.evaluate((o) => H.capture(o, 1 / 60), name);
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => { H.call('tick', 1, 1 / 60); r(); })));
