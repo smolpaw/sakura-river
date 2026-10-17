@@ -306,8 +306,45 @@ const groundNormal = (dist, earth, lane) => Fn(() => {
 // the buildings' occlusion of the ground at the fragment (groundao.js: the terrain's, and the temple's floors')
 const groundOcc = (ao) => { const f = uniform(ao.frame); return texture(ao.tex, wp.xz.sub(f.xy).div(f.zw)).r; };
 
-// The ground, with puddles on the bare earth in the rain (mirroring `sky`, its uniforms). With `paddies` it draws the
-// farmland's and the village's mesh (world.js buildFields), where flooded paddies (aWater) are still water too. With
+// The flooded paddies' water over the farmland: each zone's grid of world.js buildFields `water` (grids: theirs; zones:
+// world.ZONES), stacked in one texture with a row between zones, read with bilinear filtering: interpolated over the
+// mesh's triangles instead, its edge stepped along their diagonals in a sawtooth. Each point is read from the first
+// zone whose box holds it, as the mesh's quads are drawn by the first zone whose box holds their middle.
+export function paddyWaterMap(grids, zones) {
+  const list = grids.slice().sort((a, b) => a.zone - b.zone);
+  const W = Math.max(...list.map((g) => g.nx)), Hh = list.reduce((n, g) => n + g.nz + 1, 0);
+  const data = new Uint8Array(W * Hh);
+  let row = 0;
+  const boxes = [], frames = [];
+  for (const g of list) {
+    for (let j = 0; j < g.nz; j++) for (let i = 0; i < g.nx; i++) data[(row + j) * W + i] = Math.round(g.water[j * g.nx + i] * 255);
+    const [x0, z0, step] = g.box;
+    boxes.push(new THREE.Vector4(...zones[g.zone].box));
+    // (texel (i, row + j) holds the zone's point x0 + i * step, z0 + j * step)
+    frames.push(new THREE.Vector4(x0, z0, 1 / step, row));
+    row += g.nz + 1;
+  }
+  const tex = new THREE.DataTexture(data, W, Hh, THREE.RedFormat, THREE.UnsignedByteType);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.unpackAlignment = 1;
+  tex.needsUpdate = true;
+  return { tex, boxes, frames };
+}
+const paddyWaterAt = ({ tex, boxes, frames }) => Fn(() => {
+  const B = uniformArray(boxes, 'vec4'), Fr = uniformArray(frames, 'vec4');
+  const at = vec2(-1.0).toVar(), found = float(0).toVar();
+  Loop({ start: 0, end: boxes.length, type: 'int', name: 'pz' }, ({ pz }) => {
+    const b = B.element(pz), f = Fr.element(pz);
+    If(found.lessThan(0.5).and(wp.x.greaterThanEqual(b.x)).and(wp.x.lessThanEqual(b.z)).and(wp.z.greaterThanEqual(b.y)).and(wp.z.lessThanEqual(b.w)), () => {
+      at.assign(vec2(wp.x.sub(f.x).mul(f.z), wp.z.sub(f.y).mul(f.z).add(f.w)).add(0.5).div(vec2(tex.image.width, tex.image.height)));
+      found.assign(1.0);
+    });
+  });
+  return texture(tex, at).level(0).r.mul(found);
+})();
+
+// The ground, with puddles on the bare earth in the rain (mirroring `sky`, its uniforms). With `paddies` (paddyWaterMap)
+// it draws the farmland's and the village's mesh (world.js buildFields), where flooded paddies are still water too. With
 // `lanes` (world.js LANES) the lanes close by gain their grit, stones and ruts.
 export function terrainMaterial({ sky, paddies = false, lanes = null, ao = null }) {
   const n09 = vnoise(wp.xz.mul(0.9)), n012 = vnoise(wp.xz.mul(0.12));
@@ -381,8 +418,9 @@ export function terrainMaterial({ sky, paddies = false, lanes = null, ao = null 
       If(puddle.greaterThan(0.0), () => { o.assign(mix(o, paddyWater(sky), puddle)); });
     });
     if (paddies) {
-      // (only where there is water: the levees, banks and dry paddies skip it)
-      const wet = sstep(0.35, 0.65, attribute('aWater', 'float'));
+      // (only where there is water: the levees, banks and dry paddies skip it; the edge wandered a little by a noise,
+      // as a paddy's muddy edge is)
+      const wet = sstep(0.4, 0.6, paddyWaterAt(paddies).add(vnoise(wp.xz.mul(2.7)).sub(0.5).mul(0.2)));
       If(wet.greaterThan(0.0), () => { o.assign(mix(o, paddyWater(sky), wet)); });
     }
     return o;

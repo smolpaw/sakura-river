@@ -528,10 +528,16 @@ export function createWorld(seed = 7) {
       // under the farmland the fine mesh (buildFields) draws the ground: this one drops away beneath it, and round
       // the farmhouses' pads by as much as their walls' faces stand (padGround), so its few metres wide triangles,
       // spanning a wall, stay under the fine mesh's
+      // On the terraces it drops by the fall of the ground within a triangle's width too: a triangle spanning a riser
+      // otherwise cut through the lower paddy's edge, in bare green patches without blades
       const m = (farm[k / 3] = h.F ? h.F.m : 0);
-      let pad = Infinity;
-      if (m > 0.6) for (const b of BUILDINGS) if (Math.abs(x - b.x) < 25 && Math.abs(z - b.z) < 25) pad = Math.min(pad, padEdge(b, x, z));
-      pos[k++] = x; pos[k++] = h.y - 0.5 * smoothstep(0.25, 0.6, m) - 6 * smoothstep(0.6, 0.9, m) * smoothstep(5, 3, pad); pos[k++] = z;
+      let pad = Infinity, fall = 0;
+      if (m > 0.6) {
+        for (const b of BUILDINGS) if (Math.abs(x - b.x) < 25 && Math.abs(z - b.z) < 25) pad = Math.min(pad, padEdge(b, x, z));
+        const r = Math.max(xs[Math.min(i + 1, segX)] - xs[Math.max(i - 1, 0)], zs[Math.min(j + 1, segZ)] - zs[Math.max(j - 1, 0)]) / 2;
+        for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) fall = Math.max(fall, h.y - heightField(x + dx, z + dz).y);
+      }
+      pos[k++] = x; pos[k++] = h.y - 0.5 * smoothstep(0.25, 0.6, m) - smoothstep(0.6, 0.9, m) * Math.max(6 * smoothstep(5, 3, pad), Math.min(fall, 4)); pos[k++] = z;
     }
     const idx = new Uint32Array(segX * segZ * 6);
     k = 0;
@@ -551,9 +557,11 @@ export function createWorld(seed = 7) {
       const g = groundCover(x, y, z, nrm[v * 3 + 1]);
       col[v * 3] = g.r; col[v * 3 + 1] = g.g; col[v * 3 + 2] = g.b;
       let { dens, len } = g;
-      dens *= 1 - smoothstep(0.1, 0.3, farm[v]); // no blades on the farmland (they stand on its own mesh there)
       if (mask) { const m = mask(x, z); dens *= m[0]; len *= m[1]; }
-      grid[v * 4] = y; grid[v * 4 + 1] = dens; grid[v * 4 + 2] = len; grid[v * 4 + 3] = g.tint;
+      // no blades on the farmland (they stand on its own mesh there), but its colour stays the sward's, so where this
+      // mesh shows at the farmland's fringe it matches the grass round it
+      const blades = dens * (1 - smoothstep(0.1, 0.3, farm[v]));
+      grid[v * 4] = y; grid[v * 4 + 1] = blades; grid[v * 4 + 2] = len; grid[v * 4 + 3] = g.tint;
       ground[v * 3] = dens; ground[v * 3 + 1] = len; ground[v * 3 + 2] = g.tint;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -568,9 +576,9 @@ export function createWorld(seed = 7) {
   // and its own edge dips under the terrain where the zone fades out). `zones`: which of ZONES (the page builds them in
   // a few jobs at once). color: the ground's colour (levees grassy,
   // risers grassy earth banks, dry paddies soil, stubble or renge in flower); aGround: as on the terrain
-  // (the grass's colour on levees and the zone's fringe); aWater: over 0.5 in a flooded paddy (materials.js terrainMaterial
-  // draws the water there), 0.5 at its edge. grids: per zone, its grid's
-  // height and grass (density, length) and where the mesh is, for grass.js to stand blades on.
+  // (the grass's colour on levees and the zone's fringe). grids: per zone (`zone`: its index in ZONES), its grid's
+  // height and grass (density, length) and where the mesh is, for grass.js to stand blades on, and `water`: over 0.5 in
+  // a flooded paddy, 0.5 at its edge (materials.js terrainMaterial draws the water there, from paddyWaterMap).
   function buildFields(step = 0.5, zones = ZONES.map((_, i) => i)) {
     const P = [], I = [], grids = [], verts = [];
     const inBox = (b, x, z) => x >= b[0] && z >= b[1] && x <= b[2] && z <= b[3];
@@ -585,7 +593,8 @@ export function createWorld(seed = 7) {
       const nx = Math.round((Math.ceil(Z.box[2] / step) * step - bx0) / step) + 1, nz = Math.round((Math.ceil(Z.box[3] / step) * step - bz0) / step) + 1;
       const idx = new Int32Array(nx * nz).fill(-1);
       const grid = new Float32Array(nx * nz * 4); // y, grass density, grass length, 1 where the mesh is
-      grids.push({ grid, nx, nz, box: [bx0, bz0, step] });
+      const water = new Float32Array(nx * nz);
+      grids.push({ grid, water, zone: zi, nx, nz, box: [bx0, bz0, step] });
       // where the farmland and village are, and a ring of the natural ground round them (so the mesh's edge comes back
       // down to the ground the terrain mesh draws, however steeply the farmland ends)
       const H = new Array(nx * nz).fill(null);
@@ -607,7 +616,7 @@ export function createWorld(seed = 7) {
         idx[k] = P.length / 3;
         // (where the farmland fades out the terrain mesh takes over: this one a little under it)
         P.push(x, h.y - 0.15 * (1 - smoothstep(0.02, 0.25, h.F.m)), z);
-        verts.push({ x, y: h.y, z, F: h.F, grid, k: k * 4 });
+        verts.push({ x, y: h.y, z, F: h.F, grid, water, k });
       }
       for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
         const a = idx[j * nx + i], b = idx[j * nx + i + 1], c = idx[(j + 1) * nx + i], d = idx[(j + 1) * nx + i + 1];
@@ -621,11 +630,11 @@ export function createWorld(seed = 7) {
     geo.computeVertexNormals();
     // colours and grass, now the normals are known
     const nrm = geo.attributes.normal.array;
-    const C = new Float32Array(verts.length * 3), Gr = new Float32Array(verts.length * 3), Wt = new Float32Array(verts.length);
+    const C = new Float32Array(verts.length * 3), Gr = new Float32Array(verts.length * 3);
     const levee = [0.15, 0.27, 0.07], soil = [0.25, 0.18, 0.12], stubble = [0.4, 0.34, 0.2], renge = [0.5, 0.26, 0.42];
     const earth = [0.3, 0.26, 0.17], bank = [0.12, 0.22, 0.06], mud = [0.2, 0.16, 0.11];
     const field = { r: 0, g: 0, b: 0, dens: 1, len: 0.45, tint: 0.32 };
-    verts.forEach(({ x, y, z, F, grid, k }, v) => {
+    verts.forEach(({ x, y, z, F, grid, water, k }, v) => {
       // the ground's own cover where it shows: the village, and the farmland's fringe (elsewhere it is all paddy)
       const fringe = F.village ? 1 : 1 - smoothstep(0.15, 0.5, F.m);
       const g = fringe > 0 ? groundCover(x, y, z, nrm[v * 3 + 1]) : field;
@@ -640,17 +649,18 @@ export function createWorld(seed = 7) {
         c = c.map((q) => q * n);
         // the zone's fringe: the ground beyond
         c = lerpC(c, [g.r, g.g, g.b], fringe); dens = lerp(dens, g.dens, fringe); len = lerp(len, g.len, fringe);
-        // over 0.5: water; from how far into the paddy, so its edge falls where the levee rises, not along the mesh
-        Wt[v] = F.wet ? clamp(0.5 + F.q / 0.5, 0, 1) : 0;
+        // over 0.5: water; from how far into the paddy, so its edge falls where the levee rises, not along the mesh.
+        // Drying out over the zone's fringe, where this mesh sinks under the terrain's coarser one: water there showed
+        // through the terrain's triangles in a sawtooth
+        water[k] = F.wet ? clamp(0.5 + F.q / 0.5, 0, 1) * smoothstep(0.3, 0.6, F.m) : 0;
       }
       C.set(c, v * 3);
       Gr.set([dens, len, g.tint], v * 3);
       // blades on this mesh (grass.js reads this grid where it is)
-      grid.set([y, dens, len, 1], k);
+      grid.set([y, dens, len, 1], k * 4);
     });
     geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
     geo.setAttribute('aGround', new THREE.BufferAttribute(Gr, 3));
-    geo.setAttribute('aWater', new THREE.BufferAttribute(Wt, 1));
     geo.computeBoundingSphere();
     return { geo, grids };
   }

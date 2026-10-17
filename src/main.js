@@ -307,7 +307,8 @@ export async function create(canvas, opts = {}) {
   scene.add(hemi);
   // the village's farmland: rice paddies, flooded or dry, terraced up the slopes (world.js buildFields)
   const fieldParts = fieldJobs.map((_, k) => G[`fields${k}`]);
-  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky, paddies: true, lanes: world.LANES, ao: groundAO }));
+  const paddies = M.paddyWaterMap(fieldParts.flatMap((f) => f.grids), world.ZONES);
+  const fields = new THREE.Mesh(mergeGeometries(fieldParts.map((f) => f.geo)), M.terrainMaterial({ sky, paddies, lanes: world.LANES, ao: groundAO }));
   fields.receiveShadow = true;
   fields.name = 'fields';
   scene.add(fields);
