@@ -526,11 +526,13 @@ export const SITES = { hall: [-7, 0, -4], pagoda: [8.5, 0, 3], belfry: [-13.5, 0
 function compound(k, T, ground) {
   const rng = mulberry32(88), shade = mulberry32(89);
   const W = T.hw, D = T.hd;
-  k.box(2 * W - 0.4, 0.4, 2 * D - 0.4, 0, -0.2, 0, GRAVEL);
+  // the gravel, up to the kerb's inner edge (under it by a few cm), the kerb a little proud of it: coplanar, the two
+  // fought in the depth buffer and the edge shimmered underfoot
+  k.box(2 * W - 1.44, 0.4, 2 * D - 1.44, 0, -0.2, 0, GRAVEL);
   const sides = [[-W, D, 1, 0, 2 * W], [W, D, 0, -1, 2 * D], [W, -D, -1, 0, 2 * W], [-W, -D, 0, 1, 2 * D]];
   for (const [ox, oz, tx, tz, L] of sides) {
     const nx = -tz, nz = tx, ry = Math.atan2(nx, nz); // outward
-    for (let s = 0; s < L;) { const w = Math.min(1.6 + rng() * 0.8, L - s); const c = s + w / 2; stone(k, shade, w - 0.05, 0.35, 0.8, ox + tx * c - nx * 0.35, -0.175, oz + tz * c - nz * 0.35, ry, 1.12, KIND.STONE); s += w; }
+    for (let s = 0; s < L;) { const w = Math.min(1.6 + rng() * 0.8, L - s); const c = s + w / 2; stone(k, shade, w - 0.05, 0.365, 0.8, ox + tx * c - nx * 0.35, -0.1675, oz + tz * c - nz * 0.35, ry, 1.12, KIND.STONE); s += w; }
     // courses of rough blocks of uneven size down to the ground, battered in a curve that steepens towards the top,
     // each block set a little proud or back, mossier low down
     for (let r = 1, top = -0.35; r < 24; r++) {
