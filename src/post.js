@@ -113,7 +113,7 @@ export function lightShafts(color, samples, scale = 0.5) {
 }
 
 export function grade(input) {
-  const u = { res: uniform(new THREE.Vector2(1, 1)), time: uniform(0), vig: uniform(0.36), clarity: uniform(0.2), sharp: uniform(0.35), black: uniform(0.06) };
+  const u = { res: uniform(new THREE.Vector2(1, 1)), time: uniform(0), vig: uniform(0.36), clarity: uniform(0.2), sharp: uniform(0.35), black: uniform(0.035) };
   const node = Fn(() => {
     const vUv = uv();
     const px = vec2(1.0).div(u.res);
@@ -142,8 +142,9 @@ export function grade(input) {
     // and the haze lift the day's shadows off black
     const bk = max(u.black, 1e-4);
     c.assign(mix(c.mul(c).div(bk.mul(4.0)), c.sub(bk), step(bk.mul(2.0), c)).div(float(1.0).sub(bk)));
-    // S-curve
-    c.assign(mix(c, c.mul(c).mul(vec3(3.0).sub(c.mul(2.0))), 0.5));
+    // S-curve, eased off below a quarter so the shade keeps its colour instead of sinking into black (with the toe
+    // above, ground in a building's shade read as a hole)
+    c.assign(mix(c, c.mul(c).mul(vec3(3.0).sub(c.mul(2.0))), clamp(c.mul(4.0), 0.0, 1.0).mul(0.5)));
     l.assign(luma(c));
     // saturation: vibrance (most on muted colours) everywhere, and more on top of it, of which the greens (the grass,
     // the woods) get a fifth: more turns them lime

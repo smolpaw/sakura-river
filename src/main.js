@@ -942,7 +942,7 @@ export async function create(canvas, opts = {}) {
     rays.tint.value.copy(st.sun).lerp(rayWarm, 0.3);
     renderer.toneMappingExposure = lerp(1.35, 0.98, st.vis) * (st.elev > 30 ? 0.92 : 1);
     // the grade's black point: high sun lifts the shadows most (sky light, haze); low light is dark enough already
-    post.grade.uniforms.black.value = lerp(0.025, 0.06, smoothstep(4, 20, st.elev));
+    post.grade.uniforms.black.value = lerp(0.02, 0.035, smoothstep(4, 20, st.elev));
     lastTime = t; lastCover = S.clouds;
     return st;
   }

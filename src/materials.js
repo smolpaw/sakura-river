@@ -372,7 +372,7 @@ export function terrainMaterial({ sky, paddies = false, lanes = null, ao = null 
     const back = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 3.0);
     o.addAssign(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(sunShadow).mul(back.mul(1.6).add(0.15)).mul(grassy).mul(0.5));
     o.mulAssign(float(1.0).add(grassWave(wp.xz).mul(U.uWind).mul(grassy).mul(0.3)));
-    o.addAssign(diffuseColor.rgb.mul(lanternLight(wp)));
+    o.addAssign(diffuseColor.rgb.mul(lanternLight(wp).add(groundSkyFill())));
     // puddles on the lanes and yards once the rain has soaked the ground: in the hollows first, wider as it goes on
     If(U.uWet.greaterThan(0.3), () => {
       const n = vnoise(wp.xz.mul(0.55)).mul(0.6).add(vnoise(wp.xz.mul(1.9).add(4.0)).mul(0.4));
@@ -459,6 +459,11 @@ export const groundBounce = () => U.uSunColor.mul(U.uSunVis).mul(sstep(0.0, 0.35
 // the way to its own grey, keeping its brightness and a hint of its blue.
 const skyToGrey = () => vec3(dot(U.uSkyAmb, vec3(0.3, 0.6, 0.1))).sub(U.uSkyAmb)
   .mul(max(normalWorld.y, 0.0).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(0.8 / Math.PI));
+// The open sky's light on the ground and the grass, over the hemisphere's: by day, ground in shade sees most of the
+// sky (and the sunlit land round it), and with the hemisphere's light alone a lawn in a building's shade came out
+// black and read as a hole. Times the albedo.
+const groundSkyFill = () => vec3(dot(U.uSkyAmb, vec3(0.3, 0.6, 0.1))).mul(sstep(0.0, 0.35, U.uSunDir.y)).mul(SKY_FILL);
+const SKY_FILL = 0.45;
 
 // With `normalMap` the bark is the photographed one (sakura_bark, tools/textures.mjs) and `map` its colour.
 export function barkMaterial(map, bumpMap, normalMap = null) {
@@ -611,7 +616,7 @@ export function grassMaterial() {
     const tip = aFlex; // fragment-stage attribute becomes a varying
     const o = out.add(diffuseColor.rgb.mul(U.uSunColor).mul(U.uSunVis).mul(sunShadow).mul(back.mul(1.6).add(0.15)).mul(clamp(tip.mul(2.2), 0.0, 1.0)));
     // lantern light at half strength: at full, the lawn under the lines read as floodlit
-    return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35))).add(diffuseColor.rgb.mul(lanternLight(wp)).mul(0.5));
+    return o.mul(float(1.0).add(vWave.mul(clamp(tip.mul(2.0), 0.0, 1.0)).mul(0.35))).add(diffuseColor.rgb.mul(lanternLight(wp).mul(0.5).add(groundSkyFill())));
   })());
 }
 const sin01 = (x) => x.sin().mul(0.5).add(0.5);
@@ -816,7 +821,12 @@ export const forestLight = (shadow = sunShadow) => (out) => Fn(() => {
   const bloom = sstep(0.45, 0.7, diffuseColor.r);
   const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
   const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-  return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(shadow).mul(backB.mul(1.2).add(0.1)).add(skyGlow())).mul(bloom));
+  // the daylight through the leaves on a crown's underside (green foliage, faces turned down): its colours carry the
+  // crown's occlusion, nearly black there, and seen from the lanes under the woods the crowns were black blobs
+  const leafy = sstep(0.0, 0.03, diffuseColor.g.sub(diffuseColor.r)).mul(max(normalWorld.y.negate(), 0.0));
+  const through = vec3(0.07, 0.11, 0.035).mul(U.uSunColor.mul(U.uSunVis).mul(0.25).add(groundSkyFill().mul(1.5)));
+  return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(shadow).mul(backB.mul(1.2).add(0.1)).add(skyGlow())).mul(bloom))
+    .add(diffuseColor.rgb.mul(groundSkyFill()).mul(0.5)).add(through.mul(leafy));
 })();
 
 // the blossoms' own glow on the woods' wild cherries and the shrubs: as bright as the sky's light (0.16 by day), so at
@@ -849,7 +859,10 @@ export function shrubMaterial() {
     const bloom = sstep(0.45, 0.7, diffuseColor.r);
     const backB = pow(max(dot(normalize(wp.sub(cameraPosition)), U.uSunDir), 0.0), 2.5);
     const sunB = mix(U.uSunColor, vec3(dot(U.uSunColor, vec3(0.33))), 0.45);
-    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(skyGlow())).mul(bloom).mul(0.6));
+    // in shade the sky's light greyed and the open sky's as on the ground round them: lit by the blue sky light alone
+    // the white azaleas came out navy
+    const shade = diffuseColor.rgb.mul(skyToGrey().add(groundSkyFill()).add(groundBounce()));
+    return out.add(diffuseColor.rgb.mul(sunB.mul(U.uSunVis).mul(sunShadow).mul(backB.mul(1.2).add(0.1)).add(skyGlow())).mul(bloom).mul(0.6)).add(shade);
   })());
 }
 
@@ -905,8 +918,8 @@ export function templeMaterial(d, { ao = null } = {}) {
   }, (out) => Fn(() => {
     // the sunlit gravel and meadow light the walls and the eaves' undersides from below (as on rock)
     const o = out.add(diffuseColor.rgb.mul(groundBounce())).toVar();
-    // the paving and the treads in shade grey, not navy
-    o.addAssign(diffuseColor.rgb.mul(skyToGrey()).mul(neutral));
+    // the paving and the treads in shade grey, not navy, and lit by the open sky as the ground round them is
+    o.addAssign(diffuseColor.rgb.mul(skyToGrey().mul(neutral).add(groundSkyFill().mul(sstep(0.85, 0.95, normalWorldGeometry.y)))));
     If(U.uLights.greaterThan(0.0), () => {
       const near = float(0).toVar(), up = float(0).toVar();
       for (const c of lamps) { const v = wp.sub(c); near.addAssign(float(1.0).div(dot(v, v).mul(1.5).add(0.3))); }
