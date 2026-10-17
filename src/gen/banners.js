@@ -2,7 +2,7 @@
 // geometry, and the brush characters down their cloth painted into an ink atlas. Runs in the lanterns' job.
 // They stand in pairs: flanking the torii at the foot of the temple's approach, beside three of the stone-lantern pairs
 // up it (just outside the lanterns), and either side of each of the bridge's landings. Each pair's spots are rough;
-// the place is searched round each spot: off the lanes and the walker's corridor and landings (walk.js), off the
+// the place is searched round each spot: off the lanes and the walker's way along them, the bridge's landings (walk.js), off the
 // farmland, the pads and the bridge, out of the river's banks where the lamps stand, clear of the stone lanterns, the
 // torii's pillars, the lantern lines' posts and ropes, the bonbori, the wayside's stones and the small cherries, with
 // the cloth's whole width clear too. The cross-arm points away from the path, so the cloth hangs outside its pole and
@@ -24,7 +24,7 @@ export const BANNER_TEXTS = ['奉納', '桜まつり', '千本桜', '春季大�
 // the atlas: one cell per text, `cols` across; the writing fills the cloth's u0..u1 and v0..v1 (below the band)
 export const BANNER_INK = { w: 128, h: 640, u0: 0.1, u1: 0.9, v0: 0.15, v1: 0.97 };
 
-const CLEAR_LANE = 1.65; // the pole and the cloth's far edge from a lane's middle (walk.js: the corridor's 1.2 m and a body)
+const CLEAR_LANE = 1.65; // the pole and the cloth's far edge from a lane's middle (a lane's 1.2 m and a body)
 const SEARCH = 2.5; // m round each spot
 const ARM_OUT = BANNER.GAP + BANNER.W + 0.05;
 

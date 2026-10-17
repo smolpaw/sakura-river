@@ -3,8 +3,8 @@
 // building has places for them (SLOTS, in its frame: under the eaves at the back and the end away from the doma, in
 // the front yard by the doma's door, before the veranda, in the yard's far corner), each place a few things that
 // would stand there; each place takes one of them or nothing, each yard by its own draws, so no two yards are alike. A thing
-// stands only where its footprint lies on its pad (world.js), clear of the lanes (walk.js keeps the walker to a
-// corridor along them) and of what else stands in the yard. Generation only (in the village's job); drawn by lods.js
+// stands only where its footprint lies on its pad (world.js), clear of the lanes (the walker's way along them) and
+// of what else stands in the yard. Generation only (in the village's job); drawn by lods.js
 // (main.js), the full model within 40 m and a lighter one beyond.
 import * as THREE from 'three';
 import { mulberry32 } from './noise.js';
@@ -47,13 +47,13 @@ const SLOTS = {
   ],
 };
 const PAD_MARGIN = 0.15; // m of the pad kept clear round a footprint
-const LANE_CLEAR = 1.7; // the footprint's nearest point from a lane's middle (walk.js: the corridor's 1.2 m and the walker's body)
+const LANE_CLEAR = 1.7; // the footprint's nearest point from a lane's middle (a lane's 1.2 m and the walker's body)
 
 // houses: [{ b: the building (world.js BUILDINGS), sc: its model's scale }]. Returns the instances for lods.js (per kind
-// { matrix, color, n }) and what the walker goes round ([{ x, z, r }], walk.js keeps those near a path).
+// { matrix, color, n }).
 export function yardData(world, houses) {
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
-  const lists = YARD_KINDS.map(() => ({ m: [], c: [] })), posts = [];
+  const lists = YARD_KINDS.map(() => ({ m: [], c: [] }));
   const hyp = Math.hypot;
   houses.forEach(({ b, sc }, h) => {
     const rng = mulberry32(808 + h * 31); // (each yard its own draws, whatever fits in the others)
@@ -89,13 +89,7 @@ export function yardData(world, houses) {
       const t = 0.92 + wear[0] * 0.14; // each a little different in its wear
       l.c.push(t, t * (0.97 + wear[1] * 0.04), t * (0.94 + wear[2] * 0.06));
       placed.push({ x, z, r: Math.min(hw, hd) });
-      // for the walker: circles along its longer side
-      const n = Math.max(1, Math.round(hw / hd));
-      for (let i = 0; i < n; i++) {
-        const u = n === 1 ? 0 : -hw + hd + ((2 * (hw - hd)) * i) / (n - 1);
-        posts.push({ x: x + u * c, z: z - u * s, r: n === 1 ? hyp(hw, hd) : hd * 1.42 });
-      }
     }
   });
-  return { lists: lists.map((l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 })), posts };
+  return { lists: lists.map((l) => ({ matrix: new Float32Array(l.m), color: new Float32Array(l.c), n: l.c.length / 3 })) };
 }

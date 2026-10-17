@@ -27,6 +27,7 @@ import lampsUrl from './models/lamps.glb?url&inline';
 import boatUrl from './models/boat.glb?url&inline';
 import { makeBoats } from './boat.js';
 import { makeBanners } from './banners.js';
+import { BANNER } from './gen/banners.js';
 import { LAMP_KINDS } from './lanterns.js';
 import { VILLAGE_KINDS } from './village.js';
 import { makeSky, skyState, moonState, uStarPx } from './sky.js';
@@ -54,7 +55,7 @@ import { makeTanuki } from './tanuki.js';
 import { makeDropped } from './dropped.js';
 import { makeDeer } from './deer.js';
 import { makeHerons } from './heron.js';
-import { makeFigures } from './figures.js';
+import { makeFigures, figureSolids } from './figures.js';
 import * as M from './materials.js';
 import PHOTO_SETS from './textures.json';
 import { loadPhotos } from './photos.js';
@@ -66,6 +67,7 @@ import { runJobs } from './gen/pool.js';
 import { layout, treeSpecs } from './gen/layout.js';
 import { createSound } from './audio.js';
 import { makeWalk, WALK } from './walk.js';
+import { walkGridSteps } from './walkgrid.js';
 import waysideUrl from './models/wayside.glb?url&inline';
 import { WAYSIDE_KINDS } from './wayside.js';
 import yardUrl from './models/yard.glb?url&inline';
@@ -542,7 +544,7 @@ export async function create(canvas, opts = {}) {
   const leavesMat = M.forestMaterial({ leaves: leafAtlas, alphaToCoverage: a2c, impostorFrom: impostorFrom * lodScale });
   const forest = await makeLods(forestUrl, FOREST_KINDS, G.forest, M.forestMaterial(), [impostorFrom, 260], { leavesMat, impostor, lodScale, ...nearOf('forest') });
   forest.name = 'forest';
-  if (opts.debug) window.__sakuraDebug = { ...window.__sakuraDebug, renderer, impostors: forest.userData.impostors };
+  if (opts.debug) window.__sakuraDebug = { ...window.__sakuraDebug, renderer, scene, THREE, impostors: forest.userData.impostors };
   scene.add(forest);
   const cliffs = await makeLods(cliffsUrl, CLIFF_KINDS, G.cliffs, M.rockMaterial({ bedded: true }), [70], { lodScale, ...nearOf('cliffs') });
   cliffs.name = 'cliffs';
@@ -837,26 +839,52 @@ export async function create(canvas, opts = {}) {
   });
   canvas.addEventListener('wheel', () => { if (tween && !walking) tween = null; }, { passive: true });
 
-  // ---------- walking: first person along the lanes (walk.js); the walker's body (walker.js) loaded on first use ----------
-  // what stands by the paths for the walker to go round: the riverside's lamps, the stone lanterns (not the temple's
-  // hanging ones), the boulders, the trees' trunks (the woods' with room for their lowest boughs), the bamboo's
-  // stands, the torii's pillars, what stands in the farmhouses' yards (walk.js keeps those near a path)
-  const walkObstacles = [];
-  const instances = (l, r) => { for (let i = 0, m = l.matrix; i < l.n; i++) walkObstacles.push({ x: m[i * 16 + 12], z: m[i * 16 + 14], r: r * Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2]) }); };
-  G.lanterns.lists.forEach((l, k) => instances(l, [0.16, 0.3, 0.5][k])); // post, bonbori, kagaribi
-  for (const l of G.forest) instances(l, 0.05);
-  for (const l of G.bamboo) instances(l, 0.13); // (tools/bamboo.py: the culms' feet within 0.13 of the stand's height)
-  for (const a of [G.village.toro.lamps, G.props.temple.lamps]) for (let i = 0; i < a.length; i += 3) {
-    if (a[i + 1] - world.heightFast(a[i], a[i + 2]) < 2.5) walkObstacles.push({ x: a[i], z: a[i + 2], r: 0.55 });
+  // ---------- walking: first person (walk.js); the walker's body (walker.js) loaded on first use ----------
+  // what blocks the walker (walkgrid.js), from the scene: the models standing in the valley as drawn (the Blender
+  // models' full levels), the farmhouses' bodies, the flooded paddies. Worked out a few milliseconds a frame once the
+  // scene runs (gridIdle), or at once if the walker needs it first.
+  function walkSources() {
+    const plain = [], instanced = [], m = new THREE.Matrix4();
+    const add = (root, kind) => {
+      root.updateMatrixWorld(true);
+      root.traverse((o) => {
+        if (!o.isMesh || !o.geometry.attributes.position) return;
+        if (!o.isInstancedMesh) { plain.push({ geometry: o.geometry, matrix: o.matrixWorld, kind }); return; }
+        for (let i = 0; i < o.count; i++) plain.push({ geometry: o.geometry, matrix: new THREE.Matrix4().fromArray(o.instanceMatrix.array, i * 16).premultiply(o.matrixWorld), kind });
+      });
+    };
+    for (const g of [forest, rocks, bamboo, shrubs, lamps, cliffs, wayside, yard]) instanced.push(...g.userData.solids);
+    for (const k of village.userData.solids) for (let i = 0; i < k.n; i++) plain.push({ geometry: k.geometry, matrix: m.clone().fromArray(k.matrices, i * 16) });
+    for (const t of [main, ...smallTrees]) for (const c of t.group.children) if (c.name === 'bark') add(c);
+    for (const o of [toro, walls, boats.group]) add(o);
+    add(banners.group.getObjectByName('bannerPoles'));
+    add(bridge.mesh, 'bridge');
+    add(temple, 'temple');
+    const zones = fieldParts.flatMap((f) => f.grids);
+    const water = (x, z) => {
+      for (const g of zones) {
+        const [x0, z0, st] = g.box, i = Math.round((x - x0) / st), j = Math.round((z - z0) / st);
+        if (i >= 0 && j >= 0 && i < g.nx && j < g.nz && g.grid[(j * g.nx + i) * 4 + 3] > 0) return g.water[j * g.nx + i] > 0.5;
+      }
+      return false;
+    };
+    const boxes = world.BUILDINGS.map((b) => ({ x: b.x, z: b.z, c: b.c, s: b.s, hw: b.hw - 0.5, hd: b.hd - 0.5 }));
+    boxes.push(...figureSolids(world));
+    // the banners' cloths (their shader hangs them: gen/banners.js BANNER), each a thin sheet along its arm
+    const bd = G.lanterns.banners;
+    for (let i = 0; i < bd.n; i++) {
+      const [x, , z, yaw] = bd.base.subarray(i * 4, i * 4 + 4), r = BANNER.GAP + BANNER.W / 2;
+      boxes.push({ x: x + Math.sin(yaw) * r, z: z + Math.cos(yaw) * r, c: Math.cos(yaw), s: Math.sin(yaw), hw: 0.03, hd: BANNER.W / 2 });
+    }
+    return { plain, instanced, boxes, water, templeY: world.temple.y, lanes: world.LANES };
   }
-  for (const b of G.rocks.blockers) if (b.sc > 0.3) walkObstacles.push({ x: b.x, z: b.z, r: b.sc * 0.9 });
-  walkObstacles.push({ x: TX, z: TZ, r: 0.8 }, ...Lay.small.map((sp) => ({ x: sp.x, z: sp.z, r: 0.6 * sp.s })), ...G.village.yard.posts);
-  const toriiList = G.village.lists[VILLAGE_KINDS.indexOf('torii')], tm = new THREE.Matrix4();
-  for (let i = 0; i < toriiList.n; i++) {
-    tm.fromArray(toriiList.matrix, i * 16);
-    for (const sd of [-1, 1]) { const p = new THREE.Vector3(sd * 1.6, 0, 0).applyMatrix4(tm); walkObstacles.push({ x: p.x, z: p.z, r: 0.21 }); } // (tools/village.py)
-  }
-  const walk = makeWalk(world, { canvas, obstacles: walkObstacles, onEscape: () => setWalk(false) });
+  let gridSteps = null, walkGrid = null;
+  const walkSolids = () => {
+    if (!walkGrid) { gridSteps ??= walkGridSteps(world, walkSources); let r; while (!(r = gridSteps.next()).done); walkGrid = r.value; }
+    return walkGrid;
+  };
+  const gridIdle = () => { gridSteps ??= walkGridSteps(world, walkSources); const r = gridSteps.next(); if (r.done) walkGrid = r.value; };
+  const walk = makeWalk(world, { canvas, solids: walkSolids, onEscape: () => setWalk(false) });
   let walking = false, walker = null, walkerLoad = null, firstPerson = false;
   // (the controls update the camera in their own pointer and wheel handlers too, between frames: clamped
   // there as well)
@@ -1337,6 +1365,9 @@ export async function create(canvas, opts = {}) {
     if (!doRender) return;
     followRatio();
     frameNo++;
+    // (the walker's grid, a few milliseconds a frame once the opening flight is over; not with frames stepped by
+    // hand: the benches' timing runs)
+    if (!walkGrid && !warming && !tween && frameNo > 120 && !opts.manual) gridIdle();
     if (probe) probe.beginFrame();
     // (every pass on the first frames and on those of the warm-up that bring parts of the scene in)
     const every = frameNo < 3 || revealing;
@@ -1500,7 +1531,7 @@ export async function create(canvas, opts = {}) {
       } else controls.update();
     },
     setAutoOrbit(on) { if (on && walking) setWalk(false); autoOrbit = !!on; },
-    // walk mode: first person along the lanes (walk.js); resolves once the walker's body is in the scene
+    // walk mode: first person (walk.js); resolves once the walker's body is in the scene
     setWalk(on) { return setWalk(on); },
     walking() { return walking; },
     // debug: where the walker is (feet, ground under them, eye), how fast, on what; detail: the network too
@@ -1514,6 +1545,7 @@ export async function create(canvas, opts = {}) {
       if (detail) Object.assign(out, { ways: net.ways.map((w) => ({ name: w.name, pts: w.pts, hw: w.hw })), stairFoot: net.stairFoot, steps: net.steps, bridgeEnds: net.bridgeEnds.map((p) => p.toArray()), obstacles: net.obstacles.map((o) => [o.x, o.z]) });
       return out;
     },
+    walkGrid() { return walk.net.field(); }, // debug: what blocks the walker (walkgrid.js: flags per cell, the distance fields)
     walkTo(x, z, yaw) { walk.moveTo(x, z, yaw); if (walking && tween && tween.walk) tween = null; }, // debug: stand there (on the network)
     walkInput(o) { walk.input(o); }, // debug: { forward, strafe (-1..1), hurry, yaw, pitch (radians) }, held until changed
     // music and ambience; sound starts with the page's first click or key press if it has not had one yet

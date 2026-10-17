@@ -61,6 +61,13 @@ function fisherPlace(world) {
   return { obj: o, lamp: LAMP.clone().applyMatrix4(o.matrixWorld) };
 }
 
+// what of the people stands in the walker's way (walkgrid.js boxes): the fisherman on the bank, sitting with his
+// legs out towards the water (the planter works in a flooded paddy, which the walker keeps out of)
+export function figureSolids(world) {
+  const o = fisherPlace(world).obj, yaw = o.rotation.y, f = 0.2;
+  return [{ x: o.position.x + Math.sin(yaw) * f, z: o.position.z + Math.cos(yaw) * f, c: Math.cos(yaw), s: Math.sin(yaw), hw: 0.35, hd: 0.55 }];
+}
+
 // the lamps the light map takes (main.js lightMap): the fisherman's lantern
 export function figureLamps(world) {
   const p = fisherPlace(world).lamp;

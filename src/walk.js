@@ -1,10 +1,9 @@
-// First-person walking (main.js walk mode): the paths the walker is kept on, and the body's movement along them.
-// The network: the lanes (world.js LANES), each a corridor CORRIDOR metres either side of its middle; the bridge's
-// deck between its railings; the temple's stone steps (the approach's lane ends at their foot) and the front of its
-// terrace. The walker moves where the keys (or walkInput) push it, slides along a corridor's edge and round what
-// stands on the path (lamp posts, stone lanterns, trunks, the torii's pillars, the bridge's corner posts and
-// railings), and stands on the ground there: the deck's arch on the bridge, a slope through the treads' middles on
-// the steps.
+// First-person walking (main.js walk mode): where the walker can go, and the body's movement there.
+// The walker goes wherever the open ground leaves room for its body (walkgrid.js: what stands at body height, water,
+// ground too steep, the valley's edge), and on the ways with ground of their own: the bridge's deck between its
+// railings, the temple's stone steps and the front of its terrace. It moves where the keys (or walkInput) push it,
+// slides along what is in the way, and stands on the ground there: the deck's arch on the bridge, a slope through the
+// treads' middles on the steps.
 import * as THREE from 'three/webgpu';
 import { clamp, lerp, smoothstep } from './noise.js';
 import { bridgeFrame, BRIDGE_Z, CORNER, cornerOff, RAIL_OFF } from './props.js';
@@ -18,8 +17,8 @@ export const WALK = {
   look: 0.0022, // radians per pixel of mouse movement
   pitch: THREE.MathUtils.degToRad(85), // looking down far enough to see the geta step out (main.js EYE_AHEAD)
 };
-const BODY = 0.3; // how close the walker's middle comes to what stands by the path
-const CORRIDOR = 1.2; // half-width of a lane the walker keeps to
+const BODY = 0.3; // how close the walker's middle comes to what stands in its way
+const LANE = 1.6; // half-width of a lane's earth underfoot
 const START = { x: -22, z: -4.6, yaw: Math.atan2(0.5, -6) }; // the footpath's end beside the cherry tree, facing down it to the bridge
 
 // smooth maximum (polynomial, k wide)
@@ -113,24 +112,25 @@ const block = (f, lx, lz, hw, hd) => {
   };
 };
 
-// The network over the world. `obstacles`: [{ x, z, r }] standing near the lanes (radii without the walker's body).
-export function makeNetwork(world, obstacles = []) {
+// The network over the world. The open ground is wherever `solids` (a walkgrid.js buildWalkGrid, made on first use)
+// leaves room for the walker's body: nothing blocks it there that it cannot see. The ways are the ground with its own
+// rules: the bridge's deck between its railings and its landings, the temple's steps and the front of its terrace,
+// over the river and the temple's walls that block the open ground, with what stands on them as obstacles.
+export function makeNetwork(world, solids = null) {
   const T = world.temple, tf = { x: T.x, z: T.z, c: Math.cos(T.yaw), s: Math.sin(T.yaw) };
   const toW = (lx, lz) => [tf.x + lx * tf.c + lz * tf.s, tf.z - lx * tf.s + lz * tf.c];
   const toL = (x, z) => { const dx = x - tf.x, dz = z - tf.z; return [dx * tf.c - dz * tf.s, dx * tf.s + dz * tf.c]; };
   const ways = [];
+  let grid = null;
+  const field = () => (grid ??= solids ? solids() : null);
 
-  // the lanes
-  for (const [k, L] of world.LANES.entries()) ways.push(corridor(`lane${k}`, L, CORRIDOR));
-
-  // the bridge's deck, between its railings, on past its ends onto the banks (where the lanes pass)
+  // the bridge's deck, between its railings, on past its ends onto the banks
   const B = bridgeFrame(world, BRIDGE_Z), bc = B.center, ba = B.across, bl = B.along;
   const PAST = 1.4; // m past the deck's ends
   const uPast = PAST / (2 * B.half);
   const deckW = RAIL_OFF - 0.12 - BODY; // the railings' end posts are 0.12 thick
   ways.push(corridor('bridge', [[B.pt(-uPast).x, B.pt(-uPast).z], [B.pt(1 + uPast).x, B.pt(1 + uPast).z]], deckW));
-  // and a landing past each end: the west bank's footpath runs across the deck's mouth, between the railings' end
-  // posts and the corner lamp posts, so the walker goes round those on the landward side
+  // and a landing past each end, where the deck's mouth meets the bank between its corner lamp posts
   const bf = { x: bc.x, z: bc.z, c: ba.x, s: -ba.z }; // local x across the river (as u), z along the flow
   ways.push(area('landingW', bf, -B.half - 3, -B.half, -3, 3), area('landingE', bf, B.half, B.half + 3, -3, 3));
   const deckAt = (x, z) => {
@@ -149,49 +149,87 @@ export function makeNetwork(world, obstacles = []) {
   // the front of the terrace, from the steps' head to past the pagoda, short of the bell tower and the hall's steps
   ways.push(area('terrace', tf, SITES.belfry[0] + 2.8 + BODY + 0.1, T.hw - 0.9, SITES.hall[2] + 8.9, D - 0.7));
 
-  // what stands in the way: the given obstacles, the bridge's corner posts and railings, the terrace's buildings
-  // (not what stands under the deck: the boulders on the banks below it)
-  const underDeck = (o) => { const { u, side } = deckAt(o.x, o.z); return u > 0 && u < 1 && Math.abs(side) < RAIL_OFF + 0.5; };
-  const obs = obstacles.filter((o) => !underDeck(o)).map((o) => post(o.x, o.z, o.r + BODY));
+  // what stands on the ways besides what the solids' `on` field holds: the bridge's corner posts and railings, the
+  // terrace's buildings (temple.js: the pagoda's podium 11.6 m square and its front steps, the bell tower's 5.6 m)
+  const obs = [];
   for (const u of [-CORNER, 1 + CORNER]) for (const sd of [-1, 1]) { const p = B.pt(u, sd * cornerOff(B.width)); obs.push(post(p.x, p.z, 0.21 + BODY)); }
   for (const sd of [-1, 1]) { const a = B.pt(0, sd * RAIL_OFF), b = B.pt(1, sd * RAIL_OFF); obs.push(bar(a.x, a.z, b.x, b.z, 0.12 + BODY)); }
-  // (temple.js: the pagoda's podium 11.6 m square and its front steps, the bell tower's 5.6 m)
   obs.push(block(tf, SITES.pagoda[0], SITES.pagoda[2], 5.8, 5.8), block(tf, SITES.pagoda[0], SITES.pagoda[2] + 6.4, 1.4, 0.6));
   obs.push(block(tf, SITES.belfry[0], SITES.belfry[2], 2.8, 2.8));
-  // keep only what stands near a path
-  const tmp = { x: 0, z: 0 };
-  const near = obs.filter((o) => ways.some((w) => { const d = w.clamp({ x: o.x, z: o.z }, tmp); return d < 4 && o.dist(tmp.x, tmp.z) < 0.5; }));
 
   const p = { x: 0, z: 0 }, out = { x: 0, z: 0 };
-  // where the walker may stand nearest to (x, z): in the network, out of what stands in it
-  function constrain(x, z, res = { x: 0, z: 0 }) {
+  // the nearest point of the ways to (x, z) into out, and how far that is (0 on them)
+  const nearWay = (x, z) => {
+    let bd = Infinity, bx = x, bz = z;
     p.x = x; p.z = z;
-    for (let it = 0; it < 6; it++) {
-      let bd = Infinity, bx = p.x, bz = p.z;
-      for (const w of ways) {
-        const d = w.clamp(p, out);
-        if (d < bd) { bd = d; bx = out.x; bz = out.z; if (d === 0) break; }
-      }
-      p.x = bx; p.z = bz;
+    for (const w of ways) { const d = w.clamp(p, out); if (d < bd) { bd = d; bx = out.x; bz = out.z; if (d === 0) break; } }
+    out.x = bx; out.z = bz;
+    return bd;
+  };
+  // q moved out of the field f's blocked cells (to BODY from them), down its gradient; true if it got clear
+  const clear = (f, q) => {
+    for (let it = 0; it < 4; it++) {
+      const d = f(q.x, q.z);
+      if (d >= BODY - 1e-3) return true;
+      const e = 0.05, gx = f(q.x + e, q.z) - f(q.x - e, q.z), gz = f(q.x, q.z + e) - f(q.x, q.z - e), gl = Math.hypot(gx, gz);
+      if (gl < 1e-6) return false;
+      q.x += (gx / gl) * (BODY - d + 0.01); q.z += (gz / gl) * (BODY - d + 0.01);
+    }
+    return f(q.x, q.z) >= BODY - 1e-3;
+  };
+  const q = { x: 0, z: 0 };
+  // on a way at (x, z): out of what stands on it (its obstacles, the solids on it)
+  const onWay = (x, z, res) => {
+    q.x = x; q.z = z;
+    const g = field();
+    for (let it = 0; it < 4; it++) {
       let pushed = false;
-      for (const o of near) if (o.push(p)) pushed = true;
+      for (const o of obs) if (o.push(q)) pushed = true;
+      if (g && !clear(g.on, q)) pushed = true;
+      if (nearWay(q.x, q.z) > 0) { q.x = out.x; q.z = out.z; pushed = true; }
       if (!pushed) break;
     }
-    res.x = p.x; res.z = p.z;
+    res.x = q.x; res.z = q.z;
+    return res;
+  };
+  // where the walker standing at (fx, fz) gets to heading for (x, z): there if it is clear, slid along what is in the
+  // way, onto the edge of a way it walks off where the open ground does not take it on, or nowhere
+  function step(fx, fz, x, z, res = { x: 0, z: 0 }) {
+    const g = field();
+    if (nearWay(x, z) === 0) return onWay(x, z, res);
+    if (!g) { res.x = x; res.z = z; return res; }
+    q.x = x; q.z = z;
+    if (clear(g.open, q) && Math.hypot(q.x - fx, q.z - fz) < Math.hypot(x - fx, z - fz) + 0.6) {
+      if (nearWay(q.x, q.z) === 0) return onWay(q.x, q.z, res);
+      res.x = q.x; res.z = q.z; return res;
+    }
+    if (nearWay(x, z) < 0.8) return onWay(out.x, out.z, res);
+    res.x = fx; res.z = fz;
     return res;
   }
-  // how far (x, z) lies outside the network (0 on it)
+  // where the walker may stand nearest to (x, z): on a way, or the nearest clear open ground (searched outwards)
+  function constrain(x, z, res = { x: 0, z: 0 }) {
+    if (nearWay(x, z) === 0) return onWay(x, z, res);
+    const g = field();
+    if (!g || g.open(x, z) >= BODY) { res.x = x; res.z = z; return res; }
+    for (let r = 0.2; r < 30; r += 0.2) for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+      if (g.open(px, pz) >= BODY + 0.05) { res.x = px; res.z = pz; return res; }
+    }
+    res.x = x; res.z = z;
+    return res;
+  }
+  // how far (x, z) lies from where the walker may stand (0 where it may)
   function outside(x, z) {
-    p.x = x; p.z = z;
-    let bd = Infinity;
-    for (const w of ways) bd = Math.min(bd, w.clamp(p, out));
-    return bd;
+    if (nearWay(x, z) === 0) return 0;
+    const g = field();
+    return g ? Math.max(0, BODY - g.open(x, z)) : 0;
   }
 
   // the ground under the feet and what it is
   function ground(x, z) {
     const g = world.heightFast(x, z);
-    const lane = world.laneDist(x, z) < CORRIDOR + 0.4 ? 'earth' : 'grass';
+    const lane = world.laneDist(x, z) < LANE ? 'earth' : 'grass';
     // the bridge: the deck's arch, easing down to the ground over PAST metres past its ends
     const { u, side } = deckAt(x, z);
     if (Math.abs(side) < RAIL_OFF + 0.2 && u > -uPast && u < 1 + uPast) {
@@ -210,20 +248,20 @@ export function makeNetwork(world, obstacles = []) {
     return { y: g, surface: lane };
   }
 
-  return { ways, obstacles: near, constrain, outside, ground, start: START, steps, stairFoot: toW(STAIR.x, footZ), bridgeEnds: [B.pt(0), B.pt(1)] };
+  return { ways, obstacles: obs, step, constrain, outside, ground, field, start: START, steps, stairFoot: toW(STAIR.x, footZ), bridgeEnds: [B.pt(0), B.pt(1)] };
 }
 
 // ---------- the body and its controls ----------
-// makeWalk(world, { canvas, obstacles, onEscape }): the walker's state and the page's keys, mouse and touch.
+// makeWalk(world, { canvas, solids, onEscape }): the walker's state and the page's keys, mouse and touch; solids()
+// makes the open ground's walkgrid.js grid, called when the walker first moves or is placed.
 // update(dt, active) moves it (input only when active); while it is on (setActive) the canvas's events steer it.
-export function makeWalk(world, { canvas, obstacles = [], onEscape = null } = {}) {
-  const net = makeNetwork(world, obstacles);
+export function makeWalk(world, { canvas, solids = null, onEscape = null } = {}) {
+  const net = makeNetwork(world, solids);
   const s = {
     x: net.start.x, z: net.start.z, y: 0, yaw: net.start.yaw, pitch: 0,
     vx: 0, vz: 0, speed: 0, surface: 'earth', hurry: false,
   };
-  const c0 = net.constrain(s.x, s.z);
-  s.x = c0.x; s.z = c0.z; s.y = net.ground(s.x, s.z).y;
+  s.y = net.ground(s.x, s.z).y; // (START stands clear)
   // input: held keys, the debug hooks' injected input, the touch sticks
   const keys = new Set(), inj = { forward: 0, strafe: 0, hurry: false }, stick = { forward: 0, strafe: 0, hurry: false };
   let on = false, locked = false, unlockedAt = -1e9, active = false;
@@ -341,8 +379,8 @@ export function makeWalk(world, { canvas, obstacles = [], onEscape = null } = {}
       const a = 1 - Math.exp(-dt * WALK.accel);
       s.vx += (tx - s.vx) * a; s.vz += (tz - s.vz) * a;
       if (dt > 0 && (Math.abs(s.vx) + Math.abs(s.vz) > 1e-4)) {
-        const c = net.constrain(s.x + s.vx * dt, s.z + s.vz * dt);
-        // the pace is what the path let through: pressing into its edge doesn't build up speed
+        const c = net.step(s.x, s.z, s.x + s.vx * dt, s.z + s.vz * dt);
+        // the pace is what the ground let through: pressing into what is in the way doesn't build up speed
         let vx = (c.x - s.x) / dt, vz = (c.z - s.z) / dt;
         const v = Math.hypot(vx, vz), cap = WALK.hurry * 1.2;
         if (v > cap) { vx *= cap / v; vz *= cap / v; }

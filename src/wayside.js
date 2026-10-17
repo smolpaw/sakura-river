@@ -4,7 +4,7 @@
 // that fork and at the foot of the temple's approach by the torii; roadside shrines (hokora) on the valley lane above
 // the village, on its uphill side, and half-way up the approach.
 // Each site is a rough spot; the place is searched round it: on firm, fairly level ground beside the lane but out of
-// the walker's corridor (walk.js), off the farmland, the buildings' pads, the bridge and its landings and the banks
+// the walker's way along it, off the farmland, the buildings' pads, the bridge and its landings and the banks
 // (where the lamps stand), clear of the stone lanterns, the torii and the small cherries, facing the lane. The shrubs
 // and the grass keep off them (waysideClearings). Generation only (in the village's job); drawn by lods.js (main.js),
 // the full model within 40 m and a lighter one beyond.
@@ -26,7 +26,7 @@ const SITES = [
   { kind: 'hokora', at: [-95, -139.5], r: 5 },
   { kind: 'hokora', at: [0.5, -129], r: 6 },
 ];
-const LANE_CLEAR = 1.55; // the footprint's nearest point from a lane's middle (walk.js: the corridor's 1.2 m and the walker's body)
+const LANE_CLEAR = 1.55; // the footprint's nearest point from a lane's middle (a lane's 1.2 m and the walker's body)
 const LANE_NEAR = 2.3; // ... and beyond this, the further the worse
 const LANDING = 3.6; // m round the bridge's deck and its landings kept clear
 const BANK = 1.7; // in the river's half-widths from its middle: the banks' lamps stand within (lanterns.js)

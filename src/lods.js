@@ -218,6 +218,8 @@ export async function makeLods(url, kinds, lists, mat, ranges, { leavesMat = nul
       ],
     };
   });
+  // each kind's full model and every instance's matrix (walkgrid.js stands the walker's obstacles on them)
+  group.userData.solids = sets.map((set) => { const L = set.lod[lead]; return { geometry: L.src.geometry, matrices: L.M, n: set.l.n }; });
   for (const [k, set] of sets.entries()) {
     const src = leavesMat && gltf.scene.getObjectByName(kinds[k] + '_leaves');
     if (src) set.leaves = instanced(src, leavesMat, set.l);
